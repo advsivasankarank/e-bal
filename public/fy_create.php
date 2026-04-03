@@ -29,10 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $stmt = $pdo->prepare("
             INSERT INTO financial_years (company_id, fy_start, fy_end)
             VALUES (?, ?, ?)
+            RETURNING id
         ");
         $stmt->execute([$company_id, $fy_start, $fy_end]);
 
-        $fy_id = $pdo->lastInsertId();
+        $fy_id = $stmt->fetchColumn();
 
         // Redirect to Tally Fetch
         header("Location: tally_fetch.php?company_id=$company_id&fy_id=$fy_id");
