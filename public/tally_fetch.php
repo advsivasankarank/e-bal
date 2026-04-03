@@ -153,6 +153,23 @@ for ($i = 0; $i < $total; $i++) {
 ===================================================== */
 session_start();
 $_SESSION['classified_data'] = $data;
+$_SESSION['company_id'] = $company_id;
+$_SESSION['fy_id'] = $fy_id;
+
+/* =====================================================
+   🔷 UPDATE WORKFLOW STATUS (tally_fetched)
+===================================================== */
+$stmt = $pdo->prepare("SELECT id FROM workflow_status WHERE company_id = ? AND fy_id = ?");
+$stmt->execute([$company_id, $fy_id]);
+$wsId = $stmt->fetchColumn();
+
+if ($wsId) {
+    $pdo->prepare("UPDATE workflow_status SET tally_fetched = 1 WHERE company_id = ? AND fy_id = ?")
+        ->execute([$company_id, $fy_id]);
+} else {
+    $pdo->prepare("INSERT INTO workflow_status (company_id, fy_id, tally_fetched) VALUES (?, ?, 1)")
+        ->execute([$company_id, $fy_id]);
+}
 ?>
 
 <!DOCTYPE html>
