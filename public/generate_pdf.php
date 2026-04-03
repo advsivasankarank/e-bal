@@ -10,7 +10,7 @@ require_once __DIR__ . '/../app/core/notes_engine.php';
 require_once __DIR__ . '/../app/core/pdf_engine.php';
 
 $data = $_SESSION['classified_data'] ?? [];
-$company_id = 1;
+$company_id = $_SESSION['company_id'] ?? 1;
 
 /* ===============================
    🔷 BUILD BS DATA

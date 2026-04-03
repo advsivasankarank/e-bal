@@ -12,7 +12,7 @@ if (!isset($_SESSION['classified_data'])) {
 }
 
 $data = $_SESSION['classified_data'];
-$company_id = 1; // dynamic later
+$company_id = $_SESSION['company_id'] ?? 1;
 
 $bs = [];
 

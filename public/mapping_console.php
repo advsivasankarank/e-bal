@@ -11,7 +11,7 @@ if (empty($_SESSION['classified_data'])) {
 }
 
 $data = $_SESSION['classified_data'];
-$company_id = 1;
+$company_id = $_SESSION['company_id'] ?? 1;
 
 $heads = $pdo->query("SELECT * FROM schedule_heads")->fetchAll(PDO::FETCH_ASSOC);
 ?>
