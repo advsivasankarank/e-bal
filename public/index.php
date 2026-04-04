@@ -76,7 +76,8 @@ elseif ($r['tally_fetched']) { $status = "fetched"; $label = "Data Fetched"; }
 <td>
 
 <?php if (!$r['tally_fetched']): ?>
-<a class="btn primary" href="tally_fetch.php?company_id=<?php echo $r['company_id']; ?>&fy_id=<?php echo $r['fy_id']; ?>">Fetch</a>
+<a class="btn primary" href="tally_fetch.php?company_id=<?php echo $r['company_id']; ?>&fy_id=<?php echo $r['fy_id']; ?>">Fetch from Tally</a>
+<a class="btn info" href="xml_import.php?company_id=<?php echo $r['company_id']; ?>&fy_id=<?php echo $r['fy_id']; ?>">Import XML</a>
 
 <?php elseif (!$r['mapping_completed']): ?>
 <a class="btn warning" href="mapping_console.php">Map</a>

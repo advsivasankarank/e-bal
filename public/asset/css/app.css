@@ -120,6 +120,7 @@ td {
 .btn.primary { background: #0f4c81; }
 .btn.warning { background: #fd7e14; }
 .btn.success { background: #28a745; }
+.btn.info    { background: #1aa3a3; }
 
 /* FOOTER */
 .app-footer {
