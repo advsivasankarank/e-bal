@@ -1,0 +1,65 @@
+
+[System: Formula]
+eBalURL : "http://localhost/e-bal/api/receive_data.php"
+eBalKey : "EBAL_SECURE_KEY_123"
+
+[Variable: vJSON]
+Type : String
+
+[Variable: vType]
+Type : String
+
+[Variable: vAmt]
+Type : Amount
+
+[Collection: eBalLedgers]
+Type : Ledger
+Fetch : Name, Parent
+
+[Collection: eBalTB]
+Type : Ledger
+Fetch : Name, Parent, ClosingBalance
+
+[Function: SendDataToEBAL]
+
+    10 : SET VALUE : vJSON : "{""company_id"":1,""fy_id"":1,"
+
+    20 : SET VALUE : vJSON : ##vJSON + """ledgers"":["
+
+    30 : WALK COLLECTION : eBalLedgers
+    40 : SET VALUE : vJSON : ##vJSON + "{""name"":""" + $$String:$Name + """,""parent"":""" + $$String:$Parent + """},"
+    50 : END WALK
+
+    60 : SET VALUE : vJSON : $$StringTrimRight:##vJSON:"," + "],"
+
+    70 : SET VALUE : vJSON : ##vJSON + """trial_balance"":["
+
+    80 : WALK COLLECTION : eBalTB
+
+    90 : SET VALUE : vAmt : $ClosingBalance
+
+    100 : IF : $$IsDr:$ClosingBalance
+        SET VALUE : vType : "DR"
+    ELSE
+        SET VALUE : vType : "CR"
+    END IF
+
+    110 : SET VALUE : vJSON : ##vJSON +
+        "{""name"":""" + $$String:$Name + """," +
+        """parent"":""" + $$String:$Parent + """," +
+        """amount"":" + $$String:$$Abs:$ClosingBalance + "," +
+        """type"":""" + ##vType + """},"
+
+    120 : END WALK
+
+    130 : SET VALUE : vJSON : $$StringTrimRight:##vJSON:"," + "]}"
+
+    140 : HTTP POST : ##eBalURL : ##vJSON : "Content-Type: application/json,X-API-KEY:" + ##eBalKey
+
+    150 : MSGBOX : "e-BAL" : "Data Sent Successfully"
+
+[#Menu: Gateway of Tally]
+
+Add : Item : Before : Quit : "Send Data to e-BAL" : Call : SendDataToEBAL
+
+

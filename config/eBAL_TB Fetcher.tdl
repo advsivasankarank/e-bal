@@ -1,0 +1,61 @@
+[#Menu: Gateway of Tally]
+    Add: Item: Before: @@locQuit: Ledgerwise Trial Balance : Display : LedgerwiseTrialBalanceFlat
+
+[Report: LedgerwiseTrialBalanceFlat]
+    Form: LedgerwiseTBFormFlat
+    Title: "Ledgerwise Trial Balance (Flat)"
+    Variable: SVFromDate, SVToDate
+    Export: XML
+
+[Form: LedgerwiseTBFormFlat]
+    Part: LedgerwiseTBHeaderFlat, LedgerwiseTBPartFlat
+    Width: 100% Page
+    Height: 100% Page
+
+[Part: LedgerwiseTBHeaderFlat]
+    Line: LedgerwiseTBHeaderLineFlat
+
+[Line: LedgerwiseTBHeaderLineFlat]
+    Field: FldHdrLedgerFlat, FldHdrOpeningFlat, FldHdrClosingFlat
+
+[Field: FldHdrLedgerFlat]
+    Set as: "Ledger"
+    Width: 30
+    Align: Left
+
+[Field: FldHdrOpeningFlat]
+    Set as: "Opening (Dr/Cr)"
+    Width: 20
+    Align: Right
+
+[Field: FldHdrClosingFlat]
+    Set as: "Closing (Dr/Cr)"
+    Width: 20
+    Align: Right
+
+[Part: LedgerwiseTBPartFlat]
+    Line: LedgerwiseTBLineFlat
+    Repeat: LedgerwiseTBLineFlat : LedgerwiseTBCollectionFlat
+    Scroll: Vertical
+
+[Line: LedgerwiseTBLineFlat]
+    Field: FldLedgerNameFlat, FldOpeningFlat, FldClosingFlat
+
+[Field: FldLedgerNameFlat]
+    Set as: $Name
+    Width: 30
+    Align: Left
+
+[Field: FldOpeningFlat]
+    Set as: $$DebitCredit:$$OpeningBalance:$Ledger
+    Width: 20
+    Align: Right
+
+[Field: FldClosingFlat]
+    Set as: $$DebitCredit:$$ClosingBalance:$Ledger
+    Width: 20
+    Align: Right
+
+[Collection: LedgerwiseTBCollectionFlat]
+    Type: Ledger
+    Fetch: Name

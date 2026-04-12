@@ -1,0 +1,9 @@
+[Function: TestFunction]
+
+    10 : HTTP POST : "http://127.0.0.1/e-bal/api/receive_data.php" : "test=ok"
+
+    20 : MSGBOX : "DONE" : "Request Sent"
+
+[#Menu: Gateway of Tally]
+
+    Add : Item : Before : Quit : "TEST BUTTON" : Call : TestFunction

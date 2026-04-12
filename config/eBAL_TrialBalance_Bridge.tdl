@@ -1,0 +1,91 @@
+[#Menu: Gateway of Tally]
+    Add: Item: "e-BAL Trial Balance" : Display : eBAL TB Report
+
+[Report: eBAL TB Report]
+    Form    : eBAL TB Form
+    Title   : "Ledger-wise Trial Balance (e-BAL)"
+
+[Form: eBAL TB Form]
+    Parts   : eBAL TB Part
+    Width   : 100% Screen
+    Height  : 100% Screen
+
+[Part: eBAL TB Part]
+    Lines   : eBAL TB Header, eBAL TB Line, eBAL TB Total
+    Repeat  : eBAL TB Line : eBAL TB Collection
+    Scroll  : Vertical
+
+;; ================================
+;; HEADER
+;; ================================
+
+[Line: eBAL TB Header]
+    Fields : eBAL H Ledger, eBAL H Debit, eBAL H Credit
+
+[Field: eBAL H Ledger]
+    Set As : "Ledger"
+    Width  : 30
+
+[Field: eBAL H Debit]
+    Set As : "Debit"
+    Width  : 20
+
+[Field: eBAL H Credit]
+    Set As : "Credit"
+    Width  : 20
+
+;; ================================
+;; DATA LINE
+;; ================================
+
+[Line: eBAL TB Line]
+    Fields : eBAL Ledger Field, eBAL Debit Field, eBAL Credit Field
+
+[Field: eBAL Ledger Field]
+    Set As : $Name
+    Width  : 30
+
+[Field: eBAL Debit Field]
+    Set As : $DebitValue
+    Width  : 20
+
+[Field: eBAL Credit Field]
+    Set As : $CreditValue
+    Width  : 20
+
+;; ================================
+;; TOTAL LINE
+;; ================================
+
+[Line: eBAL TB Total]
+    Fields : eBAL Total Label, eBAL Total Debit, eBAL Total Credit
+
+[Field: eBAL Total Label]
+    Set As : "TOTAL"
+    Width  : 30
+    Align  : Right
+
+[Field: eBAL Total Debit]
+    Set As : $TotalDebit
+    Width  : 20
+
+[Field: eBAL Total Credit]
+    Set As : $TotalCredit
+    Width  : 20
+
+;; ================================
+;; COLLECTION
+;; ================================
+
+[Collection: eBAL TB Collection]
+    Type    : Ledger
+    Fetch   : Name, ClosingBalance
+    Belongs To : Yes
+
+    ;; Computed fields for Debit and Credit
+    Compute : DebitValue  : if $$IsDr:$ClosingBalance then $$Abs:$ClosingBalance else 0
+    Compute : CreditValue : if $$IsCr:$ClosingBalance then $$Abs:$ClosingBalance else 0
+
+    ;; Aggregate totals
+    Aggr Compute : TotalDebit  : Sum : DebitValue
+    Aggr Compute : TotalCredit : Sum : CreditValue
