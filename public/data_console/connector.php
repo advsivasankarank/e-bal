@@ -3,6 +3,7 @@ require_once '../../app/context_check.php';
 requireFullContext();
 require_once '../../config/app.php';
 require_once '../../app/helpers/xml_sanitizer.php';
+require_once '../../xml_engine/tally_connector.php';
 
 $page_title = "Sync Result";
 $companyName = $_SESSION['company_name'] ?? 'Not Selected';
@@ -13,7 +14,6 @@ $sessionCookie = session_name() . '=' . session_id();
 session_write_close();
 
 /* ========= FETCH FROM TALLY ========= */
-$url = "http://127.0.0.1:9000";
 
 $xml = <<<XML
 <ENVELOPE>
@@ -41,19 +41,9 @@ $xml = <<<XML
 </ENVELOPE>
 XML;
 
-$ch = curl_init($url);
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_POST => true,
-    CURLOPT_POSTFIELDS => $xml,
-    CURLOPT_HTTPHEADER => ["Content-Type: application/xml"],
-    CURLOPT_CONNECTTIMEOUT => 5,
-    CURLOPT_TIMEOUT => 20,
-]);
-$response = curl_exec($ch);
+$response = fetchFromTally($xml);
 if ($response === false) {
-    $errorMessage = "Error contacting Tally: " . curl_error($ch);
-    curl_close($ch);
+    $errorMessage = "Error contacting Tally.";
     require_once __DIR__ . '/../layouts/header.php';
     ?>
     <div class="page-title">e-BAL Sync Result</div>
@@ -63,7 +53,7 @@ if ($response === false) {
     </div>
     <div class="error-box"><p><?= htmlspecialchars($errorMessage) ?></p></div>
     <div class="card">
-        The live Tally bridge did not respond successfully. Check that Tally is running, the XML interface is enabled, and port `9000` is reachable from this machine.
+        The live Tally bridge did not respond successfully. Check that your Tally Bridge is running, the XML interface is enabled in Tally, and the bridge URL is reachable from this machine.
     </div>
     <div style="margin-top:20px;">
         <a class="btn" href="<?= BASE_URL ?>data_console/tally_online.php">Back to Online Console</a>
@@ -72,13 +62,15 @@ if ($response === false) {
     require_once __DIR__ . '/../layouts/footer.php';
     exit;
 }
-curl_close($ch);
 
 /* ========= SANITIZE ========= */
 $response = sanitizeTallyXML($response);
 
 /* ========= PUSH TO API ========= */
-$ch = curl_init("http://127.0.0.1/e-bal/api/receive_data.php");
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$apiUrl = $scheme . '://' . $host . BASE_URL . 'api/receive_data.php';
+$ch = curl_init($apiUrl);
 curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_RETURNTRANSFER => true,

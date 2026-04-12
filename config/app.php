@@ -11,6 +11,14 @@ if (!defined('BASE_URL')) {
         define('BASE_URL', $envBase ? rtrim($envBase, '/') . '/' : '/');
     }
 }
+
+if (!defined('TALLY_BRIDGE_URL')) {
+    define('TALLY_BRIDGE_URL', getenv('TALLY_BRIDGE_URL') ?: '');
+}
+
+if (!defined('TALLY_BRIDGE_TOKEN')) {
+    define('TALLY_BRIDGE_TOKEN', getenv('TALLY_BRIDGE_TOKEN') ?: '');
+}
 define('MCA_LOOKUP_URL', getenv('MCA_LOOKUP_URL') ?: '');
 define('MCA_LOOKUP_TOKEN', getenv('MCA_LOOKUP_TOKEN') ?: '');
 define('DIRECTORS_REPORT_AI_URL', getenv('DIRECTORS_REPORT_AI_URL') ?: '');

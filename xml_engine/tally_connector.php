@@ -1,5 +1,17 @@
 <?php
+if (!defined('TALLY_BRIDGE_URL')) {
+    $appConfig = __DIR__ . '/../config/app.php';
+    if (file_exists($appConfig)) {
+        require_once $appConfig;
+    }
+}
+
 function fetchFromTally($xmlRequest) {
+    $bridgeUrl = defined('TALLY_BRIDGE_URL') ? trim((string) TALLY_BRIDGE_URL) : '';
+    if ($bridgeUrl !== '' && !defined('TALLY_BRIDGE_MODE')) {
+        return fetchFromTallyBridge($bridgeUrl, $xmlRequest);
+    }
+
     $url = "http://localhost:9000";
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -14,12 +26,65 @@ function fetchFromTally($xmlRequest) {
     $response = curl_exec($ch);
 
     if ($response === false) {
-        $error = curl_error($ch);
         curl_close($ch);
         return false;
     }
 
     curl_close($ch);
+    return $response;
+}
+
+function fetchFromTallyBridge(string $bridgeUrl, string $xmlRequest) {
+    $token = defined('TALLY_BRIDGE_TOKEN') ? (string) TALLY_BRIDGE_TOKEN : '';
+    $payload = json_encode([
+        'action' => 'fetch',
+        'xml' => $xmlRequest,
+        'token' => $token,
+    ]);
+
+    $ch = curl_init($bridgeUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_HTTPHEADER => [
+            "Content-Type: application/json",
+            "Accept: application/json",
+        ],
+        CURLOPT_CONNECTTIMEOUT => 6,
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    if ($token !== '') {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Content-Type: application/json",
+            "Accept: application/json",
+            "X-Bridge-Token: " . $token,
+        ]);
+    }
+
+    $response = curl_exec($ch);
+    if ($response === false) {
+        curl_close($ch);
+        return false;
+    }
+
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($status >= 400) {
+        return false;
+    }
+
+    $decoded = json_decode($response, true);
+    if (is_array($decoded)) {
+        if (!empty($decoded['ok']) && isset($decoded['xml'])) {
+            return (string) $decoded['xml'];
+        }
+
+        return false;
+    }
+
     return $response;
 }
 
