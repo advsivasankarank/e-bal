@@ -1,0 +1,4 @@
+deployment:
+  tasks:
+    - /bin/mkdir -p /home5/etaxadv/public_html/ebal
+    - /bin/rsync -av --delete --exclude ".git" --exclude ".cpanel.yml" /home5/etaxadv/e-bal/ /home5/etaxadv/public_html/ebal/
