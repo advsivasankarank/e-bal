@@ -1,3 +1,5 @@
 /build/
 /dist/
 *.spec
+/bundle/ngrok.exe
+/old/

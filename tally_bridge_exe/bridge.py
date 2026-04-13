@@ -17,7 +17,7 @@ DEFAULT_CONFIG = {
     "timeout_total": 30,
     "public_url": "",
     "autostart": False,
-    "ngrok_enabled": False,
+    "ngrok_enabled": True,
     "ngrok_path": "",
     "ngrok_args": "",
     "webhook_url": ""

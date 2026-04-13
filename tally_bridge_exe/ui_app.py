@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from pathlib import Path
 from tkinter import messagebox
 
@@ -49,7 +50,7 @@ class BridgeUI:
     def __init__(self, root):
         self.root = root
         self.root.title(APP_NAME)
-        self.root.geometry("520x360")
+        self.root.geometry("440x240")
         self.root.resizable(False, False)
 
         self.config = load_config()
@@ -71,15 +72,6 @@ class BridgeUI:
         tk.Label(frame, text=APP_NAME, font=("Segoe UI", 14, "bold")).pack(anchor="w")
         tk.Label(frame, text="Bridge to Tally (localhost:9000)", fg="#4b5563").pack(anchor="w", pady=(0, 12))
 
-        self._field(frame, "Tally URL", "tally_url")
-        self._field(frame, "Listen Host", "listen_host")
-        self._field(frame, "Listen Port", "listen_port")
-        self._field(frame, "Token", "token", show="*")
-        self._field(frame, "Public Tunnel URL (optional)", "public_url")
-        self._field(frame, "ngrok Path", "ngrok_path")
-        self._field(frame, "ngrok Args (optional)", "ngrok_args")
-        self._field(frame, "Webhook URL (optional)", "webhook_url")
-
         status_row = tk.Frame(frame)
         status_row.pack(fill="x", pady=(8, 6))
         tk.Label(status_row, text="Status:").pack(side="left")
@@ -92,12 +84,9 @@ class BridgeUI:
 
         btn_row = tk.Frame(frame)
         btn_row.pack(fill="x", pady=(10, 4))
-        self.start_btn = tk.Button(btn_row, text="Start", width=10, command=self.start_server)
+        self.start_btn = tk.Button(btn_row, text="Start Bridge", width=16, command=self.start_server)
         self.start_btn.pack(side="left")
-        self.stop_btn = tk.Button(btn_row, text="Stop", width=10, command=self.stop_server)
-        self.stop_btn.pack(side="left", padx=(8, 0))
-        tk.Button(btn_row, text="Save", width=10, command=self.save).pack(side="left", padx=(8, 0))
-        tk.Button(btn_row, text="Check Tunnel", width=12, command=self.check_tunnel).pack(side="left", padx=(8, 0))
+        tk.Button(btn_row, text="Open ebal.etaxadv.com", width=22, command=self.open_site).pack(side="left", padx=(8, 0))
 
         self.autostart_var = tk.BooleanVar(value=bool(self.config.get("autostart")))
         tk.Checkbutton(
@@ -106,13 +95,6 @@ class BridgeUI:
             variable=self.autostart_var,
             command=self.toggle_autostart,
         ).pack(anchor="w", pady=(6, 0))
-
-        self.ngrok_var = tk.BooleanVar(value=bool(self.config.get("ngrok_enabled")))
-        tk.Checkbutton(
-            frame,
-            text="Auto-start ngrok tunnel",
-            variable=self.ngrok_var,
-        ).pack(anchor="w")
 
     def _field(self, parent, label, key, show=None):
         row = tk.Frame(parent)
@@ -124,19 +106,10 @@ class BridgeUI:
         setattr(self, f"entry_{key}", entry)
 
     def read_fields(self):
-        self.config["tally_url"] = self.entry_tally_url.get().strip()
-        self.config["listen_host"] = self.entry_listen_host.get().strip() or "127.0.0.1"
-        self.config["listen_port"] = int(self.entry_listen_port.get().strip() or 9123)
-        self.config["token"] = self.entry_token.get().strip()
-        self.config["public_url"] = self.entry_public_url.get().strip()
         self.config["autostart"] = bool(self.autostart_var.get())
-        self.config["ngrok_enabled"] = bool(self.ngrok_var.get())
-        ngrok_value = self.entry_ngrok_path.get().strip()
-        if not ngrok_value:
-            ngrok_value = bundled_ngrok_path() or "ngrok"
-        self.config["ngrok_path"] = ngrok_value
-        self.config["ngrok_args"] = self.entry_ngrok_args.get().strip()
-        self.config["webhook_url"] = self.entry_webhook_url.get().strip()
+        self.config["ngrok_enabled"] = True
+        if not self.config.get("ngrok_path"):
+            self.config["ngrok_path"] = bundled_ngrok_path() or "ngrok"
 
     def save(self):
         self.read_fields()
@@ -150,8 +123,7 @@ class BridgeUI:
         self.server = BridgeServer(self.config)
         self.server.start()
         self.status_var.set(f"Running on {self.config['listen_host']}:{self.config['listen_port']}")
-        if self.config.get("ngrok_enabled"):
-            self.start_ngrok()
+        self.start_ngrok()
 
     def stop_server(self):
         if self.server.is_running():
@@ -181,6 +153,9 @@ class BridgeUI:
         if not set_autostart(enabled):
             messagebox.showerror(APP_NAME, "Failed to update Windows auto-start.")
             self.autostart_var.set(False)
+
+    def open_site(self):
+        webbrowser.open("https://ebal.etaxadv.com")
 
     def start_ngrok(self):
         if self.ngrok_process:
