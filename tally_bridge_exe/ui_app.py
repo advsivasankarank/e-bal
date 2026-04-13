@@ -125,6 +125,7 @@ class BridgeUI:
         self.server.start()
         self.status_var.set(f"Running on {self.config['listen_host']}:{self.config['listen_port']}")
         self.start_ngrok()
+        threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
 
     def stop_server(self):
         if self.server.is_running():
