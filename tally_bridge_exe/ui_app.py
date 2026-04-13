@@ -1,7 +1,8 @@
 import json
-import os
+import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox
@@ -47,6 +48,7 @@ class BridgeUI:
 
         self.config = load_config()
         self.server = BridgeServer(self.config)
+        self.ngrok_process = None
 
         self.status_var = tk.StringVar(value="Stopped")
         self.tunnel_status_var = tk.StringVar(value="Unknown")
@@ -68,6 +70,8 @@ class BridgeUI:
         self._field(frame, "Listen Port", "listen_port")
         self._field(frame, "Token", "token", show="*")
         self._field(frame, "Public Tunnel URL (optional)", "public_url")
+        self._field(frame, "ngrok Path", "ngrok_path")
+        self._field(frame, "ngrok Args (optional)", "ngrok_args")
 
         status_row = tk.Frame(frame)
         status_row.pack(fill="x", pady=(8, 6))
@@ -96,6 +100,13 @@ class BridgeUI:
             command=self.toggle_autostart,
         ).pack(anchor="w", pady=(6, 0))
 
+        self.ngrok_var = tk.BooleanVar(value=bool(self.config.get("ngrok_enabled")))
+        tk.Checkbutton(
+            frame,
+            text="Auto-start ngrok tunnel",
+            variable=self.ngrok_var,
+        ).pack(anchor="w")
+
     def _field(self, parent, label, key, show=None):
         row = tk.Frame(parent)
         row.pack(fill="x", pady=2)
@@ -112,6 +123,9 @@ class BridgeUI:
         self.config["token"] = self.entry_token.get().strip()
         self.config["public_url"] = self.entry_public_url.get().strip()
         self.config["autostart"] = bool(self.autostart_var.get())
+        self.config["ngrok_enabled"] = bool(self.ngrok_var.get())
+        self.config["ngrok_path"] = self.entry_ngrok_path.get().strip() or "ngrok"
+        self.config["ngrok_args"] = self.entry_ngrok_args.get().strip()
 
     def save(self):
         self.read_fields()
@@ -125,11 +139,14 @@ class BridgeUI:
         self.server = BridgeServer(self.config)
         self.server.start()
         self.status_var.set(f"Running on {self.config['listen_host']}:{self.config['listen_port']}")
+        if self.config.get("ngrok_enabled"):
+            self.start_ngrok()
 
     def stop_server(self):
         if self.server.is_running():
             self.server.stop()
         self.status_var.set("Stopped")
+        self.stop_ngrok()
 
     def check_tunnel(self):
         self.read_fields()
@@ -153,6 +170,68 @@ class BridgeUI:
         if not set_autostart(enabled):
             messagebox.showerror(APP_NAME, "Failed to update Windows auto-start.")
             self.autostart_var.set(False)
+
+    def start_ngrok(self):
+        if self.ngrok_process:
+            return
+        ngrok_path = self.config.get("ngrok_path", "ngrok")
+        args = ["http", str(self.config.get("listen_port", 9123))]
+        extra = self.config.get("ngrok_args", "").strip()
+        if extra:
+            args.extend(extra.split())
+        cmd = [ngrok_path] + args
+
+        creationflags = 0
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        try:
+            self.ngrok_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=creationflags,
+            )
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Failed to start ngrok: {exc}")
+            self.ngrok_process = None
+            return
+
+        threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
+
+    def stop_ngrok(self):
+        if not self.ngrok_process:
+            return
+        try:
+            self.ngrok_process.terminate()
+        except Exception:
+            pass
+        self.ngrok_process = None
+
+    def _auto_fill_public_url(self):
+        time.sleep(2)
+        public_url = ""
+        for _ in range(10):
+            try:
+                resp = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=3)
+                data = resp.json()
+                tunnels = data.get("tunnels", [])
+                if tunnels:
+                    public_url = tunnels[0].get("public_url", "")
+                    if public_url:
+                        break
+            except Exception:
+                pass
+            time.sleep(1)
+
+        if public_url:
+            self.entry_public_url.delete(0, tk.END)
+            self.entry_public_url.insert(0, public_url)
+            self.config["public_url"] = public_url
+            save_config(self.config)
+            self.tunnel_status_var.set("OK")
+        else:
+            self.tunnel_status_var.set("Unreachable")
 
 
 def main():

@@ -16,7 +16,10 @@ DEFAULT_CONFIG = {
     "timeout_connect": 6,
     "timeout_total": 30,
     "public_url": "",
-    "autostart": False
+    "autostart": False,
+    "ngrok_enabled": False,
+    "ngrok_path": "ngrok",
+    "ngrok_args": ""
 }
 
 

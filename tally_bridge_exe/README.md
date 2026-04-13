@@ -38,6 +38,10 @@ Output:
 dist\ebal-tally-bridge-setup.exe
 ```
 
+## 4. Auto-start ngrok (Option C)
+Enable "Auto-start ngrok tunnel" in the UI, ensure `ngrok` is in PATH,
+and the bridge will start ngrok and auto-fill the public URL.
+
 ## 4. Hosted app config
 Set these on your server:
 
