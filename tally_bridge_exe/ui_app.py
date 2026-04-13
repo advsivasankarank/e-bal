@@ -1,50 +1,69 @@
 import json
-import subprocess
-import sys
+import logging
+import re
 import threading
 import time
-import tkinter as tk
-import webbrowser
+import sys
+from datetime import datetime
 from pathlib import Path
+import tkinter as tk
 from tkinter import messagebox
 
 import requests
-import re
-import tempfile
-import xml.etree.ElementTree as ET
-
-from bridge import BridgeServer, load_config, save_config
 
 
-APP_NAME = "eBAL Smart Bridge"
-RUN_REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
-RUN_REG_NAME = "eBAL_Tally_Bridge"
+APP_TITLE = "eBAL Smart Bridge"
+CONFIG_NAME = "config.json"
+LOG_NAME = "bridge.log"
 
+TALLY_URL = "http://localhost:9000"
+LEDGER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/api/upload_ledger.php"
+TB_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/api/upload_tb.php"
 
-def exe_path():
-    if getattr(sys, "frozen", False):
-        return sys.executable
-    return str(Path(__file__).resolve())
+LEDGER_XML = """<ENVELOPE>
+ <HEADER>
+  <VERSION>1</VERSION>
+  <TALLYREQUEST>Export</TALLYREQUEST>
+  <TYPE>Collection</TYPE>
+  <ID>LedgerList</ID>
+ </HEADER>
+ <BODY>
+  <DESC>
+   <STATICVARIABLES>
+    <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+   </STATICVARIABLES>
+   <TDL>
+    <TDLMESSAGE>
+     <COLLECTION NAME="LedgerList">
+      <TYPE>Ledger</TYPE>
+      <FETCH>Name, Parent</FETCH>
+     </COLLECTION>
+    </TDLMESSAGE>
+   </TDL>
+  </DESC>
+ </BODY>
+</ENVELOPE>
+"""
 
+TB_XML = """<ENVELOPE>
+ <HEADER>
+  <VERSION>1</VERSION>
+  <TALLYREQUEST>Export</TALLYREQUEST>
+  <TYPE>Data</TYPE>
+  <ID>Trial Balance</ID>
+ </HEADER>
+ <BODY>
+  <DESC>
+   <STATICVARIABLES>
+    <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+   </STATICVARIABLES>
+  </DESC>
+ </BODY>
+</ENVELOPE>
+"""
 
-def bundled_ngrok_path():
-    if getattr(sys, "frozen", False):
-        meipass = getattr(sys, "_MEIPASS", "")
-        base = Path(meipass) if meipass else Path(sys.executable).parent
-    else:
-        base = Path(__file__).resolve().parent
-    candidate = base / "ngrok.exe"
-    return str(candidate) if candidate.exists() else ""
+INVALID_XML_RE = re.compile(r"[^\x09\x0A\x0D\x20-\x7F]+")
 
-
-def bundled_cloudflared_path():
-    if getattr(sys, "frozen", False):
-        meipass = getattr(sys, "_MEIPASS", "")
-        base = Path(meipass) if meipass else Path(sys.executable).parent
-    else:
-        base = Path(__file__).resolve().parent
-    candidate = base / "cloudflared.exe"
-    return str(candidate) if candidate.exists() else ""
 
 def app_dir():
     if getattr(sys, "frozen", False):
@@ -52,342 +71,251 @@ def app_dir():
     return Path(__file__).resolve().parent
 
 
-def set_autostart(enabled):
+def load_config():
+    path = app_dir() / CONFIG_NAME
+    if not path.exists():
+        default = {
+            "client_id": "EBAL001",
+            "token": "CHANGE_THIS",
+            "company_id": 0,
+            "fy_id": 0,
+            "ledger_upload_url": LEDGER_UPLOAD_DEFAULT,
+            "tb_upload_url": TB_UPLOAD_DEFAULT,
+            "auto_sync": True,
+            "sync_interval": 300
+        }
+        path.write_text(json.dumps(default, indent=2))
+        return default
+
     try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_REG_PATH, 0, winreg.KEY_SET_VALUE) as key:
-            if enabled:
-                winreg.SetValueEx(key, RUN_REG_NAME, 0, winreg.REG_SZ, f"\"{exe_path()}\"")
-            else:
-                try:
-                    winreg.DeleteValue(key, RUN_REG_NAME)
-                except FileNotFoundError:
-                    pass
-        return True
+        data = json.loads(path.read_text())
+        return data
     except Exception:
-        return False
+        return {
+            "client_id": "EBAL001",
+            "token": "CHANGE_THIS",
+            "company_id": 0,
+            "fy_id": 0,
+            "ledger_upload_url": LEDGER_UPLOAD_DEFAULT,
+            "tb_upload_url": TB_UPLOAD_DEFAULT,
+            "auto_sync": True,
+            "sync_interval": 300
+        }
 
 
-class BridgeUI:
+def save_config(config):
+    path = app_dir() / CONFIG_NAME
+    path.write_text(json.dumps(config, indent=2))
+
+
+def setup_logging():
+    log_path = app_dir() / LOG_NAME
+    logging.basicConfig(
+        filename=str(log_path),
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+
+
+def sanitize_xml(raw_xml):
+    return INVALID_XML_RE.sub("", raw_xml)
+
+
+def fetch_from_tally(xml_request):
+    try:
+        response = requests.post(
+            TALLY_URL,
+            data=xml_request.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Tally connection failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"Tally HTTP error: {response.status_code}")
+
+    if not response.text.strip():
+        raise RuntimeError("Tally returned empty response.")
+
+    return sanitize_xml(response.text)
+
+
+def upload_to_server(config, xml_data, upload_url):
+    payload = {
+        "client_id": config.get("client_id", ""),
+        "token": config.get("token", ""),
+        "company_id": config.get("company_id", 0),
+        "fy_id": config.get("fy_id", 0),
+        "xml": xml_data,
+    }
+    try:
+        response = requests.post(
+            upload_url,
+            json=payload,
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Upload failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"Upload HTTP error: {response.status_code}")
+
+    return response.text.strip()
+
+
+class SmartBridgeUI:
     def __init__(self, root):
         self.root = root
-        self.root.title(APP_NAME)
-        self.root.geometry("440x240")
+        self.root.title(APP_TITLE)
+        self.root.geometry("420x260")
         self.root.resizable(False, False)
 
         self.config = load_config()
-        self.server = BridgeServer(self.config)
-        self.ngrok_process = None
-        self.cloudflare_process = None
-        self.cloudflare_log_path = None
+        self.stop_event = threading.Event()
+        self.worker = None
 
         self.status_var = tk.StringVar(value="Stopped")
-        self.tunnel_status_var = tk.StringVar(value="Unknown")
+        self.tally_var = tk.StringVar(value="Not Connected")
+        self.last_sync_var = tk.StringVar(value="Never")
+        self.last_upload_var = tk.StringVar(value="None")
+        self.auto_sync_var = tk.BooleanVar(value=bool(self.config.get("auto_sync", True)))
 
-        self._build_ui()
+        self.build_ui()
+        if self.auto_sync_var.get():
+            self.start_bridge()
 
-        if self.config.get("autostart"):
-            self.start_server()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-    def _build_ui(self):
+    def build_ui(self):
         frame = tk.Frame(self.root, padx=14, pady=12)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text=APP_NAME, font=("Segoe UI", 14, "bold")).pack(anchor="w")
+        tk.Label(frame, text=APP_TITLE, font=("Segoe UI", 14, "bold")).pack(anchor="w")
         tk.Label(frame, text="Bridge to Tally (localhost:9000)", fg="#4b5563").pack(anchor="w", pady=(0, 12))
 
-        status_row = tk.Frame(frame)
-        status_row.pack(fill="x", pady=(8, 6))
-        tk.Label(status_row, text="Status:").pack(side="left")
-        tk.Label(status_row, textvariable=self.status_var, fg="#0f766e", font=("Segoe UI", 10, "bold")).pack(side="left", padx=(6, 0))
-
-        tunnel_row = tk.Frame(frame)
-        tunnel_row.pack(fill="x", pady=(0, 6))
-        tk.Label(tunnel_row, text="Tunnel:").pack(side="left")
-        tk.Label(tunnel_row, textvariable=self.tunnel_status_var, fg="#2563eb").pack(side="left", padx=(6, 0))
+        self._row(frame, "Status:", self.status_var)
+        self._row(frame, "Tally Status:", self.tally_var)
+        self._row(frame, "Last Sync:", self.last_sync_var)
+        self._row(frame, "Last Upload:", self.last_upload_var)
 
         btn_row = tk.Frame(frame)
-        btn_row.pack(fill="x", pady=(10, 4))
-        self.start_btn = tk.Button(btn_row, text="Start Bridge", width=14, command=self.start_server)
-        self.start_btn.pack(side="left")
-        tk.Button(btn_row, text="Refresh Tunnel", width=14, command=self.refresh_tunnel).pack(side="left", padx=(8, 0))
-        tk.Button(btn_row, text="Open ebal.etaxadv.com", width=22, command=self.open_site).pack(side="left", padx=(8, 0))
+        btn_row.pack(fill="x", pady=(10, 6))
+        tk.Button(btn_row, text="Start Bridge", width=14, command=self.start_bridge).pack(side="left")
+        tk.Button(btn_row, text="Stop Bridge", width=14, command=self.stop_bridge).pack(side="left", padx=(8, 0))
+        tk.Button(btn_row, text="Fetch Now", width=14, command=self.fetch_now).pack(side="left", padx=(8, 0))
 
-        self.autostart_var = tk.BooleanVar(value=bool(self.config.get("autostart")))
         tk.Checkbutton(
             frame,
-            text="Auto-start on Windows login",
-            variable=self.autostart_var,
-            command=self.toggle_autostart,
+            text="Auto Sync",
+            variable=self.auto_sync_var,
+            command=self.toggle_auto_sync
         ).pack(anchor="w", pady=(6, 0))
 
-    def _field(self, parent, label, key, show=None):
+    def _row(self, parent, label, var):
         row = tk.Frame(parent)
         row.pack(fill="x", pady=2)
-        tk.Label(row, text=label, width=20, anchor="w").pack(side="left")
-        entry = tk.Entry(row, show=show)
-        entry.insert(0, str(self.config.get(key, "")))
-        entry.pack(side="left", fill="x", expand=True)
-        setattr(self, f"entry_{key}", entry)
+        tk.Label(row, text=label, width=14, anchor="w").pack(side="left")
+        tk.Label(row, textvariable=var, anchor="w", fg="#0f172a").pack(side="left")
 
-    def read_fields(self):
-        self.config["autostart"] = bool(self.autostart_var.get())
-        self.config["ngrok_enabled"] = True
-        if not self.config.get("ngrok_path"):
-            self.config["ngrok_path"] = bundled_ngrok_path() or "ngrok"
-        self.config["cloudflared_enabled"] = True
-        if not self.config.get("cloudflared_path"):
-            self.config["cloudflared_path"] = bundled_cloudflared_path() or "cloudflared"
-        if not self.config.get("webhook_url"):
-            self.config["webhook_url"] = "https://ebal.etaxadv.com/bridge_webhook.php"
+    def set_status(self, text):
+        self.status_var.set(text)
 
-    def save(self):
-        self.read_fields()
+    def set_tally_status(self, text):
+        self.tally_var.set(text)
+
+    def set_last_sync(self, text):
+        self.last_sync_var.set(text)
+
+    def set_last_upload(self, text):
+        self.last_upload_var.set(text)
+
+    def toggle_auto_sync(self):
+        self.config["auto_sync"] = bool(self.auto_sync_var.get())
         save_config(self.config)
-        messagebox.showinfo(APP_NAME, "Configuration saved.")
+        if self.auto_sync_var.get():
+            self.start_bridge()
 
-    def start_server(self):
-        self.read_fields()
-        if self.server.is_running():
+    def start_bridge(self):
+        if self.worker and self.worker.is_alive():
             return
-        self.server = BridgeServer(self.config)
-        self.server.start()
-        self.status_var.set(f"Running on {self.config['listen_host']}:{self.config['listen_port']}")
-        self.start_tunnel()
-        if not self.config.get("cloudflared_enabled"):
-            threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
+        self.stop_event.clear()
+        self.set_status("Running")
+        self.worker = threading.Thread(target=self.auto_sync_loop, daemon=True)
+        self.worker.start()
 
-    def stop_server(self):
-        if self.server.is_running():
-            self.server.stop()
-        self.status_var.set("Stopped")
-        self.stop_tunnel()
+    def stop_bridge(self):
+        self.stop_event.set()
+        self.set_status("Stopped")
 
-    def check_tunnel(self):
-        self.read_fields()
-        url = self.config.get("public_url", "")
-        if not url:
-            self.tunnel_status_var.set("Not set")
+    def fetch_now(self):
+        threading.Thread(target=self.run_sync_once, daemon=True).start()
+
+    def run_sync_once(self):
+        if not self.config.get("company_id") or not self.config.get("fy_id"):
+            self.set_last_upload("Failed")
+            messagebox.showerror(APP_TITLE, "Company ID / FY ID missing in config.json.")
             return
-
-        def task():
-            try:
-                resp = requests.get(url.rstrip("/") + "/health", timeout=6)
-                ok = resp.status_code == 200
-            except Exception:
-                ok = False
-            self.tunnel_status_var.set("OK" if ok else "Unreachable")
-
-        threading.Thread(target=task, daemon=True).start()
-
-    def toggle_autostart(self):
-        enabled = bool(self.autostart_var.get())
-        if not set_autostart(enabled):
-            messagebox.showerror(APP_NAME, "Failed to update Windows auto-start.")
-            self.autostart_var.set(False)
-
-    def open_site(self):
-        webbrowser.open("https://ebal.etaxadv.com")
-
-    def refresh_tunnel(self):
-        self.tunnel_status_var.set("Starting...")
-        if self.config.get("cloudflared_enabled"):
-            threading.Thread(target=self._watch_cloudflared_log, daemon=True).start()
-        threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
-
-    def start_tunnel(self):
-        if self.config.get("cloudflared_enabled"):
-            if self.start_cloudflared():
-                self.tunnel_status_var.set("Starting...")
-                return
-        self.start_ngrok()
-        threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
-
-    def stop_tunnel(self):
-        self.stop_ngrok()
-        self.stop_cloudflared()
-
-    def start_cloudflared(self):
-        if self.cloudflare_process:
-            return True
-        cloudflared_path = self.config.get("cloudflared_path", "cloudflared")
-        if not Path(cloudflared_path).exists():
-            self.tunnel_status_var.set("cloudflared missing")
-            return False
-        listen_port = str(self.config.get("listen_port", 9123))
-        self.cloudflare_log_path = Path(tempfile.gettempdir()) / "ebal-cloudflared.log"
-        args = [
-            "tunnel",
-            "--url",
-            f"http://localhost:{listen_port}",
-            "--no-autoupdate",
-            "--loglevel",
-            "info",
-            "--logfile",
-            str(self.cloudflare_log_path),
-        ]
-        extra = self.config.get("cloudflared_args", "").strip()
-        if extra:
-            args.extend(extra.split())
-        cmd = [cloudflared_path] + args
-
-        creationflags = 0
-        if hasattr(subprocess, "CREATE_NO_WINDOW"):
-            creationflags = subprocess.CREATE_NO_WINDOW
 
         try:
-            self.cloudflare_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                creationflags=creationflags,
-                text=True,
-                bufsize=1,
-            )
+            ledger_xml = fetch_from_tally(LEDGER_XML)
+            self.set_tally_status("Connected")
+            self.set_last_sync(datetime.now().strftime("%d-%b-%Y %H:%M:%S"))
+            logging.info("Fetched ledger master from Tally.")
         except Exception as exc:
-            self.cloudflare_process = None
-            self.tunnel_status_var.set("cloudflared failed")
-            return False
-
-        threading.Thread(target=self._read_cloudflared_output, daemon=True).start()
-        threading.Thread(target=self._watch_cloudflared_log, daemon=True).start()
-        return True
-
-    def _read_cloudflared_output(self):
-        if not self.cloudflare_process or not self.cloudflare_process.stdout:
+            self.set_tally_status("Not Connected")
+            self.set_last_upload("Failed")
+            logging.error(str(exc))
+            messagebox.showerror(APP_TITLE, f"Tally error: {exc}")
             return
-        for line in self.cloudflare_process.stdout:
-            match = re.search(r"https://[a-z0-9\\-]+\\.trycloudflare\\.com", line)
-            if match:
-                public_url = match.group(0)
-                self.config["public_url"] = public_url
-                save_config(self.config)
-                self.tunnel_status_var.set(public_url)
-                self.trigger_webhook(public_url)
-                break
-
-    def _watch_cloudflared_log(self):
-        if not self.cloudflare_log_path:
-            return
-        for _ in range(60):
-            try:
-                if self.cloudflare_log_path.exists():
-                    content = self.cloudflare_log_path.read_text(errors="ignore")
-                    match = re.search(r"https://[a-z0-9\\-]+\\.trycloudflare\\.com", content)
-                    if match:
-                        public_url = match.group(0)
-                        self.config["public_url"] = public_url
-                        save_config(self.config)
-                        self.tunnel_status_var.set(public_url)
-                        self.trigger_webhook(public_url)
-                        return
-            except Exception:
-                pass
-            time.sleep(1)
-
-    def stop_cloudflared(self):
-        if not self.cloudflare_process:
-            return
-        try:
-            self.cloudflare_process.terminate()
-        except Exception:
-            pass
-        self.cloudflare_process = None
-
-    def start_ngrok(self):
-        if self.ngrok_process:
-            return
-        ngrok_path = self.config.get("ngrok_path", "ngrok")
-        args = ["http", str(self.config.get("listen_port", 9123))]
-        extra = self.config.get("ngrok_args", "").strip()
-        if extra:
-            args.extend(extra.split())
-        cmd = [ngrok_path] + args
-
-        creationflags = 0
-        if hasattr(subprocess, "CREATE_NO_WINDOW"):
-            creationflags = subprocess.CREATE_NO_WINDOW
 
         try:
-            self.ngrok_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=creationflags,
-            )
+            ledger_url = self.config.get("ledger_upload_url") or LEDGER_UPLOAD_DEFAULT
+            result = upload_to_server(self.config, ledger_xml, ledger_url)
+            logging.info("Ledger upload success: %s", result)
         except Exception as exc:
-            messagebox.showerror(APP_NAME, f"Failed to start ngrok: {exc}")
-            self.ngrok_process = None
+            self.set_last_upload("Failed")
+            logging.error(str(exc))
+            messagebox.showerror(APP_TITLE, f"Ledger upload error: {exc}")
             return
 
-        threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
-
-    def stop_ngrok(self):
-        if not self.ngrok_process:
-            return
         try:
-            self.ngrok_process.terminate()
-        except Exception:
-            pass
-        self.ngrok_process = None
-
-    def _auto_fill_public_url(self):
-        time.sleep(2)
-        public_url = ""
-        for _ in range(10):
-            try:
-                resp = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=3)
-                content_type = (resp.headers.get("Content-Type", "") or "").lower()
-                if "json" in content_type:
-                    data = resp.json()
-                    tunnels = data.get("tunnels", [])
-                    if tunnels:
-                        public_url = tunnels[0].get("public_url", "")
-                        if public_url:
-                            break
-                else:
-                    match = re.search(r"<PublicURL>([^<]+)</PublicURL>", resp.text)
-                    if match:
-                        public_url = match.group(1).strip()
-                        if public_url:
-                            break
-                    root = ET.fromstring(resp.text)
-                    node = root.find(".//PublicURL")
-                    if node is not None and node.text:
-                        public_url = node.text.strip()
-                        if public_url:
-                            break
-            except Exception:
-                pass
-            time.sleep(1)
-
-        if public_url:
-            self.config["public_url"] = public_url
-            save_config(self.config)
-            self.tunnel_status_var.set(public_url)
-            self.trigger_webhook(public_url)
-        else:
-            self.tunnel_status_var.set("Starting...")
-
-    def trigger_webhook(self, public_url):
-        webhook = self.config.get("webhook_url", "").strip()
-        if not webhook:
+            tb_xml = fetch_from_tally(TB_XML)
+            logging.info("Fetched trial balance from Tally.")
+        except Exception as exc:
+            self.set_last_upload("Failed")
+            logging.error(str(exc))
+            messagebox.showerror(APP_TITLE, f"Tally TB error: {exc}")
             return
-        fetch_url = public_url.rstrip("/") + "/fetch"
-        payload = {
-            "public_url": public_url,
-            "fetch_url": fetch_url,
-            "token": self.config.get("token", "")
-        }
+
         try:
-            requests.post(webhook, json=payload, timeout=8)
-        except Exception:
-            pass
+            tb_url = self.config.get("tb_upload_url") or TB_UPLOAD_DEFAULT
+            result = upload_to_server(self.config, tb_xml, tb_url)
+            self.set_last_upload("Success")
+            logging.info("TB upload success: %s", result)
+        except Exception as exc:
+            self.set_last_upload("Failed")
+            logging.error(str(exc))
+            messagebox.showerror(APP_TITLE, f"TB upload error: {exc}")
+
+    def auto_sync_loop(self):
+        interval = int(self.config.get("sync_interval", 300))
+        while not self.stop_event.is_set():
+            self.run_sync_once()
+            for _ in range(interval):
+                if self.stop_event.is_set():
+                    break
+                time.sleep(1)
+
+    def on_close(self):
+        self.stop_event.set()
+        self.root.destroy()
 
 
 def main():
+    setup_logging()
     root = tk.Tk()
-    app = BridgeUI(root)
+    SmartBridgeUI(root)
     root.mainloop()
 
 
