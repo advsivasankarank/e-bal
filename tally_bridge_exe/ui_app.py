@@ -9,6 +9,7 @@ from pathlib import Path
 from tkinter import messagebox
 
 import requests
+import re
 import xml.etree.ElementTree as ET
 
 from bridge import BridgeServer, load_config, save_config
@@ -211,6 +212,11 @@ class BridgeUI:
                         if public_url:
                             break
                 else:
+                    match = re.search(r"<PublicURL>([^<]+)</PublicURL>", resp.text)
+                    if match:
+                        public_url = match.group(1).strip()
+                        if public_url:
+                            break
                     root = ET.fromstring(resp.text)
                     node = root.find(".//PublicURL")
                     if node is not None and node.text:
@@ -226,7 +232,7 @@ class BridgeUI:
             self.entry_public_url.insert(0, public_url)
             self.config["public_url"] = public_url
             save_config(self.config)
-            self.tunnel_status_var.set("OK")
+            self.tunnel_status_var.set(public_url)
             self.trigger_webhook(public_url)
         else:
             self.tunnel_status_var.set("Unreachable")
