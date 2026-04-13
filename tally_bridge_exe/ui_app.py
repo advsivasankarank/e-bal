@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from bridge import BridgeServer, load_config, save_config
 
 
-APP_NAME = "eBAL Tally Bridge"
+APP_NAME = "eBAL Smart Bridge"
 RUN_REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_REG_NAME = "eBAL_Tally_Bridge"
 
@@ -108,8 +108,9 @@ class BridgeUI:
 
         btn_row = tk.Frame(frame)
         btn_row.pack(fill="x", pady=(10, 4))
-        self.start_btn = tk.Button(btn_row, text="Start Bridge", width=16, command=self.start_server)
+        self.start_btn = tk.Button(btn_row, text="Start Bridge", width=14, command=self.start_server)
         self.start_btn.pack(side="left")
+        tk.Button(btn_row, text="Refresh Tunnel", width=14, command=self.refresh_tunnel).pack(side="left", padx=(8, 0))
         tk.Button(btn_row, text="Open ebal.etaxadv.com", width=22, command=self.open_site).pack(side="left", padx=(8, 0))
 
         self.autostart_var = tk.BooleanVar(value=bool(self.config.get("autostart")))
@@ -137,6 +138,8 @@ class BridgeUI:
         self.config["cloudflared_enabled"] = True
         if not self.config.get("cloudflared_path"):
             self.config["cloudflared_path"] = bundled_cloudflared_path() or "cloudflared"
+        if not self.config.get("webhook_url"):
+            self.config["webhook_url"] = "https://ebal.etaxadv.com/bridge_webhook.php"
 
     def save(self):
         self.read_fields()
@@ -185,6 +188,12 @@ class BridgeUI:
 
     def open_site(self):
         webbrowser.open("https://ebal.etaxadv.com")
+
+    def refresh_tunnel(self):
+        self.tunnel_status_var.set("Starting...")
+        if self.config.get("cloudflared_enabled"):
+            threading.Thread(target=self._watch_cloudflared_log, daemon=True).start()
+        threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
 
     def start_tunnel(self):
         if self.config.get("cloudflared_enabled"):
@@ -260,7 +269,7 @@ class BridgeUI:
     def _watch_cloudflared_log(self):
         if not self.cloudflare_log_path:
             return
-        for _ in range(30):
+        for _ in range(60):
             try:
                 if self.cloudflare_log_path.exists():
                     content = self.cloudflare_log_path.read_text(errors="ignore")
@@ -358,7 +367,7 @@ class BridgeUI:
             self.tunnel_status_var.set(public_url)
             self.trigger_webhook(public_url)
         else:
-            self.tunnel_status_var.set("Unreachable")
+            self.tunnel_status_var.set("Starting...")
 
     def trigger_webhook(self, public_url):
         webhook = self.config.get("webhook_url", "").strip()
