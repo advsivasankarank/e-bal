@@ -19,6 +19,7 @@ LOG_NAME = "bridge.log"
 TALLY_URL = "http://localhost:9000"
 LEDGER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/api/upload_ledger.php"
 TB_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/api/upload_tb.php"
+CONTEXT_DEFAULT = "https://ebal.etaxadv.com/api/bridge_context.php"
 
 LEDGER_XML = """<ENVELOPE>
  <HEADER>
@@ -81,6 +82,7 @@ def load_config():
             "fy_id": 0,
             "ledger_upload_url": LEDGER_UPLOAD_DEFAULT,
             "tb_upload_url": TB_UPLOAD_DEFAULT,
+            "context_url": CONTEXT_DEFAULT,
             "auto_sync": True,
             "sync_interval": 300
         }
@@ -98,6 +100,7 @@ def load_config():
             "fy_id": 0,
             "ledger_upload_url": LEDGER_UPLOAD_DEFAULT,
             "tb_upload_url": TB_UPLOAD_DEFAULT,
+            "context_url": CONTEXT_DEFAULT,
             "auto_sync": True,
             "sync_interval": 300
         }
@@ -162,6 +165,27 @@ def upload_to_server(config, xml_data, upload_url):
         raise RuntimeError(f"Upload HTTP error: {response.status_code}")
 
     return response.text.strip()
+
+
+def fetch_context(config):
+    payload = {
+        "client_id": config.get("client_id", ""),
+        "token": config.get("token", ""),
+    }
+    context_url = config.get("context_url") or CONTEXT_DEFAULT
+    try:
+        response = requests.post(context_url, json=payload, timeout=10)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Context fetch failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"Context HTTP error: {response.status_code}")
+
+    data = response.json()
+    if not data.get("ok"):
+        raise RuntimeError(data.get("message") or "Context fetch failed.")
+
+    return data
 
 
 class SmartBridgeUI:
@@ -253,9 +277,15 @@ class SmartBridgeUI:
 
     def run_sync_once(self):
         if not self.config.get("company_id") or not self.config.get("fy_id"):
-            self.set_last_upload("Failed")
-            messagebox.showerror(APP_TITLE, "Company ID / FY ID missing in config.json.")
-            return
+            try:
+                context = fetch_context(self.config)
+                self.config["company_id"] = int(context.get("company_id") or 0)
+                self.config["fy_id"] = int(context.get("fy_id") or 0)
+                save_config(self.config)
+            except Exception as exc:
+                self.set_last_upload("Failed")
+                messagebox.showerror(APP_TITLE, f"Context error: {exc}")
+                return
 
         try:
             ledger_xml = fetch_from_tally(LEDGER_XML)
