@@ -2,23 +2,13 @@
 
 define('ENV', getenv('APP_ENV') ?: 'local');
 
-if (ENV === 'local') {
-    error_reporting(E_ALL);
-    ini_set('display_errors', '1');
-} else {
-    error_reporting(0);
-    ini_set('display_errors', '0');
-}
-
-$appTimezone = getenv('APP_TIMEZONE') ?: 'Asia/Kolkata';
-date_default_timezone_set($appTimezone);
-
 $host = getenv('DB_HOST') ?: 'localhost';
 $port = (int) (getenv('DB_PORT') ?: 3306);
-$db = getenv('DB_NAME') ?: 'ebal_db';
-$user = getenv('DB_USER') ?: 'root';
+$db   = getenv('DB_NAME') ?: (ENV === 'local' ? 'ebal_db' : 'etaxadv_ebal');
+$user = getenv('DB_USER') ?: (ENV === 'local' ? 'root' : 'etaxadv_ebaluser');
 $pass = getenv('DB_PASS');
 $pass = $pass === false ? '' : $pass;
+
 $persistent = filter_var(getenv('DB_PERSISTENT') ?: 'false', FILTER_VALIDATE_BOOLEAN);
 
 try {
