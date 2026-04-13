@@ -10,6 +10,7 @@ from tkinter import messagebox
 
 import requests
 import re
+import tempfile
 import xml.etree.ElementTree as ET
 
 from bridge import BridgeServer, load_config, save_config
@@ -201,8 +202,11 @@ class BridgeUI:
         if self.cloudflare_process:
             return True
         cloudflared_path = self.config.get("cloudflared_path", "cloudflared")
+        if not Path(cloudflared_path).exists():
+            self.tunnel_status_var.set("cloudflared missing")
+            return False
         listen_port = str(self.config.get("listen_port", 9123))
-        self.cloudflare_log_path = app_dir() / "cloudflared.log"
+        self.cloudflare_log_path = Path(tempfile.gettempdir()) / "ebal-cloudflared.log"
         args = [
             "tunnel",
             "--url",
@@ -233,6 +237,7 @@ class BridgeUI:
             )
         except Exception as exc:
             self.cloudflare_process = None
+            self.tunnel_status_var.set("cloudflared failed")
             return False
 
         threading.Thread(target=self._read_cloudflared_output, daemon=True).start()
