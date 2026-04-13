@@ -45,6 +45,11 @@ def bundled_cloudflared_path():
     candidate = base / "cloudflared.exe"
     return str(candidate) if candidate.exists() else ""
 
+def app_dir():
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent
+
 
 def set_autostart(enabled):
     try:
@@ -73,6 +78,7 @@ class BridgeUI:
         self.server = BridgeServer(self.config)
         self.ngrok_process = None
         self.cloudflare_process = None
+        self.cloudflare_log_path = None
 
         self.status_var = tk.StringVar(value="Stopped")
         self.tunnel_status_var = tk.StringVar(value="Unknown")
@@ -144,7 +150,8 @@ class BridgeUI:
         self.server.start()
         self.status_var.set(f"Running on {self.config['listen_host']}:{self.config['listen_port']}")
         self.start_tunnel()
-        threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
+        if not self.config.get("cloudflared_enabled"):
+            threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
 
     def stop_server(self):
         if self.server.is_running():
@@ -181,8 +188,10 @@ class BridgeUI:
     def start_tunnel(self):
         if self.config.get("cloudflared_enabled"):
             if self.start_cloudflared():
+                self.tunnel_status_var.set("Starting...")
                 return
         self.start_ngrok()
+        threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
 
     def stop_tunnel(self):
         self.stop_ngrok()
@@ -193,11 +202,16 @@ class BridgeUI:
             return True
         cloudflared_path = self.config.get("cloudflared_path", "cloudflared")
         listen_port = str(self.config.get("listen_port", 9123))
+        self.cloudflare_log_path = app_dir() / "cloudflared.log"
         args = [
             "tunnel",
             "--url",
             f"http://localhost:{listen_port}",
             "--no-autoupdate",
+            "--loglevel",
+            "info",
+            "--logfile",
+            str(self.cloudflare_log_path),
         ]
         extra = self.config.get("cloudflared_args", "").strip()
         if extra:
@@ -222,6 +236,7 @@ class BridgeUI:
             return False
 
         threading.Thread(target=self._read_cloudflared_output, daemon=True).start()
+        threading.Thread(target=self._watch_cloudflared_log, daemon=True).start()
         return True
 
     def _read_cloudflared_output(self):
@@ -236,6 +251,25 @@ class BridgeUI:
                 self.tunnel_status_var.set(public_url)
                 self.trigger_webhook(public_url)
                 break
+
+    def _watch_cloudflared_log(self):
+        if not self.cloudflare_log_path:
+            return
+        for _ in range(30):
+            try:
+                if self.cloudflare_log_path.exists():
+                    content = self.cloudflare_log_path.read_text(errors="ignore")
+                    match = re.search(r"https://[a-z0-9\\-]+\\.trycloudflare\\.com", content)
+                    if match:
+                        public_url = match.group(0)
+                        self.config["public_url"] = public_url
+                        save_config(self.config)
+                        self.tunnel_status_var.set(public_url)
+                        self.trigger_webhook(public_url)
+                        return
+            except Exception:
+                pass
+            time.sleep(1)
 
     def stop_cloudflared(self):
         if not self.cloudflare_process:
