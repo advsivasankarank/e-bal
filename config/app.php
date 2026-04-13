@@ -19,10 +19,19 @@ if (!defined('TALLY_BRIDGE_URL')) {
 if (!defined('TALLY_BRIDGE_TOKEN')) {
     define('TALLY_BRIDGE_TOKEN', getenv('TALLY_BRIDGE_TOKEN') ?: '');
 }
+if (!defined('TALLY_BRIDGE_WEBHOOK_TOKEN')) {
+    $webhookToken = getenv('TALLY_BRIDGE_WEBHOOK_TOKEN');
+    define('TALLY_BRIDGE_WEBHOOK_TOKEN', $webhookToken !== false && $webhookToken !== '' ? $webhookToken : TALLY_BRIDGE_TOKEN);
+}
 define('MCA_LOOKUP_URL', getenv('MCA_LOOKUP_URL') ?: '');
 define('MCA_LOOKUP_TOKEN', getenv('MCA_LOOKUP_TOKEN') ?: '');
 define('DIRECTORS_REPORT_AI_URL', getenv('DIRECTORS_REPORT_AI_URL') ?: '');
 define('DIRECTORS_REPORT_AI_TOKEN', getenv('DIRECTORS_REPORT_AI_TOKEN') ?: '');
+
+$bridgeSettings = __DIR__ . '/bridge_settings.php';
+if (file_exists($bridgeSettings)) {
+    require_once $bridgeSettings;
+}
 
 function url($path) {
     return BASE_URL . $path;

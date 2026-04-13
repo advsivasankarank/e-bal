@@ -42,6 +42,13 @@ dist\ebal-tally-bridge-setup.exe
 Enable "Auto-start ngrok tunnel" in the UI, ensure `ngrok` is in PATH,
 and the bridge will start ngrok and auto-fill the public URL.
 
+## 5. Auto-update hosted app (Webhook)
+Set the webhook URL in the UI to:
+```
+https://your-domain/bridge_webhook.php
+```
+The bridge will auto-send the public URL to your hosted app after ngrok starts.
+
 ## 4. Hosted app config
 Set these on your server:
 

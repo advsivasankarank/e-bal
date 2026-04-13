@@ -72,6 +72,7 @@ class BridgeUI:
         self._field(frame, "Public Tunnel URL (optional)", "public_url")
         self._field(frame, "ngrok Path", "ngrok_path")
         self._field(frame, "ngrok Args (optional)", "ngrok_args")
+        self._field(frame, "Webhook URL (optional)", "webhook_url")
 
         status_row = tk.Frame(frame)
         status_row.pack(fill="x", pady=(8, 6))
@@ -126,6 +127,7 @@ class BridgeUI:
         self.config["ngrok_enabled"] = bool(self.ngrok_var.get())
         self.config["ngrok_path"] = self.entry_ngrok_path.get().strip() or "ngrok"
         self.config["ngrok_args"] = self.entry_ngrok_args.get().strip()
+        self.config["webhook_url"] = self.entry_webhook_url.get().strip()
 
     def save(self):
         self.read_fields()
@@ -230,8 +232,24 @@ class BridgeUI:
             self.config["public_url"] = public_url
             save_config(self.config)
             self.tunnel_status_var.set("OK")
+            self.trigger_webhook(public_url)
         else:
             self.tunnel_status_var.set("Unreachable")
+
+    def trigger_webhook(self, public_url):
+        webhook = self.config.get("webhook_url", "").strip()
+        if not webhook:
+            return
+        fetch_url = public_url.rstrip("/") + "/fetch"
+        payload = {
+            "public_url": public_url,
+            "fetch_url": fetch_url,
+            "token": self.config.get("token", "")
+        }
+        try:
+            requests.post(webhook, json=payload, timeout=8)
+        except Exception:
+            pass
 
 
 def main():
