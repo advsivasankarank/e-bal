@@ -23,7 +23,7 @@ if exist "%CLOUDFLARED_SRC%" (
   set ADD_CLOUDFLARED=--add-binary "%CLOUDFLARED_SRC%;."
 )
 
-pyinstaller --onefile --noconsole %ADD_NGROK% %ADD_CLOUDFLARED% --name ebal-tally-bridge ui_app.py
+pyinstaller --onefile --noconsole %ADD_NGROK% %ADD_CLOUDFLARED% --name ebal_smart_bridge ui_app.py
 
 echo Done. EXE is in dist\ebal-tally-bridge.exe
 pause

@@ -25,7 +25,7 @@ python ui_app.py
 ## 3. Build EXE
 Double-click `build.bat`, then use:
 ```
-dist\ebal-tally-bridge.exe
+ dist\ebal_smart_bridge.exe
 ```
 
 ## 3a. Build Installer (single click)
@@ -35,7 +35,7 @@ build_installer.bat
 ```
 Output:
 ```
-dist\ebal-tally-bridge-setup.exe
+ dist\ebal-smart-bridge-setup.exe
 ```
 
 ## 4. Auto-start ngrok (Option C)
