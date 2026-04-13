@@ -17,7 +17,13 @@ if exist "%NGROK_SRC%" (
   set ADD_NGROK=--add-binary "%NGROK_SRC%;."
 )
 
-pyinstaller --onefile --noconsole %ADD_NGROK% --name ebal-tally-bridge ui_app.py
+set CLOUDFLARED_SRC=%~dp0bundle\cloudflared.exe
+set ADD_CLOUDFLARED=
+if exist "%CLOUDFLARED_SRC%" (
+  set ADD_CLOUDFLARED=--add-binary "%CLOUDFLARED_SRC%;."
+)
+
+pyinstaller --onefile --noconsole %ADD_NGROK% %ADD_CLOUDFLARED% --name ebal-tally-bridge ui_app.py
 
 echo Done. EXE is in dist\ebal-tally-bridge.exe
 pause

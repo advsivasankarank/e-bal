@@ -20,7 +20,10 @@ DEFAULT_CONFIG = {
     "ngrok_enabled": True,
     "ngrok_path": "",
     "ngrok_args": "",
-    "webhook_url": ""
+    "cloudflared_enabled": True,
+    "cloudflared_path": "",
+    "cloudflared_args": "",
+    "webhook_url": "https://ebal.etaxadv.com/bridge_webhook.php"
 }
 
 

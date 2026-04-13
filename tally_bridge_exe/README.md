@@ -49,6 +49,13 @@ tally_bridge_exe/bundle/ngrok.exe
 ```
 The installer will copy it next to the bridge EXE so users don't install ngrok separately.
 
+## 4b. Bundle Cloudflare Tunnel (recommended)
+Download cloudflared.exe and place it here:
+```
+tally_bridge_exe/bundle/cloudflared.exe
+```
+The bridge will prefer Cloudflare Tunnel and auto-capture the URL without warnings.
+
 ## 5. Auto-update hosted app (Webhook)
 Set the webhook URL in the UI to:
 ```

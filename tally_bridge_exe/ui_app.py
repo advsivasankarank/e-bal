@@ -36,6 +36,16 @@ def bundled_ngrok_path():
     return str(candidate) if candidate.exists() else ""
 
 
+def bundled_cloudflared_path():
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", "")
+        base = Path(meipass) if meipass else Path(sys.executable).parent
+    else:
+        base = Path(__file__).resolve().parent
+    candidate = base / "cloudflared.exe"
+    return str(candidate) if candidate.exists() else ""
+
+
 def set_autostart(enabled):
     try:
         import winreg
@@ -62,6 +72,7 @@ class BridgeUI:
         self.config = load_config()
         self.server = BridgeServer(self.config)
         self.ngrok_process = None
+        self.cloudflare_process = None
 
         self.status_var = tk.StringVar(value="Stopped")
         self.tunnel_status_var = tk.StringVar(value="Unknown")
@@ -116,6 +127,9 @@ class BridgeUI:
         self.config["ngrok_enabled"] = True
         if not self.config.get("ngrok_path"):
             self.config["ngrok_path"] = bundled_ngrok_path() or "ngrok"
+        self.config["cloudflared_enabled"] = True
+        if not self.config.get("cloudflared_path"):
+            self.config["cloudflared_path"] = bundled_cloudflared_path() or "cloudflared"
 
     def save(self):
         self.read_fields()
@@ -129,14 +143,14 @@ class BridgeUI:
         self.server = BridgeServer(self.config)
         self.server.start()
         self.status_var.set(f"Running on {self.config['listen_host']}:{self.config['listen_port']}")
-        self.start_ngrok()
+        self.start_tunnel()
         threading.Thread(target=self._auto_fill_public_url, daemon=True).start()
 
     def stop_server(self):
         if self.server.is_running():
             self.server.stop()
         self.status_var.set("Stopped")
-        self.stop_ngrok()
+        self.stop_tunnel()
 
     def check_tunnel(self):
         self.read_fields()
@@ -163,6 +177,74 @@ class BridgeUI:
 
     def open_site(self):
         webbrowser.open("https://ebal.etaxadv.com")
+
+    def start_tunnel(self):
+        if self.config.get("cloudflared_enabled"):
+            if self.start_cloudflared():
+                return
+        self.start_ngrok()
+
+    def stop_tunnel(self):
+        self.stop_ngrok()
+        self.stop_cloudflared()
+
+    def start_cloudflared(self):
+        if self.cloudflare_process:
+            return True
+        cloudflared_path = self.config.get("cloudflared_path", "cloudflared")
+        listen_port = str(self.config.get("listen_port", 9123))
+        args = [
+            "tunnel",
+            "--url",
+            f"http://localhost:{listen_port}",
+            "--no-autoupdate",
+        ]
+        extra = self.config.get("cloudflared_args", "").strip()
+        if extra:
+            args.extend(extra.split())
+        cmd = [cloudflared_path] + args
+
+        creationflags = 0
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        try:
+            self.cloudflare_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                creationflags=creationflags,
+                text=True,
+                bufsize=1,
+            )
+        except Exception as exc:
+            self.cloudflare_process = None
+            return False
+
+        threading.Thread(target=self._read_cloudflared_output, daemon=True).start()
+        return True
+
+    def _read_cloudflared_output(self):
+        if not self.cloudflare_process or not self.cloudflare_process.stdout:
+            return
+        for line in self.cloudflare_process.stdout:
+            match = re.search(r"https://[a-z0-9\\-]+\\.trycloudflare\\.com", line)
+            if match:
+                public_url = match.group(0)
+                self.config["public_url"] = public_url
+                save_config(self.config)
+                self.tunnel_status_var.set(public_url)
+                self.trigger_webhook(public_url)
+                break
+
+    def stop_cloudflared(self):
+        if not self.cloudflare_process:
+            return
+        try:
+            self.cloudflare_process.terminate()
+        except Exception:
+            pass
+        self.cloudflare_process = None
 
     def start_ngrok(self):
         if self.ngrok_process:
