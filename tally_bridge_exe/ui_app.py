@@ -9,6 +9,7 @@ from pathlib import Path
 from tkinter import messagebox
 
 import requests
+import xml.etree.ElementTree as ET
 
 from bridge import BridgeServer, load_config, save_config
 
@@ -200,12 +201,21 @@ class BridgeUI:
         for _ in range(10):
             try:
                 resp = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=3)
-                data = resp.json()
-                tunnels = data.get("tunnels", [])
-                if tunnels:
-                    public_url = tunnels[0].get("public_url", "")
-                    if public_url:
-                        break
+                content_type = (resp.headers.get("Content-Type", "") or "").lower()
+                if "json" in content_type:
+                    data = resp.json()
+                    tunnels = data.get("tunnels", [])
+                    if tunnels:
+                        public_url = tunnels[0].get("public_url", "")
+                        if public_url:
+                            break
+                else:
+                    root = ET.fromstring(resp.text)
+                    node = root.find(".//PublicURL")
+                    if node is not None and node.text:
+                        public_url = node.text.strip()
+                        if public_url:
+                            break
             except Exception:
                 pass
             time.sleep(1)
