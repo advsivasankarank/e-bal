@@ -27,7 +27,11 @@ def exe_path():
 
 
 def bundled_ngrok_path():
-    base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", "")
+        base = Path(meipass) if meipass else Path(sys.executable).parent
+    else:
+        base = Path(__file__).resolve().parent
     candidate = base / "ngrok.exe"
     return str(candidate) if candidate.exists() else ""
 
@@ -228,8 +232,6 @@ class BridgeUI:
             time.sleep(1)
 
         if public_url:
-            self.entry_public_url.delete(0, tk.END)
-            self.entry_public_url.insert(0, public_url)
             self.config["public_url"] = public_url
             save_config(self.config)
             self.tunnel_status_var.set(public_url)
