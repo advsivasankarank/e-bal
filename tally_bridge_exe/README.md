@@ -42,6 +42,13 @@ dist\ebal-tally-bridge-setup.exe
 Enable "Auto-start ngrok tunnel" in the UI, ensure `ngrok` is in PATH,
 and the bridge will start ngrok and auto-fill the public URL.
 
+## 4a. Bundle ngrok into the installer
+Download ngrok.exe and place it here before building:
+```
+tally_bridge_exe/bundle/ngrok.exe
+```
+The installer will copy it next to the bridge EXE so users don't install ngrok separately.
+
 ## 5. Auto-update hosted app (Webhook)
 Set the webhook URL in the UI to:
 ```

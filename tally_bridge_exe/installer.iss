@@ -10,6 +10,7 @@ SolidCompression=yes
 
 [Files]
 Source: "dist\ebal-tally-bridge.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "bundle\ngrok.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: FileExists(ExpandConstant('{src}\bundle\ngrok.exe'))
 
 [Icons]
 Name: "{group}\eBAL Tally Bridge"; Filename: "{app}\ebal-tally-bridge.exe"

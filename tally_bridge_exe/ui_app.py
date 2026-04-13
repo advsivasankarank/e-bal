@@ -23,6 +23,12 @@ def exe_path():
     return str(Path(__file__).resolve())
 
 
+def bundled_ngrok_path():
+    base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    candidate = base / "ngrok.exe"
+    return str(candidate) if candidate.exists() else ""
+
+
 def set_autostart(enabled):
     try:
         import winreg
@@ -125,7 +131,10 @@ class BridgeUI:
         self.config["public_url"] = self.entry_public_url.get().strip()
         self.config["autostart"] = bool(self.autostart_var.get())
         self.config["ngrok_enabled"] = bool(self.ngrok_var.get())
-        self.config["ngrok_path"] = self.entry_ngrok_path.get().strip() or "ngrok"
+        ngrok_value = self.entry_ngrok_path.get().strip()
+        if not ngrok_value:
+            ngrok_value = bundled_ngrok_path() or "ngrok"
+        self.config["ngrok_path"] = ngrok_value
         self.config["ngrok_args"] = self.entry_ngrok_args.get().strip()
         self.config["webhook_url"] = self.entry_webhook_url.get().strip()
 

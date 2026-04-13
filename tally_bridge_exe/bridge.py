@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
     "public_url": "",
     "autostart": False,
     "ngrok_enabled": False,
-    "ngrok_path": "ngrok",
+    "ngrok_path": "",
     "ngrok_args": "",
     "webhook_url": ""
 }
