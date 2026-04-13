@@ -138,15 +138,16 @@ def fetch_from_tally(xml_request):
 
 
 def upload_to_server(config, xml_data, upload_url):
-    payload = {
+    params = {
         "client_id": config.get("client_id", ""),
         "token": config.get("token", ""),
-        "xml": xml_data,
     }
     try:
         response = requests.post(
             upload_url,
-            json=payload,
+            params=params,
+            data=xml_data.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
             timeout=10,
         )
     except requests.RequestException as exc:

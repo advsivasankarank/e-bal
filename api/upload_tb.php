@@ -7,20 +7,11 @@ require_once __DIR__ . '/../../config/app.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-$raw = file_get_contents('php://input');
-$payload = json_decode($raw, true);
-
-if (!is_array($payload)) {
-    http_response_code(400);
-    echo json_encode(['ok' => false, 'message' => 'Invalid JSON payload']);
-    exit;
-}
-
-$token = trim((string) ($payload['token'] ?? ''));
-$clientId = trim((string) ($payload['client_id'] ?? ''));
-$companyId = (int) ($payload['company_id'] ?? 0);
-$fyId = (int) ($payload['fy_id'] ?? 0);
-$xmlRaw = (string) ($payload['xml'] ?? '');
+$token = trim((string) ($_GET['token'] ?? ''));
+$clientId = trim((string) ($_GET['client_id'] ?? ''));
+$companyId = (int) ($_GET['company_id'] ?? 0);
+$fyId = (int) ($_GET['fy_id'] ?? 0);
+$xmlRaw = file_get_contents('php://input');
 
 $expected = getenv('EBAL_BRIDGE_TOKEN') ?: '';
 if ($expected !== '' && $token !== $expected) {
