@@ -29,6 +29,31 @@ if ($expected !== '' && $token !== $expected) {
 }
 
 if ($companyId <= 0 || $fyId <= 0) {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS bridge_clients (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            client_id VARCHAR(50) NOT NULL UNIQUE,
+            company_id INT NOT NULL,
+            fy_id INT NOT NULL,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    ");
+    $stmt = $pdo->prepare("
+        SELECT company_id, fy_id
+        FROM bridge_clients
+        WHERE client_id = ? AND active = 1
+        LIMIT 1
+    ");
+    $stmt->execute([$clientId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $companyId = (int) $row['company_id'];
+        $fyId = (int) $row['fy_id'];
+    }
+}
+
+if ($companyId <= 0 || $fyId <= 0) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'message' => 'company_id and fy_id are required']);
     exit;
