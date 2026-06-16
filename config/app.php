@@ -1,4 +1,8 @@
 <?php
+$envFile = __DIR__ . '/env.php';
+if (file_exists($envFile)) {
+    require_once $envFile;
+}
 require_once __DIR__ . '/../app/helpers/runtime_helper.php';
 
 if (!defined('ENV')) {
