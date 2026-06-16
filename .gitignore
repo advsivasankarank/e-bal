@@ -1,2 +1,3 @@
 /_build/
 /public/asset.zip
+/config/env.php

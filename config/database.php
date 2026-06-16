@@ -1,13 +1,39 @@
 <?php
-
-define('ENV', getenv('APP_ENV') ?: 'local');
+$envFile = __DIR__ . '/env.php';
+if (file_exists($envFile)) {
+    require_once $envFile;
+}
+require_once __DIR__ . '/../app/helpers/runtime_helper.php';
 
 $host = getenv('DB_HOST') ?: 'localhost';
 $port = (int) (getenv('DB_PORT') ?: 3306);
-$db   = getenv('DB_NAME') ?: (ENV === 'local' ? 'ebal_db' : 'etaxadv_ebal');
-$user = getenv('DB_USER') ?: (ENV === 'local' ? 'root' : 'etaxadv_ebaluser');
+$db   = getenv('DB_NAME');
+$user = getenv('DB_USER');
 $pass = getenv('DB_PASS');
-$pass = $pass === false ? '' : $pass;
+
+$env = defined('ENV') ? ENV : (getenv('APP_ENV') ?: 'local');
+
+if ($env !== 'local') {
+    if ($db === false || $db === '' || $db === null) {
+        appLog('CRITICAL', 'DB_NAME environment variable is not set');
+        http_response_code(500);
+        die('Database configuration missing.');
+    }
+    if ($user === false || $user === '' || $user === null) {
+        appLog('CRITICAL', 'DB_USER environment variable is not set');
+        http_response_code(500);
+        die('Database configuration missing.');
+    }
+    if ($pass === false || $pass === null) {
+        appLog('CRITICAL', 'DB_PASS environment variable is not set');
+        http_response_code(500);
+        die('Database configuration missing.');
+    }
+} else {
+    $db   = $db ?: 'ebal_db';
+    $user = $user ?: 'root';
+    $pass = $pass !== false ? $pass : '';
+}
 
 $persistent = filter_var(getenv('DB_PERSISTENT') ?: 'false', FILTER_VALIDATE_BOOLEAN);
 
@@ -27,9 +53,14 @@ try {
 
     $pdo->exec("SET sql_mode='STRICT_ALL_TABLES'");
 } catch (PDOException $e) {
-    if (ENV === 'local') {
-        die('Database Error: ' . $e->getMessage());
-    }
+    appLog('ERROR', 'Database connection failed', [
+        'code' => $e->getCode(),
+        'host' => $host,
+        'port' => $port,
+        'database' => $db,
+        'env' => $env,
+        'message' => $e->getMessage(),
+    ]);
 
     http_response_code(500);
     die('Database connection failed.');
