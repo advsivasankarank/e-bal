@@ -1,6 +1,8 @@
 <?php
+require_once '../../app/session_bootstrap.php';
 require_once '../../config/database.php';
 require_once '../../app/workflow_engine.php';
+require_once '../../app/helpers/plan_helper.php';
 ensureWorkflowColumns();
 include __DIR__ . '/../layouts/header.php';
 
@@ -8,6 +10,13 @@ $statusFilter = strtolower(trim((string) ($_GET['status'] ?? 'all')));
 $filterTitle = 'All Companies';
 $activeFyId = (int) ($_SESSION['fy_id'] ?? 0);
 $workflowJoin = " LEFT JOIN workflow_status ws ON ws.company_id = c.id" . ($activeFyId > 0 ? " AND ws.fy_id = {$activeFyId}" : '');
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+$ownerId = $userId > 0 ? getOwnerUserId($pdo, $userId) : 0;
+$conditions = [];
+
+if ($ownerId > 0) {
+    $conditions[] = "c.owner_user_id = {$ownerId}";
+}
 
 $sql = "
     SELECT
@@ -19,10 +28,9 @@ $sql = "
     {$workflowJoin}
 ";
 
-$where = '';
 switch ($statusFilter) {
     case 'pending':
-        $where = " WHERE c.id NOT IN (
+        $conditions[] = "c.id NOT IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE mapping_completed = 1 AND tally_fetched = 1" . ($activeFyId > 0 ? " AND fy_id = {$activeFyId}" : '') . "
@@ -30,7 +38,7 @@ switch ($statusFilter) {
         $filterTitle = 'Pending Companies';
         break;
     case 'completed':
-        $where = " WHERE c.id IN (
+        $conditions[] = "c.id IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE ledger_fetched = 1
@@ -43,7 +51,7 @@ switch ($statusFilter) {
         $filterTitle = 'Completed Companies';
         break;
     case 'ledger_sync':
-        $where = " WHERE c.id IN (
+        $conditions[] = "c.id IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE ledger_fetched = 1" . ($activeFyId > 0 ? " AND fy_id = {$activeFyId}" : '') . "
@@ -51,7 +59,7 @@ switch ($statusFilter) {
         $filterTitle = 'Ledger Sync Completed';
         break;
     case 'mapping':
-        $where = " WHERE c.id IN (
+        $conditions[] = "c.id IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE mapping_completed = 1" . ($activeFyId > 0 ? " AND fy_id = {$activeFyId}" : '') . "
@@ -59,7 +67,7 @@ switch ($statusFilter) {
         $filterTitle = 'Mapping Completed';
         break;
     case 'trial_balance':
-        $where = " WHERE c.id IN (
+        $conditions[] = "c.id IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE tally_fetched = 1" . ($activeFyId > 0 ? " AND fy_id = {$activeFyId}" : '') . "
@@ -67,7 +75,7 @@ switch ($statusFilter) {
         $filterTitle = 'Trial Balance Completed';
         break;
     case 'notes':
-        $where = " WHERE c.id IN (
+        $conditions[] = "c.id IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE notes_prepared = 1" . ($activeFyId > 0 ? " AND fy_id = {$activeFyId}" : '') . "
@@ -75,7 +83,7 @@ switch ($statusFilter) {
         $filterTitle = 'Notes Prepared';
         break;
     case 'profit_loss':
-        $where = " WHERE c.id IN (
+        $conditions[] = "c.id IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE profit_loss_prepared = 1" . ($activeFyId > 0 ? " AND fy_id = {$activeFyId}" : '') . "
@@ -83,7 +91,7 @@ switch ($statusFilter) {
         $filterTitle = 'Profit and Loss Prepared';
         break;
     case 'balance_sheet':
-        $where = " WHERE c.id IN (
+        $conditions[] = "c.id IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE balance_sheet_prepared = 1" . ($activeFyId > 0 ? " AND fy_id = {$activeFyId}" : '') . "
@@ -91,7 +99,7 @@ switch ($statusFilter) {
         $filterTitle = 'Balance Sheet Prepared';
         break;
     case 'directors_report':
-        $where = " WHERE c.id IN (
+        $conditions[] = "c.id IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE directors_report_prepared = 1" . ($activeFyId > 0 ? " AND fy_id = {$activeFyId}" : '') . "
@@ -99,7 +107,7 @@ switch ($statusFilter) {
         $filterTitle = 'Directors Report Prepared';
         break;
     case 'reports':
-        $where = " WHERE c.id IN (
+        $conditions[] = "c.id IN (
             SELECT DISTINCT company_id
             FROM workflow_status
             WHERE (
@@ -116,6 +124,7 @@ switch ($statusFilter) {
         break;
 }
 
+$where = $conditions !== [] ? ' WHERE ' . implode(' AND ', $conditions) : '';
 $sql .= $where . " GROUP BY c.id ORDER BY c.id DESC";
 $stmt = $pdo->query($sql);
 $companies = $stmt->fetchAll();
@@ -133,7 +142,7 @@ function companyContinueLink(array $company): array
     }
 
     if ((int) ($company['tally_fetched'] ?? 0) !== 1) {
-        return ['label' => 'Fetch Trial Balance', 'href' => $base . 'company_dashboard/company_select.php?company_id=' . (int) $company['id'] . '&next=data_console/tally_connect.php'];
+        return ['label' => 'Fetch Trial Balance', 'href' => $base . 'company_dashboard/company_select.php?company_id=' . (int) $company['id'] . '&next=data_console/tally_connect.php?bridge=1'];
     }
 
     return ['label' => 'Open Reports', 'href' => $base . 'company_dashboard/company_select.php?company_id=' . (int) $company['id'] . '&next=dashboard_report.php'];
@@ -254,6 +263,7 @@ function companyContinueLink(array $company): array
                 <a href="company_select.php?company_id=<?= (int) $c['id'] ?>">Select</a>
                 <a href="company_edit.php?id=<?= (int) $c['id'] ?>">Edit</a>
                 <form method="post" action="company_delete.php" onsubmit="return confirm('Delete this company?')">
+                    <?= csrfInput() ?>
                     <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
                     <button class="warn" type="submit">Delete</button>
                 </form>

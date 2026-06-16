@@ -2,7 +2,15 @@
 
 function ensureCompanyReportingColumns(PDO $pdo): void
 {
-    $columns = $pdo->query("SHOW COLUMNS FROM companies")->fetchAll(PDO::FETCH_COLUMN);
+    try {
+        $table = $pdo->query("SHOW TABLES LIKE 'companies'")->fetchColumn();
+        if (!$table) {
+            return;
+        }
+        $columns = $pdo->query("SHOW COLUMNS FROM companies")->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        return;
+    }
 
     $required = [
         'company_type' => "ALTER TABLE companies ADD COLUMN company_type VARCHAR(120) NULL AFTER category",
@@ -37,7 +45,12 @@ function ensureCompanyReportingColumns(PDO $pdo): void
 
     foreach ($required as $column => $sql) {
         if (!in_array($column, $columns, true)) {
-            $pdo->exec($sql);
+            try {
+                $pdo->exec($sql);
+            } catch (Throwable $e) {
+                // Avoid fatal errors in production if schema updates are blocked.
+                continue;
+            }
         }
     }
 }
@@ -220,6 +233,12 @@ function normalizeCompanyFormData(array $input): array
     $data['phone'] = $data['mobile_no'];
 
     return $data;
+}
+
+function companyNullableDbValue(?string $value): ?string
+{
+    $value = trim((string) $value);
+    return $value === '' ? null : $value;
 }
 
 function validateCompanyFormData(array $data): array

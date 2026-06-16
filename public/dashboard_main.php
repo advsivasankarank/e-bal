@@ -9,7 +9,10 @@ require_once __DIR__ . '/layouts/header.php';
 
 ensureWorkflowColumns();
 
-$totalCompanies = (int) $pdo->query("SELECT COUNT(*) FROM companies")->fetchColumn();
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+$ownerId = $userId > 0 ? getOwnerUserId($pdo, $userId) : 0;
+$companyScope = $ownerId > 0 ? " AND c.owner_user_id = {$ownerId}" : '';
+$totalCompanies = $userId > 0 ? countCompaniesForUser($pdo, $userId) : (int) $pdo->query("SELECT COUNT(*) FROM companies")->fetchColumn();
 $activeFyId = (int) ($_SESSION['fy_id'] ?? 0);
 $fyScope = $activeFyId > 0 ? " AND ws.fy_id = {$activeFyId}" : '';
 $mappedCount = (int) $pdo->query("
@@ -17,6 +20,7 @@ $mappedCount = (int) $pdo->query("
     FROM workflow_status ws
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.mapping_completed = 1
+      {$companyScope}
       {$fyScope}
 ")->fetchColumn();
 $importedCount = (int) $pdo->query("
@@ -24,6 +28,7 @@ $importedCount = (int) $pdo->query("
     FROM workflow_status ws
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.tally_fetched = 1
+      {$companyScope}
       {$fyScope}
 ")->fetchColumn();
 $completedCompanies = (int) $pdo->query("
@@ -32,12 +37,12 @@ $completedCompanies = (int) $pdo->query("
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.mapping_completed = 1
       AND ws.tally_fetched = 1
+      {$companyScope}
 ")->fetchColumn();
 $pendingCompanies = max($totalCompanies - $completedCompanies, 0);
 $pendingSetup = max($totalCompanies - $importedCount, 0);
 $reportReady = !empty($_SESSION['company_id']) && !empty($_SESSION['fy_id']);
 $planUsage = null;
-$userId = (int) ($_SESSION['user_id'] ?? 0);
 if ($userId > 0) {
     $planUsage = getPlanUsage($pdo, $userId);
 }
@@ -46,6 +51,7 @@ $ledgerSyncCompanies = (int) $pdo->query("
     FROM workflow_status ws
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.ledger_fetched = 1
+      {$companyScope}
       {$fyScope}
 ")->fetchColumn();
 $mappingCompanies = (int) $pdo->query("
@@ -53,6 +59,7 @@ $mappingCompanies = (int) $pdo->query("
     FROM workflow_status ws
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.mapping_completed = 1
+      {$companyScope}
       {$fyScope}
 ")->fetchColumn();
 $trialBalanceCompanies = (int) $pdo->query("
@@ -60,6 +67,7 @@ $trialBalanceCompanies = (int) $pdo->query("
     FROM workflow_status ws
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.tally_fetched = 1
+      {$companyScope}
       {$fyScope}
 ")->fetchColumn();
 $notesCompanies = (int) $pdo->query("
@@ -67,6 +75,7 @@ $notesCompanies = (int) $pdo->query("
     FROM workflow_status ws
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.notes_prepared = 1
+      {$companyScope}
       {$fyScope}
 ")->fetchColumn();
 $profitLossCompanies = (int) $pdo->query("
@@ -74,6 +83,7 @@ $profitLossCompanies = (int) $pdo->query("
     FROM workflow_status ws
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.profit_loss_prepared = 1
+      {$companyScope}
       {$fyScope}
 ")->fetchColumn();
 $balanceSheetCompanies = (int) $pdo->query("
@@ -81,6 +91,7 @@ $balanceSheetCompanies = (int) $pdo->query("
     FROM workflow_status ws
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.balance_sheet_prepared = 1
+      {$companyScope}
       {$fyScope}
 ")->fetchColumn();
 $directorsReportCompanies = (int) $pdo->query("
@@ -89,6 +100,7 @@ $directorsReportCompanies = (int) $pdo->query("
     INNER JOIN companies c ON c.id = ws.company_id
     INNER JOIN companies cx ON cx.id = ws.company_id
     WHERE ws.directors_report_prepared = 1
+      {$companyScope}
       {$fyScope}
       AND LOWER(REPLACE(REPLACE(cx.category, '-', '_'), ' ', '_')) = 'corporate'
 ")->fetchColumn();
@@ -97,6 +109,7 @@ $completedCompanies = (int) $pdo->query("
     FROM workflow_status ws
     INNER JOIN companies c ON c.id = ws.company_id
     WHERE ws.ledger_fetched = 1
+      {$companyScope}
       {$fyScope}
       AND ws.mapping_completed = 1
       AND ws.tally_fetched = 1

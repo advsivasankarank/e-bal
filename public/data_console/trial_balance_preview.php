@@ -9,10 +9,6 @@ require_once '../../app/helpers/parent_group_validation_helper.php';
 
 requireFullContext();
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 $company_id = (int) ($_SESSION['company_id'] ?? 0);
 $fy_id = (int) ($_SESSION['fy_id'] ?? 0);
 
@@ -25,6 +21,7 @@ asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 $previewMappingOptions = $mappingOptions;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mapping'])) {
+    requireCsrfToken();
     $allowOverride = isset($_POST['allow_override']) && (string) $_POST['allow_override'] === '1';
     ensureLedgerMappingOverrideColumn($pdo);
     $saveStmt = $pdo->prepare("
@@ -480,6 +477,7 @@ require_once __DIR__ . '/../layouts/header.php';
 </form>
 
 <form method="post" action="" class="tb-preview-form">
+    <?= csrfInput() ?>
     <input type="hidden" name="selected_note" value="<?= htmlspecialchars($selectedNote) ?>">
 
     <div class="tb-preview-table-wrap">

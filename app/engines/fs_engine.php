@@ -98,6 +98,24 @@ function buildDetailedNote(string $title, array $lines, string $emptyLabel = 'No
     ];
 }
 
+function assignSequentialNoteMetadata(array $sections, array $fallbackTitles = []): array
+{
+    foreach ($sections as $index => &$section) {
+        $noteNo = (int) ($section['note_no'] ?? 0);
+        if ($noteNo <= 0) {
+            $section['note_no'] = $index + 1;
+        }
+
+        $title = trim((string) ($section['title'] ?? ''));
+        if ($title === '') {
+            $section['title'] = $fallbackTitles[$index] ?? ('Note ' . ($index + 1));
+        }
+    }
+    unset($section);
+
+    return $sections;
+}
+
 function buildCompanyProfitAfterTax(array $classified, array $manualInputs = [], array $previousManualInputs = [], bool $usePrevious = false): float
 {
     $inventoryChangeSection = buildInventoryChangeSection($manualInputs, $previousManualInputs, 24, 'Changes in Inventories');
@@ -392,12 +410,29 @@ function buildDeferredTaxSection(array $classified, int $noteNo, string $title):
 function buildNoteIndex(array $sections): array
 {
     $index = [];
+    $aliases = [
+        'fixed assets' => ['fixed asset'],
+        'cash and bank' => ['cash & bank', 'cash and bank balances'],
+        'revenue from operations' => ['revenue'],
+        'depreciation & amortisation' => ['depreciation and amortisation'],
+        'reserves & surplus' => ['reserves and surplus'],
+        'property, plant & equipment' => ['property plant equipment', 'fixed assets'],
+        'trade payables' => ['payables'],
+        'trade receivables' => ['receivables'],
+        'inventories' => ['inventory'],
+    ];
 
     foreach ($sections as $section) {
         $title = (string) ($section['title'] ?? '');
         $noteNo = (int) ($section['note_no'] ?? 0);
         if ($title !== '') {
-            $index[$title] = $noteNo > 0 ? $noteNo : (count($index) + 1);
+            $resolvedNoteNo = $noteNo > 0 ? $noteNo : (count($index) + 1);
+            $index[$title] = $resolvedNoteNo;
+
+            $normalized = strtolower(trim($title));
+            foreach ($aliases[$normalized] ?? [] as $alias) {
+                $index[$alias] = $resolvedNoteNo;
+            }
         }
     }
 
@@ -583,8 +618,7 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
 
 function buildLLPNotesPayload(array $classified): array
 {
-    return [
-        'sections' => [
+    $sections = [
             buildDetailedNote('Partners Capital', buildLedgerLines($classified, ['share_capital'])),
             buildDetailedNote('Partners Current Account / Reserves', buildLedgerLines($classified, ['reserves'])),
             buildDetailedNote('Borrowings', buildLedgerLines($classified, ['lt_borrowings', 'st_borrowings'])),
@@ -593,14 +627,25 @@ function buildLLPNotesPayload(array $classified): array
             buildDetailedNote('Current Assets', buildLedgerLines($classified, ['inventory', 'receivables', 'cash', 'other_current_assets'])),
             buildDetailedNote('Revenue', buildLedgerLines($classified, ['revenue', 'other_income'])),
             buildDetailedNote('Expenses', buildLedgerLines($classified, ['materials', 'purchase_stock', 'inventory_change', 'employee_cost', 'finance_cost', 'depreciation', 'other_expenses'])),
-        ],
+        ];
+
+    return [
+        'sections' => assignSequentialNoteMetadata($sections, [
+            'Partners Capital',
+            'Partners Current Account / Reserves',
+            'Borrowings',
+            'Trade Payables',
+            'Fixed Assets',
+            'Current Assets',
+            'Revenue',
+            'Expenses',
+        ]),
     ];
 }
 
 function buildNonCorpNotesPayload(array $classified): array
 {
-    return [
-        'sections' => [
+    $sections = [
             buildDetailedNote('Capital', buildLedgerLines($classified, ['share_capital', 'reserves'])),
             buildDetailedNote('Borrowings', buildLedgerLines($classified, ['lt_borrowings', 'st_borrowings'])),
             buildDetailedNote('Payables', buildLedgerLines($classified, ['trade_payables', 'trade_payables_msme', 'other_current_liabilities', 'other_financial_liabilities'])),
@@ -610,7 +655,20 @@ function buildNonCorpNotesPayload(array $classified): array
             buildDetailedNote('Cash and Bank', buildLedgerLines($classified, ['cash', 'bank_balances_other'])),
             buildDetailedNote('Revenue', buildLedgerLines($classified, ['revenue', 'other_income'])),
             buildDetailedNote('Expenses', buildLedgerLines($classified, ['materials', 'purchase_stock', 'inventory_change', 'employee_cost', 'finance_cost', 'depreciation', 'other_expenses'])),
-        ],
+        ];
+
+    return [
+        'sections' => assignSequentialNoteMetadata($sections, [
+            'Capital',
+            'Borrowings',
+            'Payables',
+            'Fixed Assets',
+            'Inventory',
+            'Receivables',
+            'Cash and Bank',
+            'Revenue',
+            'Expenses',
+        ]),
     ];
 }
 
@@ -850,6 +908,100 @@ function buildNonCorpSummaryFromNotes(array $classified, array $notes, string $f
     return $data;
 }
 
+function buildExpectedNoteTitles(string $entity): array
+{
+    return match ($entity) {
+        'corporate' => [
+            'Share Capital',
+            'Reserves & Surplus',
+            'Borrowings',
+            'Deferred Tax',
+            'Other Non-Current Liabilities',
+            'Long-Term Provisions',
+            'Short-Term Borrowings',
+            'Trade Payables',
+            'Other Current Liabilities',
+            'Short-Term Provisions',
+            'Property, Plant & Equipment',
+            'Intangible Assets',
+            'Investments',
+            'Loans',
+            'Other Financial Assets',
+            'Inventories',
+            'Trade Receivables',
+            'Cash & Cash Equivalents',
+            'Other Current Assets',
+            'Revenue from Operations',
+            'Other Income',
+            'Cost of Materials Consumed',
+            'Purchase of Stock-in-Trade',
+            'Changes in Inventories of Finished Goods, Work-in-Progress and Stock-in-Trade',
+            'Employee Benefits Expense',
+            'Finance Cost',
+            'Depreciation & Amortisation',
+            'Other Expenses',
+        ],
+        'llp' => [
+            'Partners Capital',
+            'Partners Current Account / Reserves',
+            'Borrowings',
+            'Trade Payables',
+            'Fixed Assets',
+            'Current Assets',
+            'Revenue',
+            'Expenses',
+        ],
+        default => [
+            'Capital',
+            'Borrowings',
+            'Payables',
+            'Fixed Assets',
+            'Inventory',
+            'Receivables',
+            'Cash and Bank',
+            'Revenue',
+            'Expenses',
+        ],
+    };
+}
+
+function normalizeNoteAuditTitle(string $title): string
+{
+    $normalized = strtolower(trim($title));
+    $normalized = str_replace(['&', '-', '/', ',', '.', '(', ')'], ['and', ' ', ' ', ' ', ' ', '', ''], $normalized);
+    $normalized = preg_replace('/\s+/', ' ', $normalized);
+    return trim((string) $normalized);
+}
+
+function buildNoteCompletenessAudit(string $entity, array $sections): array
+{
+    $expected = buildExpectedNoteTitles($entity);
+    $availableMap = [];
+
+    foreach ($sections as $section) {
+        $title = trim((string) ($section['title'] ?? ''));
+        if ($title === '') {
+            continue;
+        }
+
+        $availableMap[normalizeNoteAuditTitle($title)] = $title;
+    }
+
+    $missing = [];
+    foreach ($expected as $title) {
+        if (!isset($availableMap[normalizeNoteAuditTitle($title)])) {
+            $missing[] = $title;
+        }
+    }
+
+    return [
+        'expected' => $expected,
+        'available' => array_values($availableMap),
+        'missing' => $missing,
+        'is_complete' => $missing === [],
+    ];
+}
+
 function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, string $fyLabel = '', array $manualInputs = [], array $previousManualInputs = []): array
 {
     $entity = getEntityCategory($pdo, $company_id);
@@ -899,6 +1051,7 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
             'current_balance_difference' => round((float) (($data['total_assets'] ?? $data['total'] ?? 0) - ($data['total_liabilities'] ?? $data['total'] ?? 0)), 2),
             'previous_balance_difference' => round((float) (($data['prev_total_assets'] ?? $data['prev_total'] ?? 0) - ($data['prev_total_liabilities'] ?? $data['prev_total'] ?? 0)), 2),
             'parent_group_conflicts' => $classified['validation']['parent_group_conflicts'] ?? [],
+            'note_completeness' => buildNoteCompletenessAudit($entity, $notes['sections'] ?? []),
         ],
         'has_data' => array_sum(array_map(static fn ($value) => abs((float) $value), $classified['summary'])) > 0,
     ];

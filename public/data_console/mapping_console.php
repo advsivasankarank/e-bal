@@ -3,20 +3,19 @@ require_once '../../app/context_check.php';
 require_once '../../app/workflow_engine.php';
 require_once '../../config/database.php';
 require_once '../../app/engines/ai_mapping_engine.php';
+require_once '../../app/helpers/mapping_ai_helper.php';
 
 requireFullContext();
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 $company_id = $_SESSION['company_id'];
 $fy_id      = $_SESSION['fy_id'];
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+ensureMappingAiSchema($pdo);
 
 $companyStmt = $pdo->prepare("SELECT category FROM companies WHERE id = ?");
 $companyStmt->execute([$company_id]);
 $companyCategory = strtolower((string) $companyStmt->fetchColumn());
-$mappingEngine = new AIMappingEngine($companyCategory);
+$mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
 $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 
@@ -44,14 +43,22 @@ $ledgers = $stmt->fetchAll();
 
 $autoMapStmt = $pdo->prepare("
     INSERT INTO ledger_mapping
-    (company_id, ledger_name, schedule_code)
-    VALUES (?, ?, ?)
+    (company_id, ledger_name, schedule_code, mapping_source, confidence_score, mapping_reason, remember_scope, approved_by_user_id, approved_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ON DUPLICATE KEY UPDATE
-        schedule_code = VALUES(schedule_code)
+        schedule_code = VALUES(schedule_code),
+        mapping_source = VALUES(mapping_source),
+        confidence_score = VALUES(confidence_score),
+        mapping_reason = VALUES(mapping_reason),
+        remember_scope = VALUES(remember_scope),
+        approved_by_user_id = VALUES(approved_by_user_id),
+        approved_at = VALUES(approved_at)
 ");
 
 $autoMappedCount = 0;
 $unmatchedLedgers = [];
+$reviewCount = 0;
+$conflictCount = 0;
 
 foreach ($ledgers as $row) {
     if (!empty($row['mapped_code'])) {
@@ -62,15 +69,37 @@ foreach ($ledgers as $row) {
     $suggestedCode = ($suggestion['head'] ?? 'unmapped') !== 'unmapped' ? $suggestion['head'] : '';
     $confidence = (int) ($suggestion['confidence'] ?? 0);
 
-    if ($suggestedCode !== '' && $confidence >= 70) {
-        $autoMapStmt->execute([$company_id, $row['ledger_name'], $suggestedCode]);
+    $suggestedReason = (string) ($suggestion['reason'] ?? 'No reason available');
+    $suggestedSource = (string) ($suggestion['source'] ?? ($suggestion['method'] ?? 'ai'));
+    $hasConflict = $suggestedCode !== '' && !isScheduleCodeAllowedForParentGroup((string) ($row['parent_group'] ?? ''), $suggestedCode);
+
+    if ($hasConflict) {
+        $conflictCount++;
+    }
+
+    if ($suggestedCode !== '' && $confidence >= 85 && !$hasConflict) {
+        $autoMapStmt->execute([
+            $company_id,
+            $row['ledger_name'],
+            $suggestedCode,
+            'auto_' . $suggestedSource,
+            $confidence,
+            $suggestedReason,
+            null,
+            $userId > 0 ? $userId : null,
+        ]);
         $autoMappedCount++;
         continue;
     }
 
     $row['ai_suggested_code'] = $suggestedCode;
     $row['ai_suggested_label'] = $suggestedCode !== '' ? $mappingEngine->getLabel($suggestedCode) : 'No confident match';
+    $row['ai_confidence'] = $confidence;
+    $row['ai_reason'] = $suggestedReason;
+    $row['ai_source'] = $suggestedSource;
+    $row['ai_conflict'] = $hasConflict;
     $unmatchedLedgers[] = $row;
+    $reviewCount++;
 }
 
 $ledgers = $unmatchedLedgers;
@@ -89,7 +118,22 @@ if (empty($ledgers)) {
 </div>
 
 <div class="card" style="margin-bottom:20px;">
-    Only unmatched ledgers are shown here. Backend AI suggestions are generated from the predefined financial format list, then you can review and save the remaining mappings.
+    Only unmatched or review-required ledgers are shown here. The mapper now applies company learning, global learning, keyword rules, and parent-group controls before asking for manual review.
+</div>
+
+<div class="summary-bar">
+    <div class="summary-card">
+        <div class="summary-number"><?= (int) $autoMappedCount ?></div>
+        <div class="summary-label">Auto Mapped</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-number"><?= (int) $reviewCount ?></div>
+        <div class="summary-label">Needs Review</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-number"><?= (int) $conflictCount ?></div>
+        <div class="summary-label">Conflicts</div>
+    </div>
 </div>
 
 <?php if (empty($ledgers)): ?>
@@ -99,7 +143,7 @@ if (empty($ledgers)) {
             Mapping is already completed for this company. Do you want to continue to trial balance fetch, or go back and re-sync ledgers?
         </div>
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php">Continue</a>
+            <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php?bridge=1">Continue</a>
             <a class="btn" href="<?= BASE_URL ?>data_console/tally_console.php">Re-sync Ledgers</a>
         </div>
     </div>
@@ -133,11 +177,12 @@ if (empty($ledgers)) {
 <?php endif; ?>
 
 <form method="post" action="mapping_save.php">
+<?= csrfInput() ?>
 
 <?php if (!empty($ledgers)): ?>
 <div class="card" style="margin-bottom:16px;">
     <strong>Bulk Match</strong><br>
-    Select the ledgers that belong to a common group, choose the required schedule head, and click <strong>Match Selected</strong>.
+    Select the ledgers that belong to a common group, choose the required schedule head, and click <strong>Match Selected</strong>. Use the remember scope when you want the system to learn future decisions.
     <div style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
         <label style="display:flex; align-items:center; gap:8px;">
             <input type="checkbox" id="select_all_ledgers">
@@ -160,7 +205,10 @@ if (empty($ledgers)) {
         <th>Ledger</th>
         <th>Parent Group</th>
         <th>Suggested Head</th>
+        <th>Confidence</th>
+        <th>AI Reason</th>
         <th>Select Head</th>
+        <th>Remember</th>
     </tr>
 
 <?php foreach ($ledgers as $row): 
@@ -175,7 +223,19 @@ if (empty($ledgers)) {
     </td>
     <td><?= htmlspecialchars($row['ledger_name']) ?></td>
     <td><?= htmlspecialchars($row['parent_group'] ?: '-') ?></td>
-    <td><?= htmlspecialchars($suggestedLabel) ?></td>
+    <td>
+        <?= htmlspecialchars($suggestedLabel) ?>
+        <?php if (!empty($row['ai_conflict'])): ?>
+            <div style="color:#b42318; font-size:12px; margin-top:4px;">Parent-group conflict</div>
+        <?php endif; ?>
+    </td>
+    <td style="text-align:center;">
+        <strong><?= (int) ($row['ai_confidence'] ?? 0) ?>%</strong><br>
+        <span style="font-size:12px; color:#667085;"><?= htmlspecialchars(ucwords(str_replace('_', ' ', (string) ($row['ai_source'] ?? 'ai')))) ?></span>
+    </td>
+    <td style="max-width:280px;">
+        <div style="white-space:normal; color:#344054;"><?= htmlspecialchars((string) ($row['ai_reason'] ?? 'No explanation')) ?></div>
+    </td>
 
     <td>
         <select name="mapping[<?= htmlspecialchars($row['ledger_name']) ?>]" class="mapping-select" required>
@@ -185,6 +245,13 @@ if (empty($ledgers)) {
                     <?= htmlspecialchars($optionLabel) ?>
                 </option>
             <?php endforeach; ?>
+        </select>
+    </td>
+    <td>
+        <select name="remember_scope[<?= htmlspecialchars($row['ledger_name']) ?>]" class="remember-select">
+            <option value="">Do Not Learn</option>
+            <option value="company">Remember for this company</option>
+            <option value="global">Remember globally</option>
         </select>
     </td>
 </tr>
@@ -200,7 +267,7 @@ if (empty($ledgers)) {
         </div>
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
             <a class="btn" href="<?= BASE_URL ?>data_console/view_synced_ledgers.php">View Synced Ledgers</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php">Continue: Fetch Trial Balance</a>
+            <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php?bridge=1">Continue: Fetch Trial Balance</a>
             <a class="btn" href="<?= BASE_URL ?>data_console/tally_console.php">Re-sync Ledgers</a>
         </div>
     </div>

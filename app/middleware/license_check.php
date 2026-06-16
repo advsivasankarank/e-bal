@@ -4,12 +4,8 @@ require_once __DIR__ . '/../session_bootstrap.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../helpers/plan_helper.php';
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 $currentScript = basename($_SERVER['SCRIPT_NAME'] ?? '');
-$publicAllowList = ['upgrade.php'];
+$publicAllowList = ['upgrade.php', 'login.php', 'logout.php'];
 
 if (in_array($currentScript, $publicAllowList, true)) {
     return;
@@ -17,6 +13,10 @@ if (in_array($currentScript, $publicAllowList, true)) {
 
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 if ($userId <= 0) {
+    return;
+}
+
+if (isSuperAdmin($pdo, $userId)) {
     return;
 }
 

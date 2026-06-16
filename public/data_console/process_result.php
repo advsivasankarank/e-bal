@@ -38,7 +38,7 @@ require_once __DIR__ . '/../layouts/header.php';
 
 <div>
     <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php">Continue</a>
-    <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php">Re-fetch Trial Balance</a>
+    <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php?bridge=1">Re-fetch Trial Balance</a>
     <a class="btn" href="mapping_console.php">Mapping Console</a>
     <a class="btn" href="<?= BASE_URL ?>dashboard_report.php">Go to Reports</a>
     <a class="btn" href="<?= BASE_URL ?>dashboard_data.php">Back to Dashboard</a>

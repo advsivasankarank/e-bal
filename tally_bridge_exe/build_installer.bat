@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-if not exist "dist\ebal-tally-bridge.exe" (
+if not exist "dist\ebal_smart_bridge.exe" (
   echo EXE not found. Run build.bat first.
   pause
   exit /b 1
@@ -21,5 +21,5 @@ if "%ISCC_PATH%"=="" (
 
 "%ISCC_PATH%" installer.iss
 
-echo Done. Installer is in dist\ebal-tally-bridge-setup.exe
+echo Done. Installer is in dist\ebal-smart-bridge-setup.exe
 pause

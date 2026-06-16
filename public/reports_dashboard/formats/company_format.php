@@ -3,7 +3,9 @@
 // Example: $data['share_capital'], $data['inventory'], etc.
 ?>
 
-<h2 id="balance-sheet">Balance Sheet as at <?= htmlspecialchars($data['date']) ?></h2>
+<section class="report-page" id="balance-sheet">
+<h2 class="report-page-title">Balance Sheet as at <?= htmlspecialchars($data['date']) ?></h2>
+<p class="report-page-subtitle">All amounts are presented in Indian Rupees.</p>
 
 <table border="1" width="100%" cellpadding="5">
 <tr><th>Particulars</th><th>Note</th><th class="figure">Current</th><th class="figure">Previous</th></tr>
@@ -46,9 +48,39 @@
 <tr><td><b>TOTAL</b></td><td></td><td class="figure"><?= format_inr($data['total_assets']) ?></td><td class="figure"><?= format_inr($data['prev_total_assets']) ?></td></tr>
 </table>
 
-<br>
+<table class="signature-table signature-block" width="100%" style="border:0; border-collapse:collapse;">
+<tr>
+    <td style="width:50%; vertical-align:top; border:0; padding:0 20px 0 0;">
+        <strong>For Statutory Auditors</strong><br><br><br><br>
+        <?= htmlspecialchars($company_meta['auditor_firm'] ?? '') ?><br>
+        <?= htmlspecialchars($company_meta['auditor_name'] ?? 'Authorised Signatory') ?>
+        <div class="signature-caption">Authorised Signatory</div>
+    </td>
+    <td style="width:50%; vertical-align:top; border:0; padding:0; text-align:right;">
+        <table class="signature-table" width="100%" style="border:0; border-collapse:collapse;">
+            <tr>
+                <td style="width:50%; border:0; padding:0 0 0 20px; text-align:right; vertical-align:top;">
+                    <strong><?= htmlspecialchars($company_meta['signatory_1_name'] ?? 'Director 1') ?></strong><br>
+                    <?= htmlspecialchars($company_meta['signatory_1_designation'] ?? 'Director') ?><br>
+                    <?= htmlspecialchars($company_meta['signatory_1_id_no'] ?? '') ?><br><br><br>
+                    <div class="signature-caption">Signature</div>
+                </td>
+                <td style="width:50%; border:0; padding:0 0 0 20px; text-align:right; vertical-align:top;">
+                    <strong><?= htmlspecialchars($company_meta['signatory_2_name'] ?? 'Director 2') ?></strong><br>
+                    <?= htmlspecialchars($company_meta['signatory_2_designation'] ?? 'Director') ?><br>
+                    <?= htmlspecialchars($company_meta['signatory_2_id_no'] ?? '') ?><br><br><br>
+                    <div class="signature-caption">Signature</div>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+</table>
+</section>
 
-<h2 id="profit-loss">Statement of Profit & Loss</h2>
+<section class="report-page" id="profit-loss">
+<h2 class="report-page-title">Statement of Profit &amp; Loss</h2>
+<p class="report-page-subtitle">For the year ended <?= htmlspecialchars($data['date']) ?>.</p>
 
 <table border="1" width="100%" cellpadding="5">
 <tr><th>Particulars</th><th>Note</th><th class="figure">Current</th><th class="figure">Previous</th></tr>
@@ -74,9 +106,7 @@
 <tr><td><b>Profit After Tax</b></td><td></td><td class="figure"><?= format_inr($data['pat']) ?></td><td class="figure"><?= format_inr($data['prev_pat']) ?></td></tr>
 </table>
 
-<br><br>
-
-<table width="100%" style="border:0; border-collapse:collapse; margin-top:40px;">
+<table class="signature-table" width="100%" style="border:0; border-collapse:collapse; margin-top:40px;">
 <tr>
     <td style="width:50%; vertical-align:top; border:0; padding:0 20px 0 0;">
         <strong>For Statutory Auditors</strong><br><br><br><br>
@@ -84,7 +114,7 @@
         <?= htmlspecialchars($company_meta['auditor_name'] ?? 'Authorised Signatory') ?>
     </td>
     <td style="width:50%; vertical-align:top; border:0; padding:0; text-align:right;">
-        <table width="100%" style="border:0; border-collapse:collapse;">
+        <table class="signature-table" width="100%" style="border:0; border-collapse:collapse;">
             <tr>
                 <td style="width:50%; border:0; padding:0 0 0 20px; text-align:right; vertical-align:top;">
                     <strong><?= htmlspecialchars($company_meta['signatory_1_name'] ?? 'Director 1') ?></strong><br>
@@ -103,3 +133,4 @@
     </td>
 </tr>
 </table>
+</section>

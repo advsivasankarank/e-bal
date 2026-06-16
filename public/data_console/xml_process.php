@@ -20,7 +20,7 @@ $fy_id = $_SESSION['fy_id'];
 if (!isset($_FILES['xml_file']) || $_FILES['xml_file']['error'] !== UPLOAD_ERR_OK) {
     $_SESSION['error'] = "File upload failed";
     $_SESSION['process_stats'] = ['total'=>0,'dr_total'=>0,'cr_total'=>0,'type'=>'xml'];
-    header("Location: /e-bal/public/data_console/process_result.php");
+    header('Location: ' . BASE_URL . 'data_console/process_result.php');
     exit;
 }
 
@@ -42,7 +42,7 @@ if (!$xmlObj) {
     $errors = libxml_get_errors();
     $_SESSION['error'] = "Invalid XML format. Parser errors: " . print_r($errors, true);
     $_SESSION['process_stats'] = ['total'=>0,'dr_total'=>0,'cr_total'=>0,'type'=>'xml'];
-    header("Location: /e-bal/public/data_console/process_result.php");
+    header('Location: ' . BASE_URL . 'data_console/process_result.php');
     exit;
 }
 
@@ -149,5 +149,5 @@ try {
    FINAL REDIRECT
 ========================= */
 session_write_close();
-header("Location: /e-bal/public/data_console/process_result.php");
+header('Location: ' . BASE_URL . 'data_console/process_result.php');
 exit;

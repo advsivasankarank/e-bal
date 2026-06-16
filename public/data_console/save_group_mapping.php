@@ -2,6 +2,7 @@
 require_once '../../app/context_check.php';
 require_once '../../app/workflow_engine.php';
 require_once '../../config/database.php';
+require_once '../../config/app.php';
 requireFullContext();
 
 $company_id = $_SESSION['company_id'];
@@ -73,5 +74,7 @@ try {
 
 } catch (Exception $e) {
     $pdo->rollBack();
-    die("Mapping save failed: " . $e->getMessage());
+    $_SESSION['error'] = 'Mapping save failed. Please review the selected group mappings and try again.';
+    header('Location: ' . BASE_URL . 'data_console/mapping_console.php');
+    exit;
 }

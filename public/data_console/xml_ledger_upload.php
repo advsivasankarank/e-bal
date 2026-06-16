@@ -9,7 +9,9 @@ $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
 
 if (!isset($_FILES['ledger_xml']) || $_FILES['ledger_xml']['error'] !== UPLOAD_ERR_OK) {
-    die("Ledger XML upload failed");
+    $_SESSION['error'] = 'Ledger XML upload failed.';
+    header('Location: ' . BASE_URL . 'data_console/tally_offline.php');
+    exit;
 }
 
 $rawXml = file_get_contents($_FILES['ledger_xml']['tmp_name']);
@@ -23,7 +25,9 @@ if (!$xml) {
         return trim($error->message);
     }, libxml_get_errors());
     libxml_clear_errors();
-    die("Invalid Ledger XML" . (!empty($errors) ? ': ' . implode('; ', $errors) : ''));
+    $_SESSION['error'] = 'Invalid Ledger XML' . (!empty($errors) ? ': ' . implode('; ', $errors) : '');
+    header('Location: ' . BASE_URL . 'data_console/tally_offline.php');
+    exit;
 }
 
 /* CLEAR OLD */

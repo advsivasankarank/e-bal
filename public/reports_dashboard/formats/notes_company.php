@@ -2,10 +2,13 @@
 // $notes = array with structured values
 ?>
 
-<h2 id="notes-to-accounts">NOTES TO ACCOUNTS</h2>
+<section class="report-page notes-shell" id="notes-to-accounts">
+<h2 class="report-page-title">Notes to Accounts</h2>
+<p class="report-page-subtitle notes-cover">Detailed disclosures supporting the Balance Sheet and Statement of Profit &amp; Loss.</p>
 
 <?php foreach (($notes['sections'] ?? []) as $index => $section): ?>
-    <h3 id="note-<?= (int) ($section['note_no'] ?? ($index + 1)) ?>">Note <?= (int) ($section['note_no'] ?? ($index + 1)) ?>: <?= htmlspecialchars($section['title']) ?></h3>
+    <div class="note-block">
+    <h3 class="note-heading" id="note-<?= (int) ($section['note_no'] ?? ($index + 1)) ?>">Note <?= (int) ($section['note_no'] ?? ($index + 1)) ?>: <?= htmlspecialchars($section['title']) ?></h3>
 
     <?php if (($section['custom_type'] ?? '') === 'inventory_change'): ?>
         <?php
@@ -24,12 +27,15 @@
         $wipPrevChange = (float) ($openingPrev['work_in_progress'] ?? 0) - (float) ($closingPrev['work_in_progress'] ?? 0);
         $stockTradePrevChange = (float) ($openingPrev['stock_in_trade'] ?? 0) - (float) ($closingPrev['stock_in_trade'] ?? 0);
         ?>
-        <table border="1" width="100%" cellpadding="5">
+        <table class="note-table" border="1" width="100%" cellpadding="5">
+            <thead>
             <tr>
                 <th>Particulars</th>
                 <th class="figure">Current Year</th>
                 <th class="figure">Previous Year</th>
             </tr>
+            </thead>
+            <tbody>
             <tr><td><b>Opening Stock</b></td><td></td><td></td></tr>
             <tr><td>Finished Goods</td><td class="figure"><?= format_inr((float) ($opening['finished_goods'] ?? 0)) ?></td><td class="figure"><?= format_inr((float) ($openingPrev['finished_goods'] ?? 0)) ?></td></tr>
             <tr><td>Work-in-Progress</td><td class="figure"><?= format_inr((float) ($opening['work_in_progress'] ?? 0)) ?></td><td class="figure"><?= format_inr((float) ($openingPrev['work_in_progress'] ?? 0)) ?></td></tr>
@@ -44,11 +50,17 @@
             <tr><td><b>Net Change - Finished Goods</b></td><td class="figure"><?= format_inr($finishedGoodsChange) ?></td><td class="figure"><?= format_inr($finishedGoodsPrevChange) ?></td></tr>
             <tr><td><b>Net Change - Work-in-Progress</b></td><td class="figure"><?= format_inr($wipChange) ?></td><td class="figure"><?= format_inr($wipPrevChange) ?></td></tr>
             <tr><td><b>Net Change - Stock-in-Trade</b></td><td class="figure"><?= format_inr($stockTradeChange) ?></td><td class="figure"><?= format_inr($stockTradePrevChange) ?></td></tr>
+            </tbody>
+            <tfoot>
             <tr><td><b>Net Change (Opening - Closing)</b></td><td class="figure"><b><?= format_inr((float) ($section['current_total'] ?? 0)) ?></b></td><td class="figure"><b><?= format_inr((float) ($section['previous_total'] ?? 0)) ?></b></td></tr>
+            </tfoot>
         </table>
     <?php else: ?>
-        <table border="1" width="100%">
+        <table class="note-table" border="1" width="100%">
+            <thead>
             <tr><th>Ledger / Particulars</th><th class="figure">Current Year</th><th class="figure">Previous Year</th></tr>
+            </thead>
+            <tbody>
             <?php foreach (($section['lines'] ?? []) as $line): ?>
                 <tr>
                     <td><?= htmlspecialchars($line['label']) ?></td>
@@ -56,19 +68,24 @@
                     <td class="figure"><?= format_inr((float) ($line['previous'] ?? 0)) ?></td>
                 </tr>
             <?php endforeach; ?>
+            </tbody>
+            <tfoot>
             <tr>
                 <td><strong>Total</strong></td>
                 <td class="figure"><strong><?= format_inr((float) ($section['current_total'] ?? 0)) ?></strong></td>
                 <td class="figure"><strong><?= format_inr((float) ($section['previous_total'] ?? 0)) ?></strong></td>
             </tr>
+            </tfoot>
         </table>
     <?php endif; ?>
+    </div>
 <?php endforeach; ?>
 
 <h3>Significant Accounting Policies</h3>
-<ul>
+<ul class="note-policy-list">
 <li>Accrual basis of accounting</li>
 <li>Historical cost convention</li>
 <li>Depreciation method</li>
 <li>Revenue recognition</li>
 </ul>
+</section>

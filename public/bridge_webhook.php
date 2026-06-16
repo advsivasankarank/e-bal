@@ -1,7 +1,17 @@
 <?php
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../app/session_bootstrap.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../app/helpers/plan_helper.php';
+require_once __DIR__ . '/../app/helpers/runtime_helper.php';
 
 header('Content-Type: application/json');
+
+if (!isLocalEnv()) {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'error' => 'Bridge webhook is disabled in production.']);
+    exit;
+}
 
 $raw = file_get_contents('php://input');
 $payload = json_decode($raw, true);
@@ -47,6 +57,7 @@ $content = "<?php\n"
     . "if (!defined('TALLY_BRIDGE_UPDATED_AT')) { define('TALLY_BRIDGE_UPDATED_AT', " . time() . "); }\n";
 
 if (file_put_contents($bridgeSettingsPath, $content, LOCK_EX) === false) {
+    appLog('ERROR', 'Bridge webhook failed to write settings', ['path' => $bridgeSettingsPath]);
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'Failed to write settings']);
     exit;

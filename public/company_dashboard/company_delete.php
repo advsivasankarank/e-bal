@@ -1,17 +1,31 @@
 <?php
 require_once '../../app/session_bootstrap.php';
 require_once '../../config/database.php';
+require_once '../../app/helpers/plan_helper.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: company_list.php");
     exit;
 }
 
+requireCsrfToken();
+
 $id = (int) ($_POST['id'] ?? 0);
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+$ownerId = $userId > 0 ? getOwnerUserId($pdo, $userId) : 0;
 
 if ($id <= 0) {
     header("Location: company_list.php?error=invalid_company");
     exit;
+}
+
+if ($ownerId > 0) {
+    $scopeStmt = $pdo->prepare("SELECT id FROM companies WHERE id = ? AND owner_user_id = ?");
+    $scopeStmt->execute([$id, $ownerId]);
+    if (!$scopeStmt->fetchColumn()) {
+        header("Location: company_list.php?error=invalid_company");
+        exit;
+    }
 }
 
 $pdo->beginTransaction();
@@ -34,8 +48,13 @@ try {
         }
     }
 
-    $stmt = $pdo->prepare("DELETE FROM companies WHERE id = ?");
-    $stmt->execute([$id]);
+    if ($ownerId > 0) {
+        $stmt = $pdo->prepare("DELETE FROM companies WHERE id = ? AND owner_user_id = ?");
+        $stmt->execute([$id, $ownerId]);
+    } else {
+        $stmt = $pdo->prepare("DELETE FROM companies WHERE id = ?");
+        $stmt->execute([$id]);
+    }
 
     $pdo->commit();
 } catch (Throwable $e) {

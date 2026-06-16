@@ -3,17 +3,23 @@ require_once '../../app/context_check.php';
 require_once '../../app/workflow_engine.php';
 require_once '../../config/database.php';
 require_once '../../app/helpers/parent_group_validation_helper.php';
+require_once '../../app/helpers/mapping_ai_helper.php';
+require_once '../../app/engines/ai_mapping_engine.php';
 
 requireFullContext();
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+requireCsrfToken();
 
 $company_id = $_SESSION['company_id'];
 $fy_id      = $_SESSION['fy_id'];
+$userId = (int) ($_SESSION['user_id'] ?? 0);
 $allowOverride = isset($_POST['allow_override']) && (string) $_POST['allow_override'] === '1';
 ensureLedgerMappingOverrideColumn($pdo);
+ensureMappingAiSchema($pdo);
+
+$companyStmt = $pdo->prepare("SELECT category FROM companies WHERE id = ?");
+$companyStmt->execute([$company_id]);
+$companyCategory = strtolower((string) $companyStmt->fetchColumn());
+$mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
 
 if (!isset($_POST['mapping'])) {
     $_SESSION['error'] = "No mapping data";
@@ -27,12 +33,17 @@ try {
 
     $stmt = $pdo->prepare("
         INSERT INTO ledger_mapping 
-        (company_id, ledger_name, schedule_code, override_parent_group)
-        VALUES (?, ?, ?, ?)
+        (company_id, ledger_name, schedule_code, override_parent_group, mapping_source, confidence_score, mapping_reason, remember_scope, approved_by_user_id, approved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ON DUPLICATE KEY UPDATE
             schedule_code=VALUES(schedule_code),
             override_parent_group=VALUES(override_parent_group),
-            schedule_code=VALUES(schedule_code)
+            mapping_source=VALUES(mapping_source),
+            confidence_score=VALUES(confidence_score),
+            mapping_reason=VALUES(mapping_reason),
+            remember_scope=VALUES(remember_scope),
+            approved_by_user_id=VALUES(approved_by_user_id),
+            approved_at=VALUES(approved_at)
     ");
 
     $parentStmt = $pdo->prepare("
@@ -47,9 +58,29 @@ try {
     foreach ($_POST['mapping'] as $ledger => $head) {
 
         if (!$head) continue;
+        $ledger = trim((string) $ledger);
+        $head = trim((string) $head);
+        if ($ledger === '' || $head === '') {
+            continue;
+        }
 
         $parentStmt->execute([$company_id, $ledger]);
         $parentGroup = (string) ($parentStmt->fetchColumn() ?: '');
+        $rememberScope = strtolower(trim((string) ($_POST['remember_scope'][$ledger] ?? '')));
+        if (!in_array($rememberScope, ['', 'company', 'global'], true)) {
+            $rememberScope = '';
+        }
+
+        $suggestion = $mappingEngine->mapLedger($ledger, $parentGroup);
+        $suggestedHead = trim((string) ($suggestion['head'] ?? ''));
+        $suggestionMatched = $suggestedHead !== '' && $suggestedHead === $head && $suggestedHead !== 'unmapped';
+        $mappingSource = $suggestionMatched
+            ? ('ai_' . (string) ($suggestion['source'] ?? ($suggestion['method'] ?? 'rule')))
+            : 'manual';
+        $confidenceScore = $suggestionMatched ? (float) ($suggestion['confidence'] ?? 0) : 100.0;
+        $mappingReason = $suggestionMatched
+            ? (string) ($suggestion['reason'] ?? 'Accepted AI/rule suggestion.')
+            : 'Manual override selected by user.';
 
         if (!isScheduleCodeAllowedForParentGroup($parentGroup, (string) $head)) {
             $conflicts[] = buildParentGroupConflict((string) $ledger, $parentGroup, (string) $head);
@@ -62,8 +93,17 @@ try {
             $company_id,
             $ledger,
             $head,
-            $allowOverride ? 1 : 0
+            $allowOverride ? 1 : 0,
+            $mappingSource,
+            $confidenceScore,
+            $mappingReason,
+            $rememberScope !== '' ? $rememberScope : null,
+            $userId > 0 ? $userId : null,
         ]);
+
+        if ($rememberScope !== '') {
+            saveMappingLearning($pdo, (int) $company_id, $ledger, $parentGroup, (string) $head, $rememberScope, $userId > 0 ? $userId : null);
+        }
     }
 
     if ($conflicts !== [] && !$allowOverride) {

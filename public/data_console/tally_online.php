@@ -23,7 +23,7 @@ $mappingDone   = $wf['mapping_completed'] ?? 0;
 $tallyFetched  = $wf['tally_fetched'] ?? 0;
 
 $nextProcessLabel = 'Sync Ledgers';
-$nextProcessUrl = BASE_URL . 'data_console/connector.php';
+$nextProcessUrl = BASE_URL . 'data_console/connector.php?bridge=1';
 $nextProcessHelp = 'Start the ledger sync to bring the live Tally ledger master into e-BAL.';
 
 if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
@@ -32,7 +32,7 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
     $nextProcessHelp = 'Ledger sync is complete. Review and confirm the schedule mapping as the next process.';
 } elseif ((int) $mappingDone === 1 && (int) $tallyFetched !== 1) {
     $nextProcessLabel = 'Fetch Trial Balance';
-    $nextProcessUrl = BASE_URL . 'data_console/tally_connect.php';
+    $nextProcessUrl = BASE_URL . 'data_console/tally_connect.php?bridge=1';
     $nextProcessHelp = 'Mapping is complete. Continue to the live trial balance fetch step.';
 } elseif ((int) $tallyFetched === 1) {
     $nextProcessLabel = 'Review Trial Balance';
@@ -62,7 +62,7 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
         </div>
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
             <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php">Continue</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/connector.php">Re-sync Online</a>
+            <a class="btn" href="<?= BASE_URL ?>data_console/connector.php?bridge=1">Re-sync Online</a>
         </div>
     </div>
 <?php elseif ((int) $mappingDone === 1): ?>
@@ -72,8 +72,8 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
             Mapping is already completed. Continue to fetch the trial balance, or re-sync the ledger master if you want to refresh the base data.
         </div>
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php">Continue</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/connector.php">Re-sync Ledgers</a>
+            <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php?bridge=1">Continue</a>
+            <a class="btn" href="<?= BASE_URL ?>data_console/connector.php?bridge=1">Re-sync Ledgers</a>
         </div>
     </div>
 <?php elseif ((int) $ledgerFetched === 1): ?>
@@ -84,15 +84,15 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
         </div>
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
             <a class="btn" href="<?= BASE_URL ?>data_console/mapping_console.php">Continue</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/connector.php">Re-sync Ledgers</a>
+            <a class="btn" href="<?= BASE_URL ?>data_console/connector.php?bridge=1">Re-sync Ledgers</a>
         </div>
     </div>
 <?php endif; ?>
 
 <div class="tile-container">
 <!-- STEP 0: CONNECTOR SYNC -->
-<div class="tile"
-    onclick="location.href='<?= BASE_URL ?>data_console/connector.php'">
+    <div class="tile"
+    onclick="location.href='<?= BASE_URL ?>data_console/connector.php?bridge=1'">
 
     <h3>Step 0</h3>
     <p>Verify the live Tally bridge and push fresh ledger XML into the application safely.</p>
@@ -128,7 +128,7 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
 
     <!-- STEP 3: TRIAL BALANCE -->
     <div class="tile <?= !$mappingDone ? 'disabled' : ($tallyFetched ? 'completed' : '') ?>"
-        onclick="<?= $mappingDone ? "location.href='".BASE_URL."data_console/tally_connect.php'" : '' ?>">
+        onclick="<?= $mappingDone ? "location.href='".BASE_URL."data_console/tally_connect.php?bridge=1'" : '' ?>">
 
         <h3>Step 3</h3>
         <p>Fetch live trial balance data from Tally once every ledger is mapped correctly.</p>

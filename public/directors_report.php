@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'generate_ai') {
         $userId = (int) ($_SESSION['user_id'] ?? 0);
-        if ($userId > 0 && !hasFeature($userId, 'ai_notes', $pdo)) {
+        if ($userId > 0 && !hasFeature($userId, 'directors_report_ai', $pdo)) {
             $infoMessage = 'AI draft is not available on your current plan. Upgrade to use AI features.';
         } else {
             $generated = generateDirectorsReportDraft($fs, $companyName, $fyName);

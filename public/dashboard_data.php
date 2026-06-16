@@ -57,7 +57,7 @@ $tallyFetched = (int) ($workflow['tally_fetched'] ?? 0);
         <div class="status"><?= $ledgerFetched ? ($mappingDone ? 'Completed' : 'Ready To Map') : 'Ledger Import Required' ?></div>
     </div>
 
-    <div class="tile <?= !$mappingDone ? 'disabled' : 'is-clickable' ?>" tabindex="0" role="link"<?= $mappingDone ? ' data-nav="' . BASE_URL . 'data_console/tally_connect.php"' : '' ?>>
+    <div class="tile <?= !$mappingDone ? 'disabled' : 'is-clickable' ?>" tabindex="0" role="link"<?= $mappingDone ? ' data-nav="' . BASE_URL . 'data_console/tally_connect.php?bridge=1"' : '' ?>>
         <h3>Trial Balance Import</h3>
         <p>Fetch live trial balance or continue the import workflow once every mapping row is complete.</p>
         <div class="status"><?= $mappingDone ? ($tallyFetched ? 'Imported' : 'Ready To Fetch') : 'Complete Mapping First' ?></div>

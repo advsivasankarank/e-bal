@@ -1,18 +1,28 @@
 <?php
 
+require_once __DIR__ . '/../helpers/mapping_ai_helper.php';
+
 class AIMappingEngine
 {
     private $category;
+    private $pdo;
+    private $companyId;
     private $mapping;
     private $labels;
     private $aliases;
+    private $learnedCompanyMappings;
+    private $learnedGlobalMappings;
 
-    public function __construct($category = 'corporate')
+    public function __construct($category = 'corporate', ?PDO $pdo = null, int $companyId = 0)
     {
         $this->category = strtolower(trim((string) $category));
+        $this->pdo = $pdo;
+        $this->companyId = $companyId;
         $this->mapping = $this->loadMapping();
         $this->labels = $this->buildLabels();
         $this->aliases = $this->loadAliases();
+        $this->learnedCompanyMappings = $this->loadLearnedMappings('company');
+        $this->learnedGlobalMappings = $this->loadLearnedMappings('global');
     }
 
     /* =========================
@@ -25,8 +35,34 @@ class AIMappingEngine
         $group  = $this->normalize($groupName);
         $allowedHeads = $this->allowedHeadsForGroup($group);
 
+        $learnedCompanyMatch = $this->matchLearnedMapping($ledger, $group, $this->learnedCompanyMappings);
+        if ($learnedCompanyMatch !== null) {
+            return [
+                'head' => $learnedCompanyMatch['schedule_code'],
+                'confidence' => 99,
+                'method' => 'learned_company',
+                'source' => 'learned_company',
+                'reason' => 'Matched a previously approved company-specific mapping for this ledger and parent group.',
+                'matched_keyword' => $learnedCompanyMatch['original_ledger_name'] ?? $ledgerName,
+            ];
+        }
+
+        $learnedGlobalMatch = $this->matchLearnedMapping($ledger, $group, $this->learnedGlobalMappings);
+        if ($learnedGlobalMatch !== null) {
+            return [
+                'head' => $learnedGlobalMatch['schedule_code'],
+                'confidence' => 96,
+                'method' => 'learned_global',
+                'source' => 'learned_global',
+                'reason' => 'Matched a previously approved global mapping from another company.',
+                'matched_keyword' => $learnedGlobalMatch['original_ledger_name'] ?? $ledgerName,
+            ];
+        }
+
         $bestMatch = null;
         $bestScore = 0;
+        $bestKeyword = '';
+        $bestSource = 'fuzzy';
 
         foreach ($this->mapping as $head => $keywords) {
             if ($allowedHeads !== [] && !in_array($head, $allowedHeads, true)) {
@@ -50,7 +86,10 @@ class AIMappingEngine
                     return [
                         'head' => $head,
                         'confidence' => 95,
-                        'method' => 'direct'
+                        'method' => 'direct',
+                        'source' => 'keyword',
+                        'reason' => 'Direct keyword match between the ledger name and the mapping vocabulary.',
+                        'matched_keyword' => $keyword,
                     ];
                 }
 
@@ -64,6 +103,10 @@ class AIMappingEngine
                 if ($percent > $bestScore) {
                     $bestScore = $percent;
                     $bestMatch = $head;
+                    $bestKeyword = $keyword;
+                    $bestSource = isset($this->aliases[$head]) && in_array($keyword, array_map([$this, 'normalize'], $this->aliases[$head]), true)
+                        ? 'alias'
+                        : 'fuzzy';
                 }
             }
         }
@@ -79,14 +122,22 @@ class AIMappingEngine
             return [
                 'head' => $groupHead,
                 'confidence' => 88,
-                'method' => 'group'
+                'method' => 'group',
+                'source' => 'group',
+                'reason' => 'Suggested from Tally parent-group classification because it is stronger than the keyword match.',
+                'matched_keyword' => $group,
             ];
         }
 
         return [
             'head' => $bestScore >= 40 ? ($bestMatch ?? 'unmapped') : 'unmapped',
             'confidence' => round($bestScore),
-            'method' => 'fuzzy'
+            'method' => 'fuzzy',
+            'source' => $bestSource,
+            'reason' => $bestScore >= 40
+                ? 'Closest vocabulary similarity match' . ($bestKeyword !== '' ? ' for "' . $bestKeyword . '"' : '') . '.'
+                : 'No confident vocabulary or group-based mapping match was found.',
+            'matched_keyword' => $bestKeyword,
         ];
     }
 
@@ -361,5 +412,58 @@ class AIMappingEngine
         $value = str_replace(['&', '-', '_', '/', '.', ','], ' ', $value);
         $value = preg_replace('/\s+/', ' ', $value);
         return $value;
+    }
+
+    private function loadLearnedMappings(string $scope): array
+    {
+        if (!$this->pdo instanceof PDO) {
+            return [];
+        }
+
+        ensureMappingLearningTable($this->pdo);
+
+        $scope = strtolower(trim($scope));
+        $companyId = $scope === 'company' ? $this->companyId : 0;
+
+        $stmt = $this->pdo->prepare("
+            SELECT
+                normalized_ledger_name,
+                normalized_parent_group,
+                original_ledger_name,
+                original_parent_group,
+                schedule_code,
+                usage_count
+            FROM mapping_learning
+            WHERE scope = ?
+              AND company_id = ?
+            ORDER BY usage_count DESC, updated_at DESC
+        ");
+        $stmt->execute([$scope, $companyId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    private function matchLearnedMapping(string $ledger, string $group, array $pool): ?array
+    {
+        $groupFallback = null;
+
+        foreach ($pool as $row) {
+            $rowLedger = (string) ($row['normalized_ledger_name'] ?? '');
+            $rowGroup = (string) ($row['normalized_parent_group'] ?? '');
+
+            if ($rowLedger === '' || $rowLedger !== $ledger) {
+                continue;
+            }
+
+            if ($rowGroup !== '' && $rowGroup === $group) {
+                return $row;
+            }
+
+            if ($rowGroup === '' && $groupFallback === null) {
+                $groupFallback = $row;
+            }
+        }
+
+        return $groupFallback;
     }
 }

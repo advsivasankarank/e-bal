@@ -2,16 +2,154 @@
 require_once '../../app/context_check.php';
 requireFullContext();
 require_once '../../config/app.php';
+require_once '../../app/helpers/security_helper.php';
 require_once '../../app/helpers/xml_sanitizer.php';
 require_once '../../xml_engine/tally_connector.php';
 
 $page_title = "Sync Result";
 $companyName = $_SESSION['company_name'] ?? 'Not Selected';
 $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
+$companyId = (int) ($_SESSION['company_id'] ?? 0);
+$fyId = (int) ($_SESSION['fy_id'] ?? 0);
 $sessionCookie = session_name() . '=' . session_id();
+$bridgeMode = isset($_GET['bridge']) && $_GET['bridge'] === '1';
+$bridgeToken = buildBridgeBrowserToken('sync');
+$bridgeClientId = 'EBAL001';
+$csrfToken = csrfToken();
+$appOrigin = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http')
+    . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
 // Release the session lock before calling the local API with the same cookie.
 session_write_close();
+
+/* ========= BRIDGE MODE ========= */
+if ($bridgeMode) {
+    require_once __DIR__ . '/../layouts/header.php';
+    ?>
+    <div class="page-title">e-BAL Smart Bridge</div>
+    <div class="active-info">
+        Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
+        FY: <strong><?= htmlspecialchars($fyName) ?></strong>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+        Click the button below to trigger the Smart Bridge running on this PC. It will sync the ledger master into e-BAL.
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+        <strong>Status:</strong> <span id="bridgeStatus">Waiting</span><br>
+        <strong>Last Response:</strong> <span id="bridgeResponse">-</span>
+    </div>
+
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px;">
+        <button class="btn" type="button" onclick="runBridgeSync()">Start Bridge Sync</button>
+        <button class="btn" type="button" onclick="pollStatus()">Refresh Status</button>
+        <a class="btn" href="<?= BASE_URL ?>data_console/tally_online.php">Back to Online Console</a>
+    </div>
+
+    <script>
+        const bridgeToken = <?= json_encode($bridgeToken) ?>;
+        const bridgeClientId = <?= json_encode($bridgeClientId) ?>;
+        const csrfToken = <?= json_encode($csrfToken) ?>;
+        const activeCompanyId = <?= (int) $companyId ?>;
+        const activeFyId = <?= (int) $fyId ?>;
+        const bridgeUrl = 'http://127.0.0.1:9123/sync';
+        const bridgeContextUrl = '<?= BASE_URL ?>bridge_context.php';
+        const ledgerUploadUrl = <?= json_encode($appOrigin . BASE_URL . 'bridge_ledger.php') ?>;
+        const tbUploadUrl = <?= json_encode($appOrigin . BASE_URL . 'bridge_tb.php') ?>;
+
+        function setStatus(text) {
+            const el = document.getElementById('bridgeStatus');
+            if (el) el.textContent = text;
+        }
+
+        function setResponse(text) {
+            const el = document.getElementById('bridgeResponse');
+            if (el) el.textContent = text;
+        }
+
+        async function registerBridgeContext() {
+            const response = await fetch(bridgeContextUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify({
+                    client_id: bridgeClientId,
+                    _csrf_token: csrfToken,
+                    company_id: activeCompanyId,
+                    fy_id: activeFyId
+                })
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) {
+                throw new Error(data.message || 'Unable to register bridge context.');
+            }
+        }
+
+        async function runBridgeSync() {
+            setStatus('Requesting...');
+            setResponse('Registering company context...');
+            try {
+                await registerBridgeContext();
+                const resp = await fetch(bridgeUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(bridgeToken ? { 'X-Bridge-Token': bridgeToken } : {})
+                    },
+                    body: JSON.stringify({
+                        client_id: bridgeClientId,
+                        site_origin: window.location.origin,
+                        ledger_upload_url: ledgerUploadUrl,
+                        tb_upload_url: tbUploadUrl
+                    })
+                });
+                const data = await resp.json().catch(() => ({}));
+                setStatus(data.ok ? 'Sync queued' : 'Failed');
+                const targetInfo = data.targets?.ledger_upload_url ? ` -> ${data.targets.ledger_upload_url}` : '';
+                setResponse((data.message || 'No response message') + targetInfo);
+                if (data.ok) {
+                    pollStatus(true);
+                }
+            } catch (err) {
+                setStatus('Failed');
+                setResponse(err.message || 'Bridge not reachable. Start the Smart Bridge app.');
+            }
+        }
+
+        function pollStatus(auto) {
+            const statusUrl = '<?= BASE_URL ?>data_console/bridge_status.php?ts=' + Date.now();
+            fetch(statusUrl, { cache: 'no-store' })
+                .then(resp => resp.json())
+                .then(data => {
+                    if (data.ok && data.ledger_fetched === 1) {
+                        setStatus('Ledger sync completed');
+                        setResponse('Ledgers imported. Continue to mapping.');
+                        if (auto) {
+                            setTimeout(() => {
+                                window.location.href = '<?= BASE_URL ?>data_console/mapping_console.php';
+                            }, 1200);
+                        }
+                    } else if (data.ok) {
+                        setStatus('Waiting for sync...');
+                        setResponse('Ledger sync not completed yet.');
+                    } else {
+                        setStatus('Unavailable');
+                        setResponse(data.message || 'Status not available');
+                    }
+                })
+                .catch(() => {
+                    setStatus('Unavailable');
+                    setResponse('Could not read status.');
+                });
+        }
+    </script>
+    <?php
+    require_once __DIR__ . '/../layouts/footer.php';
+    exit;
+}
 
 /* ========= FETCH FROM TALLY ========= */
 

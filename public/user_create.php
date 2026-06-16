@@ -5,16 +5,25 @@ require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/layouts/header.php';
 
 $errors = [];
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+
+if ($userId > 0 && isSuperAdmin($pdo, $userId)) {
+    $errors[] = 'Superadmin should create client admin accounts from Workspace Admin. Use this page only for workspace users.';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrfToken();
     $name = trim((string) ($_POST['name'] ?? ''));
     $email = trim((string) ($_POST['email'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
     $role = trim((string) ($_POST['role'] ?? 'staff'));
-    $userId = (int) ($_SESSION['user_id'] ?? 0);
 
     if ($name === '' || $email === '' || $password === '') {
         $errors[] = 'Name, email, and password are required.';
+    }
+
+    if ($role === 'superadmin') {
+        $errors[] = 'Superadmin users cannot be created from this page.';
     }
 
     if ($userId > 0 && !canAddUser($userId, $pdo)) {
@@ -51,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <?php endif; ?>
 
 <form method="post" class="card section-card" style="max-width:520px;">
+    <?= csrfInput() ?>
     <div class="form-group">
         <label for="name">Full Name</label>
         <input id="name" name="name" type="text" required>

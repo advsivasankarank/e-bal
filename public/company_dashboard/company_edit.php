@@ -2,29 +2,43 @@
 require_once '../../config/app.php';
 require_once '../../config/database.php';
 require_once '../../app/helpers/company_reporting_helper.php';
+require_once '../../app/session_bootstrap.php';
+require_once '../../app/helpers/plan_helper.php';
 
 $id = (int) ($_GET['id'] ?? 0);
 $errors = [];
 ensureCompanyReportingColumns($pdo);
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+$ownerId = $userId > 0 ? getOwnerUserId($pdo, $userId) : 0;
 
 if ($id <= 0) {
-    die("Invalid company selected");
+    $_SESSION['error'] = 'Invalid company selected.';
+    header('Location: company_list.php?error=invalid_company');
+    exit;
 }
 
 // Fetch company
-$stmt = $pdo->prepare("SELECT * FROM companies WHERE id = ?");
-$stmt->execute([$id]);
+if ($ownerId > 0) {
+    $stmt = $pdo->prepare("SELECT * FROM companies WHERE id = ? AND owner_user_id = ?");
+    $stmt->execute([$id, $ownerId]);
+} else {
+    $stmt = $pdo->prepare("SELECT * FROM companies WHERE id = ?");
+    $stmt->execute([$id]);
+}
 $company = $stmt->fetch(PDO::FETCH_ASSOC);
 
 // 🔒 If not found
 if (!$company) {
-    die("Company not found");
+    $_SESSION['error'] = 'Company not found.';
+    header('Location: company_list.php?error=invalid_company');
+    exit;
 }
 
 $company = normalizeCompanyFormData($company);
 $company = $_SERVER['REQUEST_METHOD'] === 'POST' ? normalizeCompanyFormData($_POST) : $company;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrfToken();
     $errors = validateCompanyFormData($company);
 
     if ($errors === []) {
@@ -37,18 +51,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 signatory_1_name=?, signatory_1_designation=?, signatory_1_custom_designation=?, signatory_1_id_no=?, signatory_1_signing_authority=?, signatory_1_is_signing=?,
                 signatory_2_name=?, signatory_2_designation=?, signatory_2_custom_designation=?, signatory_2_id_no=?, signatory_2_signing_authority=?, signatory_2_is_signing=?,
                 updated_at=NOW()
-            WHERE id=?
+            WHERE id=? " . ($ownerId > 0 ? "AND owner_user_id=?" : '') . "
         ");
 
-        $stmt->execute([
-            $company['name'], $company['category'], $company['company_type'], $company['noncorp_subcategory'], $company['cin'], $company['llp_code'], $company['pan'],
-            $company['registered_address'], $company['branch_address'], $company['state_code'], $company['official_email'], $company['mobile_no'],
-            $company['address'], $company['phone'],
-            $company['statutory_auditor_name'], $company['statutory_auditor_firm'], $company['statutory_auditor_frn'], $company['statutory_auditor_membership_no'],
-            $company['signatory_1_name'], $company['signatory_1_designation'], $company['signatory_1_custom_designation'], $company['signatory_1_id_no'], $company['signatory_1_signing_authority'], $company['signatory_1_is_signing'],
-            $company['signatory_2_name'], $company['signatory_2_designation'], $company['signatory_2_custom_designation'], $company['signatory_2_id_no'], $company['signatory_2_signing_authority'], $company['signatory_2_is_signing'],
+        $params = [
+            $company['name'], $company['category'], companyNullableDbValue($company['company_type']), companyNullableDbValue($company['noncorp_subcategory']), companyNullableDbValue($company['cin']), companyNullableDbValue($company['llp_code']), companyNullableDbValue($company['pan']),
+            $company['registered_address'], companyNullableDbValue($company['branch_address']), companyNullableDbValue($company['state_code']), companyNullableDbValue($company['official_email']), companyNullableDbValue($company['mobile_no']),
+            $company['address'], companyNullableDbValue($company['phone']),
+            companyNullableDbValue($company['statutory_auditor_name']), companyNullableDbValue($company['statutory_auditor_firm']), companyNullableDbValue($company['statutory_auditor_frn']), companyNullableDbValue($company['statutory_auditor_membership_no']),
+            $company['signatory_1_name'], $company['signatory_1_designation'], companyNullableDbValue($company['signatory_1_custom_designation']), companyNullableDbValue($company['signatory_1_id_no']), companyNullableDbValue($company['signatory_1_signing_authority']), $company['signatory_1_is_signing'],
+            companyNullableDbValue($company['signatory_2_name']), companyNullableDbValue($company['signatory_2_designation']), companyNullableDbValue($company['signatory_2_custom_designation']), companyNullableDbValue($company['signatory_2_id_no']), companyNullableDbValue($company['signatory_2_signing_authority']), $company['signatory_2_is_signing'],
             $id
-        ]);
+        ];
+        if ($ownerId > 0) {
+            $params[] = $ownerId;
+        }
+        $stmt->execute($params);
 
         header("Location: company_list.php?updated=1");
         exit;
@@ -86,6 +104,7 @@ $nonCorpDesignationOptions = getNonCorporateDesignationOptions();
 </style>
 
 <form method="post" id="company-form">
+    <?= csrfInput() ?>
     <div class="wizard-card">
         <h3>1. Company Name</h3>
         <div class="wizard-grid">

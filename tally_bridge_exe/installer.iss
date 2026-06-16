@@ -1,8 +1,8 @@
 [Setup]
 AppName=eBAL Smart Bridge
 AppVersion=1.0.0
-DefaultDirName={pf}\eBAL Tally Bridge
-DefaultGroupName=eBAL Tally Bridge
+DefaultDirName={pf}\eBAL Smart Bridge
+DefaultGroupName=eBAL Smart Bridge
 OutputDir=dist
 OutputBaseFilename=ebal-smart-bridge-setup
 Compression=lzma
@@ -10,7 +10,8 @@ SolidCompression=yes
 
 [Files]
 Source: "dist\ebal_smart_bridge.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "bundle\cloudflared.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: FileExists(ExpandConstant('{src}\bundle\cloudflared.exe'))
+Source: "config.json"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
+Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\eBAL Smart Bridge"; Filename: "{app}\ebal_smart_bridge.exe"

@@ -2,17 +2,22 @@
 require_once '../config/database.php';
 require_once '../app/session_bootstrap.php';
 require_once '../app/helpers/xml_sanitizer.php';
+require_once '../config/app.php';
+require_once '../app/helpers/runtime_helper.php';
+
+if (defined('ENV') && ENV !== 'local') {
+    http_response_code(404);
+    exit;
+}
 
 $raw = file_get_contents("php://input");
 if ($raw === false || trim($raw) === '') {
-    die("No input received");
+    http_response_code(400);
+    exit("No input received");
 }
 
 /* SANITIZE */
 $raw = sanitizeTallyXML($raw);
-
-/* DEBUG LOG */
-file_put_contents(__DIR__ . "/tdl_log.txt", $raw . "\n\n", FILE_APPEND);
 
 /* PARSE */
 libxml_use_internal_errors(true);
@@ -29,12 +34,14 @@ if ($xml === false) {
 /* ========= EXTRACT LEDGERS ========= */
 $ledgers = $xml->xpath("//*[local-name()='LEDGER']");
 if (!$ledgers || count($ledgers) === 0) {
-    die("No ledger data found");
+    http_response_code(400);
+    exit("No ledger data found");
 }
 
 /* ========= CONTEXT ========= */
 if (!isset($_SESSION['company_id'], $_SESSION['fy_id'])) {
-    die("Session context missing");
+    http_response_code(400);
+    exit("Session context missing");
 }
 $company_id = $_SESSION['company_id'];
 $fy_id      = $_SESSION['fy_id'];
@@ -78,6 +85,6 @@ try {
 
 } catch (Exception $e) {
     $pdo->rollBack();
-    error_log("DB ERROR: " . $e->getMessage());
+    appLog('ERROR', 'Legacy receive_data import failed', ['message' => $e->getMessage()]);
     echo "DB ERROR: Please check logs";
 }

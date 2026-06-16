@@ -1,12 +1,19 @@
 <?php
 ?>
 
-<h2 id="notes-to-accounts">NOTES TO ACCOUNTS</h2>
+<section class="report-page notes-shell" id="notes-to-accounts">
+<h2 class="report-page-title">Notes to Accounts</h2>
+<p class="report-page-subtitle notes-cover">Detailed disclosures supporting the non-corporate financial statements.</p>
 
 <?php foreach (($notes['sections'] ?? []) as $index => $section): ?>
-    <h3 id="note-<?= $index + 1 ?>">Note <?= $index + 1 ?>: <?= htmlspecialchars($section['title']) ?></h3>
-    <table border="1" width="100%">
+    <div class="note-block">
+    <?php $noteNo = (int) ($section['note_no'] ?? ($index + 1)); ?>
+    <h3 class="note-heading" id="note-<?= $noteNo ?>">Note <?= $noteNo ?>: <?= htmlspecialchars((string) ($section['title'] ?? ('Note ' . $noteNo))) ?></h3>
+    <table class="note-table" border="1" width="100%">
+        <thead>
         <tr><th>Ledger / Particulars</th><th class="figure">Current Year</th><th class="figure">Previous Year</th></tr>
+        </thead>
+        <tbody>
         <?php foreach (($section['lines'] ?? []) as $line): ?>
             <tr>
                 <td><?= htmlspecialchars($line['label']) ?></td>
@@ -14,17 +21,22 @@
                 <td class="figure"><?= format_inr((float) ($line['previous'] ?? 0)) ?></td>
             </tr>
         <?php endforeach; ?>
+        </tbody>
+        <tfoot>
         <tr>
             <td><strong>Total</strong></td>
             <td class="figure"><strong><?= format_inr((float) ($section['current_total'] ?? 0)) ?></strong></td>
             <td class="figure"><strong><?= format_inr((float) ($section['previous_total'] ?? 0)) ?></strong></td>
         </tr>
+        </tfoot>
     </table>
+    </div>
 <?php endforeach; ?>
 
 <h3>Accounting Policies</h3>
-<ul>
+<ul class="note-policy-list">
 <li>Accrual system</li>
 <li>Going concern assumption</li>
 <li>Consistency principle</li>
 </ul>
+</section>

@@ -17,6 +17,7 @@ $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 $manualBundle = loadManualInputsWithCarryForward($pdo, $company_id, $fy_id, $fyName);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') === 'save_manual_company_note') {
+    requireCsrfToken();
     $classifiedForManualSave = getClassifiedData($pdo, $company_id, $fy_id);
     $postedManualInputs = [
         'share_capital_authorised' => trim((string) ($_POST['share_capital_authorised'] ?? '')),
@@ -79,6 +80,7 @@ $hasReportData = (bool) ($fs['has_data'] ?? false);
 $currentDiff = (float) ($fs['validation']['current_balance_difference'] ?? 0);
 $previousDiff = (float) ($fs['validation']['previous_balance_difference'] ?? 0);
 $parentGroupConflicts = $fs['validation']['parent_group_conflicts'] ?? [];
+$noteCompleteness = $fs['validation']['note_completeness'] ?? ['missing' => [], 'is_complete' => true];
 
 if ($hasReportData) {
     updateWorkflow($company_id, $fy_id, 'notes_prepared');
@@ -95,18 +97,146 @@ if ($hasReportData) {
     Format: <strong><?= htmlspecialchars($fs['title'] ?? 'Financial Statements') ?></strong>
 </div>
 
+<?php if ($hasReportData): ?>
+    <div class="card section-card report-actions">
+        <strong>Report Actions</strong><br>
+        Download the same report in PDF, Word, or Excel, or use the print layout for browser PDF output.
+        <div style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap;">
+            <a class="btn btn-export btn-download-pdf" href="<?= BASE_URL ?>report_download.php?format=pdf">Download PDF</a>
+            <a class="btn btn-export btn-download-word" href="<?= BASE_URL ?>report_download.php?format=word">Download Word</a>
+            <a class="btn btn-export btn-download-excel" href="<?= BASE_URL ?>report_download.php?format=excel">Download Excel</a>
+            <button type="button" class="btn btn-export btn-print" onclick="window.print()">Save as PDF</button>
+        </div>
+    </div>
+<?php endif; ?>
+
 <style>
-.report-shell { background: #fff; border: 1px solid #d8e2ef; border-radius: 16px; padding: 24px; }
-.report-shell h2 { margin-top: 28px; }
+.report-shell { background: transparent; border: 0; padding: 0; }
+.report-page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 24px;
+    background: #fff;
+    border: 1px solid #d8e2ef;
+    border-radius: 12px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+    padding: 18mm 16mm;
+    box-sizing: border-box;
+    page-break-after: always;
+}
+.report-page:last-child { page-break-after: auto; }
+.report-page-title {
+    margin: 0 0 8px;
+    font-size: 24px;
+    line-height: 1.25;
+    color: #0f172a;
+}
+.report-page-subtitle {
+    margin: 0 0 18px;
+    color: #475569;
+    font-size: 13px;
+}
+.report-shell h2 { margin: 0 0 10px; font-size: 22px; }
+.report-shell h3 { margin: 18px 0 10px; font-size: 16px; }
 .report-shell table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-.report-shell th, .report-shell td { border: 1px solid #dbe3ef; padding: 10px 12px; text-align: left; vertical-align: top; }
+.report-shell th, .report-shell td { border: 1px solid #dbe3ef; padding: 8px 10px; text-align: left; vertical-align: top; font-size: 13px; }
 .report-shell tr.section td, .report-shell tr.section th { background: #f5f8fc; font-weight: 700; }
 .report-shell td.figure, .report-shell th.figure { text-align: right; white-space: nowrap; }
+.notes-cover { margin-bottom: 16px; }
+.note-block { break-inside: avoid; page-break-inside: avoid; margin-bottom: 22px; }
+.notes-shell {
+    border-top: 2px solid #d7e3f3;
+    padding-top: 6px;
+}
+.note-heading {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%);
+    border: 1px solid #d9e5f2;
+    border-radius: 8px;
+    color: #0f172a;
+    font-size: 15px;
+    line-height: 1.35;
+}
+.note-table {
+    margin-top: 0;
+    border: 1px solid #d9e5f2;
+}
+.note-table thead th {
+    background: #eef4f9;
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+    color: #334155;
+}
+.note-table tbody tr:nth-child(even) td {
+    background: #fbfdff;
+}
+.note-table tfoot td {
+    background: #f3f7fb;
+    font-weight: 700;
+}
+.note-policy-list {
+    margin: 12px 0 0 18px;
+    padding: 0;
+}
+.note-policy-list li {
+    margin-bottom: 6px;
+    line-height: 1.5;
+}
+.signature-table td { border: 0 !important; }
+.signature-block { margin-top: 28px; }
+.signature-caption { color: #475569; font-size: 12px; margin-top: 8px; }
 .manual-note-form { margin: 20px 0 28px; padding: 18px; border: 1px solid #dbe3ef; border-radius: 12px; background: #f8fbff; }
 .manual-note-grid { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 14px; }
 .manual-note-grid label { display: block; font-weight: 600; margin-bottom: 6px; }
 .manual-note-grid input { width: 100%; padding: 10px 12px; border: 1px solid #cfd8e3; border-radius: 8px; }
 .btn-primary { display: inline-block; margin-top: 14px; padding: 10px 16px; background: #1e5aa8; color: #fff; border: 0; border-radius: 8px; cursor: pointer; }
+.btn-export {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 148px;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+.btn-download-pdf { background: #0f766e; }
+.btn-download-pdf:hover { background: #115e59; }
+.btn-download-word { background: #1d4ed8; }
+.btn-download-word:hover { background: #1e40af; }
+.btn-download-excel { background: #15803d; }
+.btn-download-excel:hover { background: #166534; }
+.btn-print { background: #7c3aed; }
+.btn-print:hover { background: #6d28d9; }
+@media print {
+    @page {
+        size: A4;
+        margin: 10mm;
+    }
+    body { background: #fff !important; }
+    .topbar, .page-title, .active-info, .card.section-card, .report-actions, .manual-note-form, .btn, .btn-primary, .btn-export, .error-box { display: none !important; }
+    .report-shell { margin: 0; padding: 0; }
+    .report-page {
+        width: auto;
+        min-height: auto;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 12mm 10mm;
+    }
+    .note-heading,
+    .note-table thead th,
+    .note-table tfoot td,
+    .note-table tbody tr:nth-child(even) td {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
 </style>
 
 <?php if (!$hasReportData): ?>
@@ -132,9 +262,21 @@ if ($hasReportData) {
             </ul>
         </div>
     <?php endif; ?>
+    <?php if (!(bool) ($noteCompleteness['is_complete'] ?? true)): ?>
+        <div class="error-box" style="margin-bottom:20px;">
+            <p>Some expected note headings are missing for this report format.</p>
+            <ul style="margin:8px 0 0 18px;">
+                <?php foreach (($noteCompleteness['missing'] ?? []) as $missingTitle): ?>
+                    <li><?= htmlspecialchars((string) $missingTitle) ?></li>
+                <?php endforeach; ?>
+            </ul>
+            <p style="margin-top:8px;">Please review the mapped heads and note payload before issuing or exporting the statements.</p>
+        </div>
+    <?php endif; ?>
     <div class="report-shell">
         <?php if (($fs['entity_category'] ?? '') === 'corporate'): ?>
             <form method="post" class="manual-note-form">
+                <?= csrfInput() ?>
                 <h2>Manual Share Capital Inputs</h2>
                 <p>Fill these once for the first reporting year. In later years, the report carries forward the previous year values automatically and you can revise them if required.</p>
                 <input type="hidden" name="report_action" value="save_manual_company_note">

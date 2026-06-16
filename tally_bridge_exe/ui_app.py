@@ -1,13 +1,20 @@
 import json
 import logging
+import os
 import re
 import threading
-import time
 import sys
+import time
+import hmac
+import hashlib
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
+import urllib.parse
+import webbrowser
+import xml.etree.ElementTree as ET
 
 import requests
 
@@ -15,10 +22,13 @@ import requests
 APP_TITLE = "eBAL Smart Bridge"
 CONFIG_NAME = "config.json"
 LOG_NAME = "bridge.log"
+BRIDGE_VERSION = "1.1.0"
 
 TALLY_URL = "http://localhost:9000"
-LEDGER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/api/upload_ledger.php"
-TB_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/api/upload_tb.php"
+LEDGER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_ledger.php"
+TB_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_tb.php"
+LISTEN_HOST_DEFAULT = "127.0.0.1"
+LISTEN_PORT_DEFAULT = 9123
 
 LEDGER_XML = """<ENVELOPE>
  <HEADER>
@@ -46,23 +56,49 @@ LEDGER_XML = """<ENVELOPE>
 """
 
 TB_XML = """<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Export Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <EXPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>Trial Balance</REPORTNAME>
+        <STATICVARIABLES>
+          <ISLEDGERWISE>Yes</ISLEDGERWISE>
+          <SVEXPORTFORMAT>XML</SVEXPORTFORMAT>
+        </STATICVARIABLES>
+      </REQUESTDESC>
+    </EXPORTDATA>
+  </BODY>
+</ENVELOPE>
+"""
+
+INVALID_XML_RE = re.compile(r"[^\x09\x0A\x0D\x20-\x7F]+")
+
+COMPANY_XML = """<ENVELOPE>
  <HEADER>
   <VERSION>1</VERSION>
   <TALLYREQUEST>Export</TALLYREQUEST>
-  <TYPE>Data</TYPE>
-  <ID>Trial Balance</ID>
+  <TYPE>Collection</TYPE>
+  <ID>CompanyInfo</ID>
  </HEADER>
  <BODY>
   <DESC>
    <STATICVARIABLES>
     <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
    </STATICVARIABLES>
+   <TDL>
+    <TDLMESSAGE>
+     <COLLECTION NAME="CompanyInfo">
+      <TYPE>Company</TYPE>
+      <FETCH>Name, MailingName, Address, StateName, PinCode, CountryName</FETCH>
+     </COLLECTION>
+    </TDLMESSAGE>
+   </TDL>
   </DESC>
  </BODY>
 </ENVELOPE>
 """
-
-INVALID_XML_RE = re.compile(r"[^\x09\x0A\x0D\x20-\x7F]+")
 
 
 def app_dir():
@@ -71,17 +107,45 @@ def app_dir():
     return Path(__file__).resolve().parent
 
 
+def runtime_dir():
+    if getattr(sys, "frozen", False):
+        base_dir = Path(os.getenv("LOCALAPPDATA") or Path.home())
+        path = base_dir / "eBAL Smart Bridge"
+    else:
+        path = app_dir()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def config_path():
+    return runtime_dir() / CONFIG_NAME
+
+
+def log_path():
+    return runtime_dir() / LOG_NAME
+
+
 def load_config():
-    path = app_dir() / CONFIG_NAME
+    path = config_path()
     if not path.exists():
         default = {
             "client_id": "EBAL001",
-            "token": "CHANGE_THIS",
+            "token": "",
             "ledger_upload_url": LEDGER_UPLOAD_DEFAULT,
             "tb_upload_url": TB_UPLOAD_DEFAULT,
-            "auto_sync": True,
+            "listen_host": LISTEN_HOST_DEFAULT,
+            "listen_port": LISTEN_PORT_DEFAULT,
+            "auto_sync": False,
             "sync_interval": 300
         }
+        bundled = app_dir() / CONFIG_NAME
+        if getattr(sys, "frozen", False) and bundled.exists():
+            try:
+                data = json.loads(bundled.read_text())
+                if isinstance(data, dict):
+                    default.update(data)
+            except Exception:
+                pass
         path.write_text(json.dumps(default, indent=2))
         return default
 
@@ -91,26 +155,37 @@ def load_config():
     except Exception:
         return {
             "client_id": "EBAL001",
-            "token": "CHANGE_THIS",
+            "token": "",
             "ledger_upload_url": LEDGER_UPLOAD_DEFAULT,
             "tb_upload_url": TB_UPLOAD_DEFAULT,
-            "auto_sync": True,
+            "listen_host": LISTEN_HOST_DEFAULT,
+            "listen_port": LISTEN_PORT_DEFAULT,
+            "auto_sync": False,
             "sync_interval": 300
         }
 
 
 def save_config(config):
-    path = app_dir() / CONFIG_NAME
+    path = config_path()
     path.write_text(json.dumps(config, indent=2))
 
 
 def setup_logging():
-    log_path = app_dir() / LOG_NAME
     logging.basicConfig(
-        filename=str(log_path),
+        filename=str(log_path()),
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
+
+
+def allowed_browser_origins():
+    return {
+        "http://localhost",
+        "http://127.0.0.1",
+        "https://ebal.etaxadv.com",
+        "https://etaxadv.com",
+        "https://www.etaxadv.com",
+    }
 
 
 def sanitize_xml(raw_xml):
@@ -137,81 +212,232 @@ def fetch_from_tally(xml_request):
     return sanitize_xml(response.text)
 
 
+def parse_company_info(xml_text):
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return {}
+
+    company = None
+    for elem in root.iter():
+        if not elem.tag.upper().endswith("COMPANY"):
+            continue
+        child_tags = [child.tag.upper() for child in list(elem)]
+        if any(tag.endswith("NAME") or tag.endswith("PINCODE") or tag.endswith("STATENAME") for tag in child_tags):
+            company = elem
+            break
+
+    if company is None:
+        return {}
+
+    def text(tag):
+        for node in company.iter():
+            if node.tag.upper().endswith(tag.upper()):
+                if node.text:
+                    return node.text.strip()
+        return ""
+
+    name = text("NAME") or company.attrib.get("NAME", "").strip()
+    mailing = text("MAILINGNAME")
+    state = text("STATENAME")
+    pin = text("PINCODE")
+    country = text("COUNTRYNAME")
+
+    address_lines = []
+    for node in company.iter():
+        if node.tag.upper().endswith("ADDRESS"):
+            if node.text:
+                address_lines.append(node.text.strip())
+
+    return {
+        "name": name or mailing,
+        "mailing_name": mailing if mailing and mailing != "INR" else "",
+        "address_lines": [line for line in address_lines if line],
+        "state_name": state,
+        "pin_code": pin,
+        "country_name": country,
+    }
+
+
 def upload_to_server(config, xml_data, upload_url):
     params = {
         "client_id": config.get("client_id", ""),
-        "token": config.get("token", ""),
     }
+    token = str(config.get("token", "")).strip()
+    headers = {
+        "Content-Type": "application/xml",
+        "User-Agent": "eBAL-Bridge/1.0 (Windows)",
+    }
+    if token:
+        headers["X-Bridge-Token"] = token
     try:
+        logging.info("Upload start: url=%s client_id=%s token_set=%s bytes=%s",
+                     upload_url, params.get("client_id"),
+                     "yes" if token else "no",
+                     len(xml_data.encode("utf-8")))
         response = requests.post(
             upload_url,
             params=params,
             data=xml_data.encode("utf-8"),
-            headers={"Content-Type": "application/xml"},
+            headers=headers,
             timeout=10,
         )
     except requests.RequestException as exc:
         raise RuntimeError(f"Upload failed: {exc}") from exc
 
     if response.status_code >= 400:
+        logging.error("Upload HTTP error: %s body=%s", response.status_code, response.text[:500])
         raise RuntimeError(f"Upload HTTP error: {response.status_code}")
 
+    logging.info("Upload success: status=%s body=%s", response.status_code, response.text[:500])
     return response.text.strip()
+
+
+def is_absolute_url(value):
+    if not value:
+        return False
+    parsed = urllib.parse.urlparse(str(value).strip())
+    return bool(parsed.scheme and parsed.netloc)
+
+
+def join_url(origin, path):
+    origin = (origin or "").strip().rstrip("/")
+    path = (path or "").strip()
+    if not origin:
+        return path
+    if not path:
+        return origin
+    if not path.startswith("/"):
+        path = "/" + path
+    return origin + path
+
+
+def resolve_upload_targets(base_config, override):
+    active_config = dict(base_config)
+    override = override if isinstance(override, dict) else {}
+
+    site_origin = str(override.get("site_origin", "") or "").strip().rstrip("/")
+    ledger_url = str(override.get("ledger_upload_url", "") or "").strip()
+    tb_url = str(override.get("tb_upload_url", "") or "").strip()
+
+    if site_origin:
+        if ledger_url and not is_absolute_url(ledger_url):
+            ledger_url = join_url(site_origin, ledger_url)
+        if tb_url and not is_absolute_url(tb_url):
+            tb_url = join_url(site_origin, tb_url)
+        if not ledger_url:
+            ledger_url = join_url(site_origin, "/bridge_ledger.php")
+        if not tb_url:
+            tb_url = join_url(site_origin, "/bridge_tb.php")
+
+    if ledger_url:
+        active_config["ledger_upload_url"] = ledger_url
+    if tb_url:
+        active_config["tb_upload_url"] = tb_url
+
+    for key in ("client_id",):
+        value = override.get(key)
+        if value not in (None, ""):
+            active_config[key] = value
+
+    return active_config
+
+
+def is_upload_ok(response_text):
+    if not response_text:
+        return False, "Empty response"
+    try:
+        payload = json.loads(response_text)
+    except Exception:
+        return True, ""
+
+    ok = bool(payload.get("ok", False))
+    message = payload.get("message", "") if isinstance(payload, dict) else ""
+    return ok, message
 
 
 class SmartBridgeUI:
     def __init__(self, root):
         self.root = root
         self.root.title(APP_TITLE)
-        self.root.geometry("420x260")
+        self.root.geometry("560x360")
         self.root.resizable(False, False)
 
         self.config = load_config()
         self.stop_event = threading.Event()
         self.worker = None
+        self.server = None
+        self.server_thread = None
+        self.sync_lock = threading.Lock()
+        self.sync_in_progress = False
+        self.sync_override = None
 
         self.status_var = tk.StringVar(value="Stopped")
         self.tally_var = tk.StringVar(value="Not Connected")
         self.last_sync_var = tk.StringVar(value="Never")
         self.last_upload_var = tk.StringVar(value="None")
-        self.auto_sync_var = tk.BooleanVar(value=bool(self.config.get("auto_sync", True)))
+        self.listen_var = tk.StringVar(value="Not Listening")
+        self.target_var = tk.StringVar(value="Not resolved yet")
 
         self.build_ui()
-        if self.auto_sync_var.get():
-            self.start_bridge()
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def build_ui(self):
-        frame = tk.Frame(self.root, padx=14, pady=12)
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        self.root.configure(bg="#f6f7fb")
+        frame = tk.Frame(self.root, bg="#f6f7fb", padx=18, pady=16)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text=APP_TITLE, font=("Segoe UI", 14, "bold")).pack(anchor="w")
-        tk.Label(frame, text="Bridge to Tally (localhost:9000)", fg="#4b5563").pack(anchor="w", pady=(0, 12))
+        header = tk.Frame(frame, bg="#f6f7fb")
+        header.pack(fill="x")
+        tk.Label(
+            header,
+            text=APP_TITLE,
+            font=("Segoe UI", 16, "bold"),
+            bg="#f6f7fb",
+            fg="#0f172a"
+        ).pack(anchor="w")
+        tk.Label(
+            header,
+            text="Bridge to Tally (localhost:9000)",
+            font=("Segoe UI", 10),
+            bg="#f6f7fb",
+            fg="#64748b"
+        ).pack(anchor="w", pady=(2, 12))
 
-        self._row(frame, "Status:", self.status_var)
-        self._row(frame, "Tally Status:", self.tally_var)
-        self._row(frame, "Last Sync:", self.last_sync_var)
-        self._row(frame, "Last Upload:", self.last_upload_var)
+        card = tk.Frame(frame, bg="#ffffff", bd=1, relief="solid")
+        card.pack(fill="x", pady=(0, 12))
+        card_inner = tk.Frame(card, bg="#ffffff", padx=12, pady=10)
+        card_inner.pack(fill="x")
 
-        btn_row = tk.Frame(frame)
-        btn_row.pack(fill="x", pady=(10, 6))
-        tk.Button(btn_row, text="Start Bridge", width=14, command=self.start_bridge).pack(side="left")
-        tk.Button(btn_row, text="Stop Bridge", width=14, command=self.stop_bridge).pack(side="left", padx=(8, 0))
-        tk.Button(btn_row, text="Fetch Now", width=14, command=self.fetch_now).pack(side="left", padx=(8, 0))
+        self._row(card_inner, "Bridge Status", self.status_var)
+        self._row(card_inner, "Listening", self.listen_var)
+        self._row(card_inner, "Tally Status", self.tally_var)
+        self._row(card_inner, "Last Sync", self.last_sync_var)
+        self._row(card_inner, "Last Upload", self.last_upload_var)
+        self._row(card_inner, "Upload Target", self.target_var)
 
-        tk.Checkbutton(
-            frame,
-            text="Auto Sync",
-            variable=self.auto_sync_var,
-            command=self.toggle_auto_sync
-        ).pack(anchor="w", pady=(6, 0))
+        btn_row = tk.Frame(frame, bg="#f6f7fb")
+        btn_row.pack(fill="x", pady=(6, 6))
+        ttk.Button(btn_row, text="Start Bridge", width=16, command=self.start_bridge).pack(side="left")
+        ttk.Button(btn_row, text="Stop Bridge", width=16, command=self.stop_bridge).pack(side="left", padx=(8, 0))
+        ttk.Button(btn_row, text="Fetch Now", width=16, command=self.fetch_now).pack(side="left", padx=(8, 0))
+
+        action_row = tk.Frame(frame, bg="#f6f7fb")
+        action_row.pack(fill="x", pady=(4, 0))
+        ttk.Button(action_row, text="Open ebal.etaxadv.com", command=self.open_portal).pack(side="left")
 
     def _row(self, parent, label, var):
         row = tk.Frame(parent)
         row.pack(fill="x", pady=2)
-        tk.Label(row, text=label, width=14, anchor="w").pack(side="left")
-        tk.Label(row, textvariable=var, anchor="w", fg="#0f172a").pack(side="left")
+        tk.Label(row, text=label + ":", width=16, anchor="w", bg=parent["bg"], fg="#475569").pack(side="left")
+        tk.Label(row, textvariable=var, anchor="w", bg=parent["bg"], fg="#0f172a").pack(side="left")
 
     def set_status(self, text):
         self.status_var.set(text)
@@ -225,28 +451,40 @@ class SmartBridgeUI:
     def set_last_upload(self, text):
         self.last_upload_var.set(text)
 
-    def toggle_auto_sync(self):
-        self.config["auto_sync"] = bool(self.auto_sync_var.get())
-        save_config(self.config)
-        if self.auto_sync_var.get():
-            self.start_bridge()
-
     def start_bridge(self):
-        if self.worker and self.worker.is_alive():
+        if self.server:
             return
         self.stop_event.clear()
+        self.start_command_server()
         self.set_status("Running")
-        self.worker = threading.Thread(target=self.auto_sync_loop, daemon=True)
-        self.worker.start()
 
     def stop_bridge(self):
         self.stop_event.set()
+        self.stop_command_server()
         self.set_status("Stopped")
+        self.listen_var.set("Not Listening")
 
     def fetch_now(self):
         threading.Thread(target=self.run_sync_once, daemon=True).start()
 
     def run_sync_once(self):
+        if not self.acquire_sync_lock():
+            return
+
+        override = self.sync_override or {}
+        active_config = resolve_upload_targets(self.config, override)
+        self.sync_override = None
+        ledger_url = active_config.get("ledger_upload_url") or LEDGER_UPLOAD_DEFAULT
+        tb_url = active_config.get("tb_upload_url") or TB_UPLOAD_DEFAULT
+        self.target_var.set(f"Ledger: {ledger_url} | TB: {tb_url}")
+
+        try:
+            self.set_status("Syncing...")
+            self.set_last_upload("In Progress")
+            self.set_last_sync(datetime.now().strftime("%d-%b-%Y %H:%M:%S"))
+        finally:
+            pass
+
         try:
             ledger_xml = fetch_from_tally(LEDGER_XML)
             self.set_tally_status("Connected")
@@ -257,16 +495,20 @@ class SmartBridgeUI:
             self.set_last_upload("Failed")
             logging.error(str(exc))
             messagebox.showerror(APP_TITLE, f"Tally error: {exc}")
+            self.release_sync_lock()
             return
 
         try:
-            ledger_url = self.config.get("ledger_upload_url") or LEDGER_UPLOAD_DEFAULT
-            result = upload_to_server(self.config, ledger_xml, ledger_url)
+            result = upload_to_server(active_config, ledger_xml, ledger_url)
             logging.info("Ledger upload success: %s", result)
+            ok, msg = is_upload_ok(result)
+            if not ok:
+                raise RuntimeError(msg or "Ledger upload failed.")
         except Exception as exc:
             self.set_last_upload("Failed")
             logging.error(str(exc))
             messagebox.showerror(APP_TITLE, f"Ledger upload error: {exc}")
+            self.release_sync_lock()
             return
 
         try:
@@ -276,29 +518,241 @@ class SmartBridgeUI:
             self.set_last_upload("Failed")
             logging.error(str(exc))
             messagebox.showerror(APP_TITLE, f"Tally TB error: {exc}")
+            self.release_sync_lock()
             return
 
         try:
-            tb_url = self.config.get("tb_upload_url") or TB_UPLOAD_DEFAULT
-            result = upload_to_server(self.config, tb_xml, tb_url)
+            result = upload_to_server(active_config, tb_xml, tb_url)
             self.set_last_upload("Success")
             logging.info("TB upload success: %s", result)
+            ok, msg = is_upload_ok(result)
+            if not ok:
+                raise RuntimeError(msg or "Trial balance upload failed.")
         except Exception as exc:
             self.set_last_upload("Failed")
             logging.error(str(exc))
             messagebox.showerror(APP_TITLE, f"TB upload error: {exc}")
+        finally:
+            self.release_sync_lock()
+            self.set_status("Running")
 
-    def auto_sync_loop(self):
-        interval = int(self.config.get("sync_interval", 300))
-        while not self.stop_event.is_set():
-            self.run_sync_once()
-            for _ in range(interval):
-                if self.stop_event.is_set():
-                    break
-                time.sleep(1)
+    def acquire_sync_lock(self):
+        if self.sync_in_progress:
+            return False
+        locked = self.sync_lock.acquire(blocking=False)
+        if not locked:
+            return False
+        self.sync_in_progress = True
+        return True
+
+    def release_sync_lock(self):
+        if self.sync_in_progress:
+            self.sync_in_progress = False
+            self.sync_lock.release()
+
+    def open_portal(self):
+        webbrowser.open("https://ebal.etaxadv.com")
+
+    def start_command_server(self):
+        host = self.config.get("listen_host") or LISTEN_HOST_DEFAULT
+        port = int(self.config.get("listen_port") or LISTEN_PORT_DEFAULT)
+        try:
+            server = HTTPServer((host, port), self.make_handler())
+        except OSError as exc:
+            messagebox.showerror(APP_TITLE, f"Cannot start bridge server: {exc}")
+            self.set_status("Stopped")
+            return
+        self.server = server
+        self.listen_var.set(f"http://{host}:{port}/sync")
+
+        def run():
+            server.serve_forever()
+
+        self.server_thread = threading.Thread(target=run, daemon=True)
+        self.server_thread.start()
+
+    def stop_command_server(self):
+        if not self.server:
+            return
+        try:
+            self.server.shutdown()
+        except Exception:
+            pass
+        self.server = None
+        self.server_thread = None
+
+    def make_handler(self):
+        ui = self
+
+        class SyncHandler(BaseHTTPRequestHandler):
+            def do_OPTIONS(self):
+                self.send_response(204)
+                self.apply_cors_headers()
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
+                self.end_headers()
+
+            def do_GET(self):
+                parsed = urllib.parse.urlparse(self.path)
+                if parsed.path == "/health":
+                    self.send_json(200, {"ok": True, "status": ui.status_var.get()})
+                    return
+                if parsed.path == "/company":
+                    token = self.get_token(parsed)
+                    if not ui.is_authorized(token, "company"):
+                        self.send_json(401, {"ok": False, "message": "Unauthorized"})
+                        return
+                    try:
+                        xml_text = fetch_from_tally(COMPANY_XML)
+                        data = parse_company_info(xml_text)
+                        if not data:
+                            self.send_json(404, {"ok": False, "message": "Company data not found"})
+                            return
+                        self.send_json(200, {"ok": True, "company": data})
+                    except Exception as exc:
+                        self.send_json(502, {"ok": False, "message": f"Bridge error: {exc}"})
+                    return
+                if parsed.path == "/sync":
+                    token = self.get_token(parsed)
+                    if not ui.is_authorized(token, "sync"):
+                        self.send_json(401, {"ok": False, "message": "Unauthorized"})
+                        return
+                    accepted = ui.queue_sync()
+                    self.send_json(
+                        200,
+                        {
+                            "ok": accepted,
+                            "message": "Sync queued" if accepted else "Sync already running",
+                            "bridge_version": BRIDGE_VERSION,
+                        },
+                    )
+                    return
+                self.send_json(404, {"ok": False, "message": "Not found"})
+
+            def do_POST(self):
+                parsed = urllib.parse.urlparse(self.path)
+                if parsed.path == "/company":
+                    token = self.get_token(parsed)
+                    if not ui.is_authorized(token, "company"):
+                        self.send_json(401, {"ok": False, "message": "Unauthorized"})
+                        return
+                    try:
+                        xml_text = fetch_from_tally(COMPANY_XML)
+                        data = parse_company_info(xml_text)
+                        if not data:
+                            self.send_json(404, {"ok": False, "message": "Company data not found"})
+                            return
+                        self.send_json(200, {"ok": True, "company": data})
+                    except Exception as exc:
+                        self.send_json(502, {"ok": False, "message": f"Bridge error: {exc}"})
+                    return
+                if parsed.path != "/sync":
+                    self.send_json(404, {"ok": False, "message": "Not found"})
+                    return
+                length = int(self.headers.get("Content-Length", "0") or 0)
+                body = self.rfile.read(length) if length > 0 else b""
+                token = self.get_token(parsed, body)
+                if not ui.is_authorized(token, "sync"):
+                    self.send_json(401, {"ok": False, "message": "Unauthorized"})
+                    return
+                override = {}
+                if body:
+                    try:
+                        payload = json.loads(body.decode("utf-8"))
+                        if isinstance(payload, dict):
+                            override = {
+                                "client_id": payload.get("client_id", ""),
+                                "ledger_upload_url": payload.get("ledger_upload_url", ""),
+                                "tb_upload_url": payload.get("tb_upload_url", ""),
+                                "site_origin": payload.get("site_origin", ""),
+                            }
+                    except Exception:
+                        override = {}
+                accepted = ui.queue_sync(override)
+                resolved = resolve_upload_targets(ui.config, override)
+                self.send_json(
+                    200,
+                    {
+                        "ok": accepted,
+                        "message": "Sync queued" if accepted else "Sync already running",
+                        "bridge_version": BRIDGE_VERSION,
+                        "targets": {
+                            "ledger_upload_url": resolved.get("ledger_upload_url", ""),
+                            "tb_upload_url": resolved.get("tb_upload_url", ""),
+                        },
+                    },
+                )
+
+            def get_token(self, parsed, body=None):
+                token = self.headers.get("X-Bridge-Token", "")
+                if token:
+                    return token
+                query = urllib.parse.parse_qs(parsed.query)
+                if query.get("token"):
+                    return query["token"][0]
+                if body:
+                    try:
+                        data = json.loads(body.decode("utf-8"))
+                        return data.get("token", "")
+                    except Exception:
+                        return ""
+                return ""
+
+            def send_json(self, code, payload):
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.apply_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps(payload).encode("utf-8"))
+
+            def apply_cors_headers(self):
+                origin = self.headers.get("Origin", "").strip()
+                if origin in allowed_browser_origins():
+                    self.send_header("Access-Control-Allow-Origin", origin)
+                    self.send_header("Vary", "Origin")
+
+            def log_message(self, format, *args):
+                return
+
+        return SyncHandler
+
+    def queue_sync(self, override=None):
+        if self.sync_in_progress:
+            return False
+        self.sync_override = override if isinstance(override, dict) else None
+        threading.Thread(target=self.run_sync_once, daemon=True).start()
+        return True
+
+    def is_authorized(self, token, purpose="sync"):
+        expected = str(self.config.get("token", "")).strip()
+        if expected == "":
+            return False
+        if token == expected:
+            return True
+        return self.is_signed_browser_token(token, purpose, expected)
+
+    def is_signed_browser_token(self, token, purpose, secret):
+        if not token or not secret:
+            return False
+        parts = token.split(".")
+        if len(parts) != 5 or parts[0] != "v1":
+            return False
+        _, token_purpose, expiry_raw, nonce, signature = parts
+        if token_purpose != purpose:
+            return False
+        try:
+            expiry = int(expiry_raw)
+        except ValueError:
+            return False
+        if expiry < int(time.time()):
+            return False
+        payload = "|".join([token_purpose, str(expiry), nonce])
+        expected_signature = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected_signature)
 
     def on_close(self):
         self.stop_event.set()
+        self.stop_command_server()
         self.root.destroy()
 
 

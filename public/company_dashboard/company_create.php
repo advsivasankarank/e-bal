@@ -1,27 +1,47 @@
 <?php
 require_once '../../config/app.php';
 require_once '../../config/database.php';
+require_once '../../app/session_bootstrap.php';
+require_once '../../app/middleware/license_check.php';
 require_once '../../app/helpers/company_reporting_helper.php';
 require_once '../../app/helpers/plan_helper.php';
+require_once '../../app/helpers/security_helper.php';
 
 $page_title = "Create Company";
 $errors = [];
-ensureCompanyReportingColumns($pdo);
+try {
+    ensureCompanyReportingColumns($pdo);
+} catch (Throwable $e) {
+    $errors[] = 'Database schema update failed. Please contact admin to run the latest migrations.';
+}
+
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+if ($userId <= 0) {
+    header('Location: ' . BASE_URL . 'login.php');
+    exit;
+}
+
+if (!isWorkspaceAdmin($pdo, $userId)) {
+    $errors[] = 'Only workspace admin users can create companies.';
+}
+
+$bridgeToken = buildBridgeBrowserToken('company');
 
 $formData = normalizeCompanyFormData($_POST);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrfToken();
     $errors = validateCompanyFormData($formData);
 
     if ($errors === []) {
-        $userId = (int) ($_SESSION['user_id'] ?? 0);
         if ($userId > 0 && !canAddCompany($userId, $pdo)) {
             $errors[] = 'Company limit reached. Upgrade your plan.';
         }
     }
 
     if ($errors === []) {
-        $stmt = $pdo->prepare("
+        try {
+            $stmt = $pdo->prepare("
             INSERT INTO companies (
                 owner_user_id, name, category, company_type, noncorp_subcategory, cin, llp_code, pan,
                 registered_address, branch_address, state_code, official_email, mobile_no,
@@ -41,18 +61,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )
         ");
 
-        $stmt->execute([
+            $stmt->execute([
             $userId > 0 ? $userId : null,
-            $formData['name'], $formData['category'], $formData['company_type'], $formData['noncorp_subcategory'], $formData['cin'], $formData['llp_code'], $formData['pan'],
-            $formData['registered_address'], $formData['branch_address'], $formData['state_code'], $formData['official_email'], $formData['mobile_no'],
-            $formData['address'], $formData['phone'],
-            $formData['statutory_auditor_name'], $formData['statutory_auditor_firm'], $formData['statutory_auditor_frn'], $formData['statutory_auditor_membership_no'],
-            $formData['signatory_1_name'], $formData['signatory_1_designation'], $formData['signatory_1_custom_designation'], $formData['signatory_1_id_no'], $formData['signatory_1_signing_authority'], $formData['signatory_1_is_signing'],
-            $formData['signatory_2_name'], $formData['signatory_2_designation'], $formData['signatory_2_custom_designation'], $formData['signatory_2_id_no'], $formData['signatory_2_signing_authority'], $formData['signatory_2_is_signing'],
-        ]);
+            $formData['name'], $formData['category'], companyNullableDbValue($formData['company_type']), companyNullableDbValue($formData['noncorp_subcategory']), companyNullableDbValue($formData['cin']), companyNullableDbValue($formData['llp_code']), companyNullableDbValue($formData['pan']),
+            $formData['registered_address'], companyNullableDbValue($formData['branch_address']), companyNullableDbValue($formData['state_code']), companyNullableDbValue($formData['official_email']), companyNullableDbValue($formData['mobile_no']),
+            $formData['address'], companyNullableDbValue($formData['phone']),
+            companyNullableDbValue($formData['statutory_auditor_name']), companyNullableDbValue($formData['statutory_auditor_firm']), companyNullableDbValue($formData['statutory_auditor_frn']), companyNullableDbValue($formData['statutory_auditor_membership_no']),
+            $formData['signatory_1_name'], $formData['signatory_1_designation'], companyNullableDbValue($formData['signatory_1_custom_designation']), companyNullableDbValue($formData['signatory_1_id_no']), companyNullableDbValue($formData['signatory_1_signing_authority']), $formData['signatory_1_is_signing'],
+            companyNullableDbValue($formData['signatory_2_name']), companyNullableDbValue($formData['signatory_2_designation']), companyNullableDbValue($formData['signatory_2_custom_designation']), companyNullableDbValue($formData['signatory_2_id_no']), companyNullableDbValue($formData['signatory_2_signing_authority']), $formData['signatory_2_is_signing'],
+            ]);
 
-        header("Location: company_list.php?success=1");
-        exit;
+            header("Location: company_list.php?success=1");
+            exit;
+        } catch (Throwable $e) {
+            $errors[] = 'Unable to save company data. Please verify database schema and permissions.';
+        }
     }
 }
 
@@ -88,12 +111,17 @@ include __DIR__ . '/../layouts/header.php';
 </style>
 
 <form method="post" id="company-form">
+    <?= csrfInput() ?>
     <div class="wizard-card">
         <h3>1. Company Name</h3>
         <div class="wizard-grid">
             <div class="wizard-full">
                 <label for="name">Company / Entity Name</label>
                 <input type="text" id="name" name="name" value="<?= htmlspecialchars($formData['name'] ?? '') ?>" required>
+            </div>
+            <div class="wizard-full">
+                <button type="button" class="btn" onclick="fetchFromTallyBridge()">Fetch from Tally</button>
+                <div class="helper-text" id="tally_fetch_status" style="display:none;"></div>
             </div>
         </div>
     </div>
@@ -279,6 +307,7 @@ include __DIR__ . '/../layouts/header.php';
 
 <script>
 const stateFromCinMap = <?= json_encode($stateOptions) ?>;
+const tallyBridgeToken = <?= json_encode($bridgeToken) ?>;
 
 function applyCinRules() {
     const cinInput = document.getElementById('cin');
@@ -335,6 +364,54 @@ function toggleEntitySections() {
     }
 
     applyDefaultDesignations();
+}
+
+function applyTallyCompanyData(company) {
+    if (!company) return;
+
+    const nameField = document.getElementById('name');
+    if (nameField && !nameField.value.trim()) {
+        nameField.value = company.name || company.mailing_name || '';
+    }
+
+    const addressField = document.getElementById('registered_address');
+    if (addressField && (!addressField.value.trim())) {
+        const lines = Array.isArray(company.address_lines) ? company.address_lines : [];
+        const parts = lines.length ? lines : [];
+        if (company.pin_code) parts.push(company.pin_code);
+        addressField.value = parts.join('\n');
+    }
+
+    if (company.state_name) {
+        const stateCode = Object.keys(stateFromCinMap).find((code) => stateFromCinMap[code] === company.state_name);
+        if (stateCode) {
+            document.getElementById('state_code').value = stateCode;
+        }
+    }
+}
+
+async function fetchFromTallyBridge() {
+    const status = document.getElementById('tally_fetch_status');
+    if (status) {
+        status.style.display = 'block';
+        status.textContent = 'Contacting Smart Bridge...';
+    }
+
+    try {
+        const response = await fetch('http://127.0.0.1:9123/company', {
+            method: 'POST',
+            headers: tallyBridgeToken ? { 'X-Bridge-Token': tallyBridgeToken } : {}
+        });
+        const data = await response.json();
+        if (!data.ok) {
+            if (status) status.textContent = data.message || 'Bridge did not return company data.';
+            return;
+        }
+        applyTallyCompanyData(data.company || {});
+        if (status) status.textContent = 'Company details fetched from Tally. Review and save.';
+    } catch (error) {
+        if (status) status.textContent = 'Bridge not reachable. Start eBAL Smart Bridge and try again.';
+    }
 }
 
 async function fetchEntityData(type) {

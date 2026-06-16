@@ -84,7 +84,7 @@ foreach ($rows as $row) {
 
 <div class="card" style="margin-bottom:16px;">
     <a class="btn" href="<?= BASE_URL ?>data_console/mapping_console.php">Back to Mapping</a>
-    <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php">Go to Trial Balance</a>
+    <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php?bridge=1">Go to Trial Balance</a>
 </div>
 
 <table border="1" cellpadding="8" cellspacing="0" width="100%">
