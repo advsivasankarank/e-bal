@@ -7,6 +7,7 @@ ensureCsrfToken();
 
 $currentScript = basename($_SERVER['SCRIPT_NAME'] ?? '');
 $publicAllowList = [
+    'index.php',
     'login.php',
     'logout.php',
 ];

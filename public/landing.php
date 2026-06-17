@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>e-BAL – Financial Statement Preparation Platform</title>
 <meta name="description" content="Generate Schedule III, LLP, Partnership, Proprietorship, Trust and Society Financial Statements directly from Tally Trial Balance.">
+<link rel="canonical" href="https://ebal.etaxadv.com/">
+<meta property="og:title" content="e-BAL – Financial Statement Preparation Platform">
+<meta property="og:description" content="Generate Schedule III, LLP, Partnership, Proprietorship, Trust and Society Financial Statements directly from Tally Trial Balance.">
+<meta property="og:url" content="https://ebal.etaxadv.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="e-BAL">
 <style>
 /* ===== RESET & BASE ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -671,7 +677,7 @@ ul{list-style:none}
           <li>Dedicated Support</li>
           <li>Multi-user Access</li>
         </ul>
-        <a href="contact.html" class="pricing-btn secondary">Contact Sales</a>
+        <a href="https://etaxadv.com/contact" class="pricing-btn secondary">Contact Sales</a>
       </div>
     </div>
     <div class="pricing-includes">

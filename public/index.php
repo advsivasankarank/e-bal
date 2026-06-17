@@ -1,5 +1,12 @@
 <?php
 require_once __DIR__ . '/../app/session_bootstrap.php';
+
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+if ($userId <= 0) {
+    require __DIR__ . '/landing.php';
+    exit;
+}
+
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
