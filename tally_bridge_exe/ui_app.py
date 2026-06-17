@@ -27,7 +27,7 @@ BRIDGE_VERSION = "1.1.0"
 TALLY_URL = "http://localhost:9000"
 LEDGER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_ledger.php"
 TB_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_tb.php"
-VOUCHER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/api/voucher_sync.php?action=sync"
+VOUCHER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/voucher_sync.php?action=sync"
 LISTEN_HOST_DEFAULT = "127.0.0.1"
 LISTEN_PORT_DEFAULT = 9123
 
@@ -524,7 +524,7 @@ def resolve_upload_targets(base_config, override):
         if not tb_url:
             tb_url = join_url(site_origin, "/bridge_tb.php")
         if not voucher_url:
-            voucher_url = join_url(site_origin, "/api/voucher_sync.php?action=sync")
+            voucher_url = join_url(site_origin, "/voucher_sync.php?action=sync")
 
     if ledger_url:
         active_config["ledger_upload_url"] = ledger_url
