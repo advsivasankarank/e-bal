@@ -1,0 +1,91 @@
+<?php
+
+require_once __DIR__ . '/../engines/classification_engine.php';
+require_once __DIR__ . '/fy_closure_helper.php';
+
+function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $fs): array
+{
+    $errors = [];
+    $warnings = [];
+
+    $summary = $fs['summary'] ?? [];
+    $data = $fs['data'] ?? [];
+    $notes = $fs['notes'] ?? [];
+    $scheduleItems = $fs['schedule_items'] ?? [];
+
+    $assetsTotal = (float) ($summary['assets_total'] ?? 0);
+    $liabilitiesTotal = (float) ($summary['liabilities_total'] ?? 0);
+    $bsDiff = round($assetsTotal - $liabilitiesTotal, 2);
+    if (abs($bsDiff) > 0.01) {
+        $errors[] = [
+            'check' => 'assets_equals_liabilities',
+            'message' => 'Balance Sheet does not balance. Assets (₹' . number_format($assetsTotal, 2)
+                . ') ≠ Liabilities (₹' . number_format($liabilitiesTotal, 2)
+                . '). Difference: ₹' . number_format($bsDiff, 2) . '.',
+        ];
+    }
+
+    if (!empty($fs['validation']['parent_group_conflicts'])) {
+        $conflictCount = count($fs['validation']['parent_group_conflicts']);
+        $errors[] = [
+            'check' => 'parent_group_conflicts',
+            'message' => $conflictCount . ' parent group validation conflict(s) found. '
+                . 'Ledgers with conflicts are excluded from classification.',
+        ];
+    }
+
+    if (!($data['mapping_completed'] ?? false)) {
+        $errors[] = [
+            'check' => 'mapping_completeness',
+            'message' => 'Ledger mapping is not yet complete. Some ledgers may be unmapped.',
+        ];
+    }
+
+    $noteComplete = $notes['validation']['note_completeness'] ?? $fs['validation']['note_completeness'] ?? [];
+    if (isset($noteComplete['is_complete']) && !$noteComplete['is_complete']) {
+        $missing = $noteComplete['missing'] ?? [];
+        $warnings[] = [
+            'check' => 'note_completeness',
+            'message' => (count($missing) > 0
+                ? 'Missing note sections: ' . implode(', ', array_map('htmlspecialchars', $missing))
+                : 'Some expected note sections are missing.'),
+        ];
+    }
+
+    $currentDiff = (float) ($fs['validation']['current_balance_difference'] ?? 0);
+    $previousDiff = (float) ($fs['validation']['previous_balance_difference'] ?? 0);
+    if (abs($currentDiff) > 0.01) {
+        $warnings[] = [
+            'check' => 'current_year_reconciliation',
+            'message' => 'Current year balance difference: ₹' . number_format($currentDiff, 2)
+                . '. The trial balance totals may not match the classified note totals.',
+        ];
+    }
+    if (abs($previousDiff) > 0.01) {
+        $warnings[] = [
+            'check' => 'previous_year_reconciliation',
+            'message' => 'Previous year balance difference: ₹' . number_format($previousDiff, 2)
+                . '. Opening balances may not reconcile with note totals.',
+        ];
+    }
+
+    $isFirstYear = (bool) ($fs['is_first_year'] ?? false);
+    if (!$isFirstYear) {
+        $prevFYId = getPreviousFYId($pdo, $company_id, $fy_id);
+        if ($prevFYId !== null) {
+            $prevStatus = getFYStatus($pdo, $company_id, $prevFYId);
+            if ($prevStatus !== 'closed') {
+                $warnings[] = [
+                    'check' => 'previous_year_not_closed',
+                    'message' => 'Previous financial year is not closed. Comparative figures may not reflect finalized balances.',
+                ];
+            }
+        }
+    }
+
+    return [
+        'can_generate' => empty($errors),
+        'errors' => $errors,
+        'warnings' => $warnings,
+    ];
+}

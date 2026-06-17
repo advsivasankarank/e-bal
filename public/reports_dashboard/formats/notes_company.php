@@ -1,4 +1,7 @@
 <?php
+$isFirstYear = (bool) ($isFirstYear ?? false);
+function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . \format_inr($val) . '</td>'; }
+function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . $val . '</td>'; }
 // $notes = array with structured values
 ?>
 
@@ -32,40 +35,40 @@
             <tr>
                 <th>Particulars</th>
                 <th class="figure">Current Year</th>
-                <th class="figure">Previous Year</th>
+                <?php if (!$isFirstYear): ?><th class="figure" data-prev>Previous Year</th><?php endif; ?>
             </tr>
             </thead>
             <tbody>
-            <tr><td><b>Opening Stock</b></td><td></td><td></td></tr>
-            <tr><td>Finished Goods</td><td class="figure"><?= format_inr((float) ($opening['finished_goods'] ?? 0)) ?></td><td class="figure"><?= format_inr((float) ($openingPrev['finished_goods'] ?? 0)) ?></td></tr>
-            <tr><td>Work-in-Progress</td><td class="figure"><?= format_inr((float) ($opening['work_in_progress'] ?? 0)) ?></td><td class="figure"><?= format_inr((float) ($openingPrev['work_in_progress'] ?? 0)) ?></td></tr>
-            <tr><td>Stock-in-Trade</td><td class="figure"><?= format_inr((float) ($opening['stock_in_trade'] ?? 0)) ?></td><td class="figure"><?= format_inr((float) ($openingPrev['stock_in_trade'] ?? 0)) ?></td></tr>
-            <tr><td><b>Total Opening Stock</b></td><td class="figure"><?= format_inr($openingTotal) ?></td><td class="figure"><?= format_inr($openingPrevTotal) ?></td></tr>
+            <tr><td><b>Opening Stock</b></td><td></td><?php if (!$isFirstYear): ?><td data-prev></td><?php endif; ?></tr>
+            <tr><td>Finished Goods</td><td class="figure"><?= format_inr((float) ($opening['finished_goods'] ?? 0)) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr((float) ($openingPrev['finished_goods'] ?? 0)) ?></td><?php endif; ?></tr>
+            <tr><td>Work-in-Progress</td><td class="figure"><?= format_inr((float) ($opening['work_in_progress'] ?? 0)) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr((float) ($openingPrev['work_in_progress'] ?? 0)) ?></td><?php endif; ?></tr>
+            <tr><td>Stock-in-Trade</td><td class="figure"><?= format_inr((float) ($opening['stock_in_trade'] ?? 0)) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr((float) ($openingPrev['stock_in_trade'] ?? 0)) ?></td><?php endif; ?></tr>
+            <tr><td><b>Total Opening Stock</b></td><td class="figure"><?= format_inr($openingTotal) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr($openingPrevTotal) ?></td><?php endif; ?></tr>
 
-            <tr><td><b>Closing Stock</b></td><td></td><td></td></tr>
-            <tr><td>Finished Goods</td><td class="figure"><?= format_inr((float) ($closing['finished_goods'] ?? 0)) ?></td><td class="figure"><?= format_inr((float) ($closingPrev['finished_goods'] ?? 0)) ?></td></tr>
-            <tr><td>Work-in-Progress</td><td class="figure"><?= format_inr((float) ($closing['work_in_progress'] ?? 0)) ?></td><td class="figure"><?= format_inr((float) ($closingPrev['work_in_progress'] ?? 0)) ?></td></tr>
-            <tr><td>Stock-in-Trade</td><td class="figure"><?= format_inr((float) ($closing['stock_in_trade'] ?? 0)) ?></td><td class="figure"><?= format_inr((float) ($closingPrev['stock_in_trade'] ?? 0)) ?></td></tr>
-            <tr><td><b>Total Closing Stock</b></td><td class="figure"><?= format_inr($closingTotal) ?></td><td class="figure"><?= format_inr($closingPrevTotal) ?></td></tr>
-            <tr><td><b>Net Change - Finished Goods</b></td><td class="figure"><?= format_inr($finishedGoodsChange) ?></td><td class="figure"><?= format_inr($finishedGoodsPrevChange) ?></td></tr>
-            <tr><td><b>Net Change - Work-in-Progress</b></td><td class="figure"><?= format_inr($wipChange) ?></td><td class="figure"><?= format_inr($wipPrevChange) ?></td></tr>
-            <tr><td><b>Net Change - Stock-in-Trade</b></td><td class="figure"><?= format_inr($stockTradeChange) ?></td><td class="figure"><?= format_inr($stockTradePrevChange) ?></td></tr>
+            <tr><td><b>Closing Stock</b></td><td></td><?php if (!$isFirstYear): ?><td data-prev></td><?php endif; ?></tr>
+            <tr><td>Finished Goods</td><td class="figure"><?= format_inr((float) ($closing['finished_goods'] ?? 0)) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr((float) ($closingPrev['finished_goods'] ?? 0)) ?></td><?php endif; ?></tr>
+            <tr><td>Work-in-Progress</td><td class="figure"><?= format_inr((float) ($closing['work_in_progress'] ?? 0)) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr((float) ($closingPrev['work_in_progress'] ?? 0)) ?></td><?php endif; ?></tr>
+            <tr><td>Stock-in-Trade</td><td class="figure"><?= format_inr((float) ($closing['stock_in_trade'] ?? 0)) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr((float) ($closingPrev['stock_in_trade'] ?? 0)) ?></td><?php endif; ?></tr>
+            <tr><td><b>Total Closing Stock</b></td><td class="figure"><?= format_inr($closingTotal) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr($closingPrevTotal) ?></td><?php endif; ?></tr>
+            <tr><td><b>Net Change - Finished Goods</b></td><td class="figure"><?= format_inr($finishedGoodsChange) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr($finishedGoodsPrevChange) ?></td><?php endif; ?></tr>
+            <tr><td><b>Net Change - Work-in-Progress</b></td><td class="figure"><?= format_inr($wipChange) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr($wipPrevChange) ?></td><?php endif; ?></tr>
+            <tr><td><b>Net Change - Stock-in-Trade</b></td><td class="figure"><?= format_inr($stockTradeChange) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr($stockTradePrevChange) ?></td><?php endif; ?></tr>
             </tbody>
             <tfoot>
-            <tr><td><b>Net Change (Opening - Closing)</b></td><td class="figure"><b><?= format_inr((float) ($section['current_total'] ?? 0)) ?></b></td><td class="figure"><b><?= format_inr((float) ($section['previous_total'] ?? 0)) ?></b></td></tr>
+            <tr><td><b>Net Change (Opening - Closing)</b></td><td class="figure"><b><?= format_inr((float) ($section['current_total'] ?? 0)) ?></b></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><b><?= format_inr((float) ($section['previous_total'] ?? 0)) ?></b></td><?php endif; ?></tr>
             </tfoot>
         </table>
     <?php else: ?>
         <table class="note-table" border="1" width="100%">
             <thead>
-            <tr><th>Ledger / Particulars</th><th class="figure">Current Year</th><th class="figure">Previous Year</th></tr>
+            <tr><th>Ledger / Particulars</th><th class="figure">Current Year</th><?php if (!$isFirstYear): ?><th class="figure" data-prev>Previous Year</th><?php endif; ?></tr>
             </thead>
             <tbody>
             <?php foreach (($section['lines'] ?? []) as $line): ?>
                 <tr>
                     <td><?= htmlspecialchars($line['label']) ?></td>
                     <td class="figure"><?= format_inr((float) ($line['current'] ?? 0)) ?></td>
-                    <td class="figure"><?= format_inr((float) ($line['previous'] ?? 0)) ?></td>
+                    <?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr((float) ($line['previous'] ?? 0)) ?></td><?php endif; ?>
                 </tr>
             <?php endforeach; ?>
             </tbody>
@@ -73,7 +76,7 @@
             <tr>
                 <td><strong>Total</strong></td>
                 <td class="figure"><strong><?= format_inr((float) ($section['current_total'] ?? 0)) ?></strong></td>
-                <td class="figure"><strong><?= format_inr((float) ($section['previous_total'] ?? 0)) ?></strong></td>
+                <?php if (!$isFirstYear): ?><td class="figure" data-prev><strong><?= format_inr((float) ($section['previous_total'] ?? 0)) ?></strong></td><?php endif; ?>
             </tr>
             </tfoot>
         </table>

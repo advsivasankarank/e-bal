@@ -21,6 +21,13 @@ $companyStmt->execute([$company_id]);
 $companyCategory = strtolower((string) $companyStmt->fetchColumn());
 $mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
 
+if (isset($_POST['mapping_data'])) {
+    $decoded = json_decode((string) $_POST['mapping_data'], true);
+    if (is_array($decoded)) {
+        $_POST['mapping'] = $decoded;
+    }
+}
+
 if (!isset($_POST['mapping'])) {
     $_SESSION['error'] = "No mapping data";
     header("Location: mapping_console.php");
@@ -155,5 +162,10 @@ try {
     $_SESSION['error'] = $e->getMessage();
 }
 
-header("Location: mapping_console.php");
+$returnTo = trim((string) ($_POST['return_to'] ?? ''));
+if ($returnTo === 'mapping_workbench') {
+    header("Location: mapping_workbench.php");
+} else {
+    header("Location: mapping_console.php");
+}
 exit;

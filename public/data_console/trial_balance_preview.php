@@ -20,6 +20,13 @@ $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 $previewMappingOptions = $mappingOptions;
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mapping_data'])) {
+    $decoded = json_decode((string) $_POST['mapping_data'], true);
+    if (is_array($decoded)) {
+        $_POST['mapping'] = $decoded;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mapping'])) {
     requireCsrfToken();
     $allowOverride = isset($_POST['allow_override']) && (string) $_POST['allow_override'] === '1';

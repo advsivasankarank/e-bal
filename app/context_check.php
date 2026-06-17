@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/session_bootstrap.php';
+require_once __DIR__ . '/helpers/fy_closure_helper.php';
 
 function requireCompany() {
     if (empty($_SESSION['company_id'])) {
@@ -20,4 +21,8 @@ function requireFY() {
 function requireFullContext() {
     requireCompany();
     requireFY();
+    global $pdo;
+    if (isset($pdo) && $pdo instanceof PDO) {
+        ensureFYClosureSchema($pdo);
+    }
 }

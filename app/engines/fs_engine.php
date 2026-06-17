@@ -1168,6 +1168,12 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
     $subcategory = $companyMeta['entity_subcategory'] ?? 'proprietorship';
     $fyDisplay = $fyLabel !== '' ? $fyLabel : ('FY ' . $fy_id);
 
+    require_once __DIR__ . '/../helpers/fy_closure_helper.php';
+    ensureFYClosureSchema($pdo);
+    $hasPrevData = hasPreviousYearData($pdo, $company_id, $fy_id);
+    $isFirstYear = !$hasPrevData;
+    $prevFYId = getPreviousFYId($pdo, $company_id, $fy_id);
+
     switch ($entity) {
         case 'corporate':
             $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs);
@@ -1216,5 +1222,7 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
             'note_completeness' => buildNoteCompletenessAudit($entity, $notes['sections'] ?? [], $subcategory),
         ],
         'has_data' => array_sum(array_map(static fn ($value) => abs((float) $value), $classified['summary'])) > 0,
+        'is_first_year' => $isFirstYear,
+        'previous_fy_id' => $prevFYId,
     ];
 }

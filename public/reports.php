@@ -4,6 +4,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/engines/fs_engine.php';
 require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
 require_once __DIR__ . '/../app/helpers/figure_helper.php';
+require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 require_once __DIR__ . '/layouts/header.php';
 
@@ -272,6 +273,29 @@ if ($hasReportData) {
                 <?php endforeach; ?>
             </ul>
             <p style="margin-top:8px;">Please review the mapped heads and note payload before issuing or exporting the statements.</p>
+        </div>
+    <?php endif; ?>
+
+    <?php
+    $validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
+    if (!empty($validationResult['errors'])): ?>
+        <div class="card" style="margin-bottom:20px; border: 2px solid #dc2626; border-radius: 10px; padding: 16px;">
+            <strong style="color:#dc2626; font-size:15px;">Validation Errors — Report May Be Incomplete</strong>
+            <ul style="margin:10px 0 0 18px;">
+                <?php foreach ($validationResult['errors'] as $ve): ?>
+                    <li style="margin-bottom:6px;"><?= htmlspecialchars($ve['message']) ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
+    <?php if (!empty($validationResult['warnings'])): ?>
+        <div class="card" style="margin-bottom:20px; border: 2px solid #f59e0b; border-radius: 10px; padding: 16px;">
+            <strong style="color:#f59e0b; font-size:15px;">Validation Warnings</strong>
+            <ul style="margin:10px 0 0 18px;">
+                <?php foreach ($validationResult['warnings'] as $ve): ?>
+                    <li style="margin-bottom:6px;"><?= htmlspecialchars($ve['message']) ?></li>
+                <?php endforeach; ?>
+            </ul>
         </div>
     <?php endif; ?>
     <div class="report-shell">

@@ -1,0 +1,35 @@
+.htCore td {
+    font-size: 13px;
+}
+.handsontable .htRight {
+    font-weight: 500;
+}
+.schedule-select {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    padding: 2px 4px;
+    cursor: pointer;
+}
+.schedule-select:focus {
+    outline: 1px solid #4a90d9;
+    background: #fff;
+}
+.ht-group-header {
+    font-weight: 700;
+    color: #1a237e;
+    background: #e8eaf6;
+}
+.ht-dr-cell {
+    color: #c62828;
+}
+.ht-cr-cell {
+    color: #2e7d32;
+}
+.ht-balanced {
+    background: #e8f5e9;
+}
+.ht-unbalanced {
+    background: #ffebee;
+}

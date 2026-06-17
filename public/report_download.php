@@ -4,6 +4,8 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/engines/fs_engine.php';
 require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
 require_once __DIR__ . '/../app/helpers/report_document_helper.php';
+require_once __DIR__ . '/../app/exporters/financial_statement_xlsx.php';
+require_once __DIR__ . '/../app/exporters/financial_statement_docx.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Dompdf\Dompdf;
@@ -17,7 +19,7 @@ $companyName = $_SESSION['company_name'] ?? 'Not Selected';
 $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 
 $format = strtolower(trim((string) ($_GET['format'] ?? 'pdf')));
-$allowedFormats = ['pdf', 'word', 'excel'];
+$allowedFormats = ['pdf', 'word', 'excel', 'docx', 'xlsx'];
 
 if (!in_array($format, $allowedFormats, true)) {
     http_response_code(400);
@@ -56,16 +58,24 @@ if ($format === 'pdf') {
     exit;
 }
 
-if ($format === 'word') {
-    header('Content-Type: application/msword; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'doc') . '"');
+if (in_array($format, ['word', 'docx'], true)) {
+    $docxPath = exportFinancialStatementsToDocx($fs, $companyName, $fyName);
+    header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'docx') . '"');
     header('Cache-Control: max-age=0');
-    echo $htmlDocument;
+    header('Content-Length: ' . filesize($docxPath));
+    readfile($docxPath);
+    unlink($docxPath);
     exit;
 }
 
-header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
-header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'xls') . '"');
-header('Cache-Control: max-age=0');
-echo $htmlDocument;
-exit;
+if (in_array($format, ['excel', 'xlsx'], true)) {
+    $xlsxPath = exportFinancialStatementsToXlsx($fs, $companyName, $fyName);
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'xlsx') . '"');
+    header('Cache-Control: max-age=0');
+    header('Content-Length: ' . filesize($xlsxPath));
+    readfile($xlsxPath);
+    unlink($xlsxPath);
+    exit;
+}

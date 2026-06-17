@@ -4,6 +4,14 @@ function reportDocumentStyles(): string
 {
     return <<<'CSS'
 <style>
+@page {
+    margin: 22mm 16mm 24mm;
+    size: A4 portrait;
+}
+body {
+    font-family: 'DejaVu Sans', sans-serif;
+    counter-reset: section;
+}
 .report-shell { background: transparent; border: 0; padding: 0; }
 .report-page {
     width: 210mm;
@@ -83,6 +91,7 @@ function reportDocumentStyles(): string
     margin: 0 auto 18px;
     width: 210mm;
     color: #0f172a;
+    page-break-after: always;
 }
 .report-export-cover h1 {
     margin: 0 0 6px;
@@ -92,6 +101,50 @@ function reportDocumentStyles(): string
     margin: 0 0 4px;
     color: #475569;
     font-size: 13px;
+}
+.toc-page {
+    page-break-after: always;
+    margin-bottom: 20mm;
+}
+.toc-page h2 {
+    font-size: 20px;
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+}
+.toc-entry {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 13px;
+    border-bottom: 1px dotted #ccc;
+}
+.toc-entry.main {
+    font-weight: 700;
+    font-size: 14px;
+    margin-top: 8px;
+}
+.toc-entry .page-num {
+    font-weight: 700;
+}
+.page-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 9px;
+    color: #94a3b8;
+    border-top: 1px solid #e2e8f0;
+    padding: 4mm 16mm;
+    background: #fff;
+    width: 100%;
+}
+.page-footer .page-counter:after {
+    content: counter(page, decimal);
+}
+.page-footer .total-pages:before {
+    content: counter(total-pages, decimal);
 }
 </style>
 CSS;
@@ -104,6 +157,10 @@ function renderFinancialReportDocument(array $fs, string $companyName, string $f
     $company_meta = $fs['company_meta'] ?? [];
     $formatTemplate = $fs['format_template'];
     $notesTemplate = $fs['notes_template'];
+    $isFirstYear = (bool) ($fs['is_first_year'] ?? false);
+
+    $plLabel = ($fs['entity_subcategory'] ?? '') === 'trust' ? 'Income & Expenditure Account' : 'Profit & Loss Account';
+    $noteSections = $notes['sections'] ?? [];
 
     ob_start();
     ?>
@@ -112,6 +169,17 @@ function renderFinancialReportDocument(array $fs, string $companyName, string $f
         <p><?= htmlspecialchars($fs['title'] ?? 'Financial Statements') ?></p>
         <p>Financial Year: <?= htmlspecialchars($fyName) ?></p>
     </div>
+
+    <div class="toc-page">
+        <h2>Table of Contents</h2>
+        <div class="toc-entry main"><span>Balance Sheet</span></div>
+        <div class="toc-entry main"><span>Statement of <?= htmlspecialchars($plLabel) ?></span></div>
+        <div class="toc-entry main"><span>Notes to Accounts</span></div>
+        <?php foreach ($noteSections as $noteSection): ?>
+            <div class="toc-entry"><span style="padding-left:16px;"><?= htmlspecialchars($noteSection['title'] ?? '') ?></span></div>
+        <?php endforeach; ?>
+    </div>
+
     <div class="report-shell">
         <?php include $formatTemplate; ?>
         <?php include $notesTemplate; ?>
@@ -122,9 +190,14 @@ function renderFinancialReportDocument(array $fs, string $companyName, string $f
 
 function wrapReportHtmlDocument(string $title, string $bodyHtml): string
 {
+    $footer = <<<'FOOTER'
+<div class="page-footer">
+    Page <span class="page-counter"></span>
+</div>
+FOOTER;
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' .
         htmlspecialchars($title, ENT_QUOTES, 'UTF-8') .
-        '</title>' . reportDocumentStyles() . '</head><body>' . $bodyHtml . '</body></html>';
+        '</title>' . reportDocumentStyles() . '</head><body>' . $bodyHtml . $footer . '</body></html>';
 }
 
 function buildReportExportFilename(string $companyName, string $fyName, string $extension): string

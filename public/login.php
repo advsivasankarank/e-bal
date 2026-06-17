@@ -2,8 +2,10 @@
 require_once __DIR__ . '/../app/session_bootstrap.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
+require_once __DIR__ . '/../app/helpers/fy_closure_helper.php';
 
 ensurePlanTables($pdo);
+ensureFYClosureSchema($pdo);
 
 if (!empty($_SESSION['user_id'])) {
     header('Location: ' . BASE_URL . 'index.php');
