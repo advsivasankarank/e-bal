@@ -253,6 +253,10 @@ function getClassifiedData(PDO $pdo, int $company_id, int $fy_id): array
         }
 
         $summary[$bucket] += $amount;
+        // Include opening balance for BS buckets (balance sheet items carry forward)
+        if (!in_array($bucket, ['revenue', 'expenses'], true)) {
+            $summary[$bucket] += $previousAmount;
+        }
         $previousSummary[$bucket] += $previousAmount;
     }
 

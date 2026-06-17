@@ -31,6 +31,14 @@ if ($action === 'close') {
     $result = closeFinancialYear($pdo, $company_id, $fy_id, $userId, $reason);
 } elseif ($action === 'reopen') {
     $result = reopenFinancialYear($pdo, $company_id, $fy_id, $userId, $reason);
+} elseif ($action === 'regenerate_snapshot') {
+    $targetFYId = (int) ($_POST['target_fy_id'] ?? 0);
+    if ($targetFYId <= 0) {
+        $_SESSION['closure_error'] = 'Invalid target FY for snapshot regeneration.';
+        header('Location: fy_closure.php');
+        exit;
+    }
+    $result = regenerateSnapshot($pdo, $company_id, $targetFYId, $userId);
 } else {
     $_SESSION['closure_error'] = 'Invalid action.';
     header('Location: fy_closure.php');

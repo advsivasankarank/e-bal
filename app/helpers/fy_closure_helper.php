@@ -140,13 +140,16 @@ function validateFYClosure(PDO $pdo, int $company_id, int $fy_id): array
 
     $assetsTotal = (float) ($summary['assets_total'] ?? 0);
     $liabilitiesTotal = (float) ($summary['liabilities_total'] ?? 0);
-    $diff = round($assetsTotal - $liabilitiesTotal, 2);
+    $profit = (float) ($summary['profit'] ?? 0);
+    $equityIncludingProfit = $liabilitiesTotal + $profit;
+    $diff = round($assetsTotal - $equityIncludingProfit, 2);
 
     if (abs($diff) > 0.01) {
         $msg = "Balance sheet does not balance. Assets (₹" . number_format($assetsTotal, 2)
             . ") ≠ Liabilities + Equity (₹" . number_format($liabilitiesTotal, 2)
+            . ") including current year profit/loss (₹" . number_format($profit, 2)
             . "). Difference: ₹" . number_format($diff, 2);
-        $failures[] = ['check_name' => 'balance_sheet_balance', 'severity' => 'error', 'message' => $msg, 'details' => json_encode(['assets' => $assetsTotal, 'liabilities' => $liabilitiesTotal, 'diff' => $diff])];
+        $failures[] = ['check_name' => 'balance_sheet_balance', 'severity' => 'error', 'message' => $msg, 'details' => json_encode(['assets' => $assetsTotal, 'liabilities' => $liabilitiesTotal, 'profit' => $profit, 'equity_including_profit' => $equityIncludingProfit, 'diff' => $diff])];
     }
 
     $conflicts = $classified['validation']['parent_group_conflicts'] ?? [];
@@ -289,44 +292,64 @@ function getClosingSnapshotSummary(PDO $pdo, int $company_id, int $fy_id): array
 
 function closeFinancialYear(PDO $pdo, int $company_id, int $fy_id, int $user_id, string $reason = ''): array
 {
-    $currentStatus = getFYStatus($pdo, $company_id, $fy_id);
-    if ($currentStatus === 'closed') {
-        return ['success' => false, 'message' => 'This financial year is already closed.'];
-    }
+    $pdo->beginTransaction();
 
-    $failures = validateFYClosure($pdo, $company_id, $fy_id);
-    $errors = array_filter($failures, fn($f) => $f['severity'] === 'error');
-    if (!empty($errors)) {
-        return ['success' => false, 'message' => 'Closure validation failed. ' . $errors[0]['message'], 'failures' => $failures];
-    }
-
-    $snapshotCount = captureClosingSnapshot($pdo, $company_id, $fy_id);
-
-    $table = detectFinancialYearTable($pdo);
-    if ($table !== null && fyColumnExists($pdo, $table, 'status')) {
-        $pdo->prepare("UPDATE `$table` SET status = 'closed', closed_by = ?, closed_at = NOW(), closure_notes = ? WHERE id = ? AND company_id = ?")
-            ->execute([$user_id, $reason, $fy_id, $company_id]);
-    }
-
-    $pdo->prepare("INSERT INTO fy_closure_audit (company_id, fy_id, action, performed_by, reason, validation_summary)
-        VALUES (?, ?, 'closed', ?, ?, ?)")
-        ->execute([$company_id, $fy_id, $user_id, $reason, json_encode(['snapshot_entries' => $snapshotCount, 'failures' => count($failures)])]);
-
-    $nextFYId = getNextFYId($pdo, $company_id, $fy_id);
-    if ($nextFYId !== null) {
-        $obsCheck = $pdo->prepare("SELECT COUNT(*) FROM fy_opening_balance_sources WHERE company_id = ? AND fy_id = ?");
-        $obsCheck->execute([$company_id, $nextFYId]);
-        if ((int) $obsCheck->fetchColumn() === 0) {
-            createOpeningBalances($pdo, $company_id, $nextFYId, $fy_id, $user_id);
+    try {
+        $table = detectFinancialYearTable($pdo);
+        if ($table !== null && fyColumnExists($pdo, $table, 'status')) {
+            $lockStmt = $pdo->prepare("SELECT status FROM `$table` WHERE id = ? AND company_id = ? FOR UPDATE");
+            $lockStmt->execute([$fy_id, $company_id]);
+            $currentStatus = (string) $lockStmt->fetchColumn();
+        } else {
+            $currentStatus = getFYStatus($pdo, $company_id, $fy_id);
         }
-    }
 
-    return [
-        'success' => true,
-        'message' => "Financial year closed successfully. {$snapshotCount} snapshot entries captured.",
-        'snapshot_count' => $snapshotCount,
-        'failures' => $failures,
-    ];
+        if ($currentStatus === 'closed') {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => 'This financial year is already closed.'];
+        }
+
+        $failures = validateFYClosure($pdo, $company_id, $fy_id);
+        $errors = array_filter($failures, fn($f) => $f['severity'] === 'error');
+        if (!empty($errors)) {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => 'Closure validation failed. ' . $errors[0]['message'], 'failures' => $failures];
+        }
+
+        $snapshotCount = captureClosingSnapshot($pdo, $company_id, $fy_id);
+
+        if ($table !== null && fyColumnExists($pdo, $table, 'status')) {
+            $pdo->prepare("UPDATE `$table` SET status = 'closed', closed_by = ?, closed_at = NOW(), closure_notes = ? WHERE id = ? AND company_id = ?")
+                ->execute([$user_id, $reason, $fy_id, $company_id]);
+        }
+
+        $pdo->prepare("INSERT INTO fy_closure_audit (company_id, fy_id, action, performed_by, reason, validation_summary)
+            VALUES (?, ?, 'closed', ?, ?, ?)")
+            ->execute([$company_id, $fy_id, $user_id, $reason, json_encode(['snapshot_entries' => $snapshotCount, 'failures' => count($failures)])]);
+
+        $nextFYId = getNextFYId($pdo, $company_id, $fy_id);
+        if ($nextFYId !== null) {
+            $obsCheck = $pdo->prepare("SELECT COUNT(*) FROM fy_opening_balance_sources WHERE company_id = ? AND fy_id = ?");
+            $obsCheck->execute([$company_id, $nextFYId]);
+            if ((int) $obsCheck->fetchColumn() === 0) {
+                createOpeningBalances($pdo, $company_id, $nextFYId, $fy_id, $user_id);
+            }
+        }
+
+        $pdo->commit();
+
+        return [
+            'success' => true,
+            'message' => "Financial year closed successfully. {$snapshotCount} snapshot entries captured.",
+            'snapshot_count' => $snapshotCount,
+            'failures' => $failures,
+        ];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        return ['success' => false, 'message' => 'Closure failed: ' . $e->getMessage()];
+    }
 }
 
 /* =========================
@@ -335,46 +358,65 @@ function closeFinancialYear(PDO $pdo, int $company_id, int $fy_id, int $user_id,
 
 function reopenFinancialYear(PDO $pdo, int $company_id, int $fy_id, int $user_id, string $reason = ''): array
 {
-    $currentStatus = getFYStatus($pdo, $company_id, $fy_id);
-    if ($currentStatus !== 'closed') {
-        return ['success' => false, 'message' => 'Only a closed financial year can be reopened.'];
-    }
+    $pdo->beginTransaction();
 
-    $nextFYId = getNextFYId($pdo, $company_id, $fy_id);
-    if ($nextFYId !== null) {
-        $nextStatus = getFYStatus($pdo, $company_id, $nextFYId);
-        if ($nextStatus !== 'draft') {
-            $pdo->prepare("UPDATE `financial_years` SET status = 'draft', reopened_by = ?, reopened_at = NOW() WHERE id = ? AND company_id = ?")
-                ->execute([$user_id, $nextFYId, $company_id]);
-
-            $pdo->prepare("UPDATE fy_opening_balance_sources
-                SET invalidated_by = ?, invalidated_at = NOW()
-                WHERE company_id = ? AND fy_id = ?")
-                ->execute([$user_id, $company_id, $nextFYId]);
-
-            $pdo->prepare("DELETE FROM fy_closing_snapshots WHERE company_id = ? AND fy_id = ?")
-                ->execute([$company_id, $nextFYId]);
-
-            $pdo->prepare("INSERT INTO fy_closure_audit (company_id, fy_id, action, performed_by, reason)
-                VALUES (?, ?, 'reopened', ?, ?)")
-                ->execute([$company_id, $nextFYId, $user_id, 'Invalidated due to reopening of previous FY: ' . $reason]);
+    try {
+        $currentStatus = getFYStatus($pdo, $company_id, $fy_id);
+        if ($currentStatus !== 'closed') {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => 'Only a closed financial year can be reopened.'];
         }
+
+        $affectedFYs = [];
+        $nextFYId = getNextFYId($pdo, $company_id, $fy_id);
+        if ($nextFYId !== null) {
+            $nextStatus = getFYStatus($pdo, $company_id, $nextFYId);
+            if ($nextStatus !== 'draft') {
+                $affectedFYs[] = $nextFYId;
+                $pdo->prepare("UPDATE `financial_years` SET status = 'draft', reopened_by = ?, reopened_at = NOW() WHERE id = ? AND company_id = ?")
+                    ->execute([$user_id, $nextFYId, $company_id]);
+
+                $pdo->prepare("UPDATE fy_opening_balance_sources
+                    SET invalidated_by = ?, invalidated_at = NOW()
+                    WHERE company_id = ? AND fy_id = ?")
+                    ->execute([$user_id, $company_id, $nextFYId]);
+
+                $pdo->prepare("DELETE FROM fy_closing_snapshots WHERE company_id = ? AND fy_id = ?")
+                    ->execute([$company_id, $nextFYId]);
+
+                $pdo->prepare("INSERT INTO fy_closure_audit (company_id, fy_id, action, performed_by, reason)
+                    VALUES (?, ?, 'reopened', ?, ?)")
+                    ->execute([$company_id, $nextFYId, $user_id, 'Invalidated due to reopening of previous FY: ' . $reason]);
+            }
+        }
+
+        $table = detectFinancialYearTable($pdo);
+        if ($table !== null && fyColumnExists($pdo, $table, 'status')) {
+            $pdo->prepare("UPDATE `$table` SET status = 'draft', reopened_by = ?, reopened_at = NOW() WHERE id = ? AND company_id = ?")
+                ->execute([$user_id, $fy_id, $company_id]);
+        }
+
+        $pdo->prepare("DELETE FROM fy_closing_snapshots WHERE company_id = ? AND fy_id = ?")
+            ->execute([$company_id, $fy_id]);
+
+        $pdo->prepare("INSERT INTO fy_closure_audit (company_id, fy_id, action, performed_by, reason)
+            VALUES (?, ?, 'reopened', ?, ?)")
+            ->execute([$company_id, $fy_id, $user_id, $reason]);
+
+        $pdo->commit();
+
+        $msg = 'Financial year reopened successfully. Carry-forward balances in subsequent years have been invalidated.';
+        if (!empty($affectedFYs)) {
+            $msg .= ' Affected FYs: #' . implode(', #', $affectedFYs) . '.';
+        }
+
+        return ['success' => true, 'message' => $msg];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        return ['success' => false, 'message' => 'Reopen failed: ' . $e->getMessage()];
     }
-
-    $table = detectFinancialYearTable($pdo);
-    if ($table !== null && fyColumnExists($pdo, $table, 'status')) {
-        $pdo->prepare("UPDATE `$table` SET status = 'draft', reopened_by = ?, reopened_at = NOW() WHERE id = ? AND company_id = ?")
-            ->execute([$user_id, $fy_id, $company_id]);
-    }
-
-    $pdo->prepare("DELETE FROM fy_closing_snapshots WHERE company_id = ? AND fy_id = ?")
-        ->execute([$company_id, $fy_id]);
-
-    $pdo->prepare("INSERT INTO fy_closure_audit (company_id, fy_id, action, performed_by, reason)
-        VALUES (?, ?, 'reopened', ?, ?)")
-        ->execute([$company_id, $fy_id, $user_id, $reason]);
-
-    return ['success' => true, 'message' => 'Financial year reopened successfully. Carry-forward balances in subsequent years have been invalidated.'];
 }
 
 /* =========================
@@ -392,7 +434,47 @@ function createOpeningBalances(PDO $pdo, int $company_id, int $target_fy_id, int
         VALUES (?, ?, ?, ?)")
         ->execute([$company_id, $target_fy_id, $source_fy_id, $user_id]);
 
-    return ['success' => true, 'message' => 'Opening balance source recorded.', 'source_fy' => $source_fy_id];
+    $carryForwardCount = 0;
+    $upsertStmt = $pdo->prepare("
+        INSERT INTO tally_ledgers
+            (company_id, fy_id, ledger_name, parent_group, amount, dr_cr, opening_amount, opening_dr_cr, created_at)
+        VALUES (?, ?, ?, ?, 0, 'DR', ?, ?)
+        ON DUPLICATE KEY UPDATE
+            opening_amount = VALUES(opening_amount),
+            opening_dr_cr = VALUES(opening_dr_cr)
+    ");
+
+    foreach ($snapshot as $code => $item) {
+        foreach (($item['rows'] ?? []) as $row) {
+            $ledgerName = (string) ($row['ledger_name'] ?? '');
+            if ($ledgerName === '' || $ledgerName === '__TOTAL__') {
+                continue;
+            }
+            $amount = abs((float) ($row['amount'] ?? 0));
+            if ($amount < 0.005) {
+                continue;
+            }
+            $drCr = (string) ($row['dr_cr'] ?? 'DR');
+            $parentGroup = (string) ($row['parent_group'] ?? '');
+
+            $upsertStmt->execute([
+                $company_id,
+                $target_fy_id,
+                $ledgerName,
+                $parentGroup,
+                $amount,
+                $drCr,
+            ]);
+            $carryForwardCount++;
+        }
+    }
+
+    return [
+        'success' => true,
+        'message' => "Opening balances carried forward. {$carryForwardCount} ledger(s) populated.",
+        'carry_forward_count' => $carryForwardCount,
+        'source_fy' => $source_fy_id,
+    ];
 }
 
 function getOpeningBalanceSource(PDO $pdo, int $company_id, int $fy_id): ?array
@@ -521,6 +603,40 @@ function buildComparativeValidation(PDO $pdo, int $company_id, int $fy_id): arra
         'prev_fy_id' => $prevFYId,
         'issues' => $issues,
     ];
+}
+
+/* =========================
+   SNAPSHOT REGENERATION
+========================= */
+
+function regenerateSnapshot(PDO $pdo, int $company_id, int $fy_id, int $user_id): array
+{
+    $status = getFYStatus($pdo, $company_id, $fy_id);
+    if ($status !== 'closed') {
+        return ['success' => false, 'message' => 'Snapshot can only be regenerated for closed financial years.'];
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $snapshotCount = captureClosingSnapshot($pdo, $company_id, $fy_id);
+
+        $pdo->prepare("INSERT INTO fy_closure_audit (company_id, fy_id, action, performed_by, reason)
+            VALUES (?, ?, 'snapshot_regenerated', ?, ?)")
+            ->execute([$company_id, $fy_id, $user_id, 'Snapshot regenerated manually']);
+
+        $pdo->commit();
+
+        return [
+            'success' => true,
+            'message' => "Snapshot regenerated successfully. {$snapshotCount} entries captured.",
+            'snapshot_count' => $snapshotCount,
+        ];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        return ['success' => false, 'message' => 'Snapshot regeneration failed: ' . $e->getMessage()];
+    }
 }
 
 /* =========================

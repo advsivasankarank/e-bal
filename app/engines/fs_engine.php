@@ -570,6 +570,18 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
                 (int) $noteNo,
                 $title
             );
+            if ((float) ($inventorySection['current_total'] ?? 0) == 0.0) {
+                $classifiedInventory = classifiedAmount($classified, 'inventory');
+                if (abs($classifiedInventory) > 0.00001) {
+                    $inventorySection['current_total'] = $classifiedInventory;
+                    $inventorySection['previous_total'] = classifiedPreviousAmount($classified, 'inventory');
+                    $inventorySection['lines'] = [[
+                        'label' => 'Closing Stock',
+                        'current' => $classifiedInventory,
+                        'previous' => classifiedPreviousAmount($classified, 'inventory'),
+                    ]];
+                }
+            }
             $inventorySection['master_code'] = $masterCode;
             $sections[] = $inventorySection;
             continue;
@@ -1038,7 +1050,7 @@ function buildNonCorpSummaryFromNotes(array $classified, array $notes, string $f
     }
     $data['pat'] = $data['pbt'];
     $data['prev_pat'] = $data['prev_pbt'];
-    $data['capital'] = $capital + $data['pat'];
+    $data['capital'] = $capital + $prevCapital + $data['pat'];
     $data['prev_capital'] = $prevCapital + $data['prev_pat'];
     $data['total_liabilities'] = $data['capital'] + $borrowings + $payables + $currentLiabilities;
     $data['prev_total_liabilities'] = $data['prev_capital'] + $prevBorrowings + $prevPayables + $prevCurrentLiabilities;

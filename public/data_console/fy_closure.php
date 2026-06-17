@@ -43,6 +43,26 @@ if ($hasPrevData) {
     $comparativeIssues = buildComparativeValidation($pdo, $company_id, $fy_id);
 }
 
+$sourceInvalidated = false;
+$sourceInvalidatedAt = null;
+if ($status !== 'closed') {
+    $invStmt = $pdo->prepare("SELECT invalidated_at FROM fy_opening_balance_sources WHERE company_id = ? AND fy_id = ? AND invalidated_by IS NOT NULL LIMIT 1");
+    $invStmt->execute([$company_id, $fy_id]);
+    $sourceInvalidatedAt = $invStmt->fetchColumn();
+    $sourceInvalidated = $sourceInvalidatedAt !== false;
+}
+
+$affectedSubsequentFYs = [];
+if ($status === 'closed') {
+    $fyStmt = $pdo->prepare("SELECT id, fy_label, status FROM financial_years WHERE company_id = ? AND fy_start > (SELECT fy_start FROM financial_years WHERE id = ?) ORDER BY fy_start");
+    $fyStmt->execute([$company_id, $fy_id]);
+    foreach ($fyStmt->fetchAll(PDO::FETCH_ASSOC) as $fy) {
+        if ($fy['status'] !== 'draft') {
+            $affectedSubsequentFYs[] = $fy;
+        }
+    }
+}
+
 $page_title = "Financial Year Closure";
 require_once __DIR__ . '/../layouts/header.php';
 
@@ -89,20 +109,54 @@ $fyLabel = (string) $fyStmt->fetchColumn();
             <?php if ($status !== 'closed' && $canClose): ?>
                 <form method="post" action="fy_closure_process.php" onsubmit="return confirm('Are you sure you want to close this financial year? This action cannot be undone without reopening.');">
                     <input type="hidden" name="action" value="close">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['_csrf_token'] ?? '') ?>">
+                    <?= csrfInput() ?>
                     <button type="submit" class="btn" style="background:#d92d20; color:#fff;">Close Financial Year</button>
                 </form>
             <?php endif; ?>
-            <?php if ($status === 'closed' && $canClose): ?>
-                <form method="post" action="fy_closure_process.php" onsubmit="return confirm('Reopening will invalidate carry-forward balances in subsequent years. Continue?');">
+            <?php if ($status === 'closed' && $canClose):
+                $reopenWarning = 'Reopening will invalidate carry-forward balances';
+                $listFYs = array_map(fn($f) => $f['fy_label'] . ' (status: ' . $f['status'] . ')', $affectedSubsequentFYs);
+                if (!empty($listFYs)) {
+                    $reopenWarning .= ' in: ' . implode(', ', $listFYs);
+                }
+                $reopenWarning .= '. Continue?';
+            ?>
+                <form method="post" action="fy_closure_process.php" onsubmit="return confirm(<?= json_encode($reopenWarning) ?>);">
                     <input type="hidden" name="action" value="reopen">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['_csrf_token'] ?? '') ?>">
+                    <?= csrfInput() ?>
                     <button type="submit" class="btn" style="background:#b54708; color:#fff;">Reopen Financial Year</button>
                 </form>
+                <?php if ($status === 'closed' && $canClose && !empty($affectedSubsequentFYs)): ?>
+                    <div style="width:100%; margin-top:8px; padding:8px 12px; background:#fff3cd; border-radius:4px; font-size:13px;">
+                        <strong>⚠ Subsequent FYs affected by reopening:</strong>
+                        <ul style="margin:4px 0 0 16px;">
+                            <?php foreach ($affectedSubsequentFYs as $afy): ?>
+                                <li><?= htmlspecialchars($afy['fy_label']) ?> (<?= htmlspecialchars($afy['status']) ?>)
+                                    <form method="post" action="fy_closure_process.php" style="display:inline;">
+                                        <input type="hidden" name="action" value="regenerate_snapshot">
+                                        <input type="hidden" name="target_fy_id" value="<?= (int) $afy['id'] ?>">
+                                        <?= csrfInput() ?>
+                                        <button type="submit" class="btn" style="padding:2px 8px; font-size:11px; background:#157347; color:#fff;">Regen Snapshot</button>
+                                    </form>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>
 </div>
+
+<?php if ($sourceInvalidated): ?>
+    <div class="card" style="margin-bottom:20px; border-left:4px solid #b54708;">
+        <strong style="color:#b54708;">⚠ Opening Balances Invalidated</strong>
+        <p style="margin:8px 0 0; color:#667085;">
+            The opening balances for this financial year were invalidated on <?= htmlspecialchars(date('d-M-Y H:i', strtotime((string) $sourceInvalidatedAt))) ?> due to the reopening of the previous financial year.
+            Comparative figures may be inaccurate until the previous year is re-closed and this year's opening balances are refreshed.
+        </p>
+    </div>
+<?php endif; ?>
 
 <?php if ($status === 'closed' && !empty($snapshotSummary)): ?>
 <div class="card" style="margin-bottom:20px;">

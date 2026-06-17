@@ -4,7 +4,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Style\Font;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 function exportFinancialStatementsToXlsx(array $fs, string $companyName, string $fyName): string
 {
@@ -12,7 +12,7 @@ function exportFinancialStatementsToXlsx(array $fs, string $companyName, string 
     $spreadsheet->getProperties()
         ->setCreator('e-BAL')
         ->setLastModifiedBy('e-BAL')
-        ->setTitle($companyName . ' - Financial Statements - ' . $fyName);
+        ->setTitle("{$companyName} - Financial Statements - {$fyName}");
 
     buildBsSheet($spreadsheet, $fs, $companyName, $fyName);
     buildPlSheet($spreadsheet, $fs, $companyName, $fyName);
@@ -25,20 +25,12 @@ function exportFinancialStatementsToXlsx(array $fs, string $companyName, string 
     return $filename;
 }
 
-function applyHeaderStyle($sheet, int $row): void
+function colLetter(int $index): string
 {
-    $sheet->getStyle("A{$row}:D{$row}")->getFont()->setBold(true)->setSize(12);
+    return chr(64 + $index);
 }
 
-function applySectionStyle($sheet, int $row, int $colCount = 4): void
-{
-    $sheet->getStyle("A{$row}:{$colCount}{$row}")->getFont()->setBold(true);
-    $sheet->getStyle("A{$row}:{$colCount}{$row}")->getFill()
-        ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-        ->getStartColor()->setARGB('FFF0F4F8');
-}
-
-function writeTableHeader($sheet, int $row, array $headers): void
+function writeXlsxHeader($sheet, int $row, array $headers): string
 {
     $col = 'A';
     foreach ($headers as $header) {
@@ -48,45 +40,66 @@ function writeTableHeader($sheet, int $row, array $headers): void
             ->setBorderStyle(Border::BORDER_MEDIUM);
         $col++;
     }
+    return --$col;
 }
 
-function writeDataRow($sheet, int $row, array $values, array $figureCols = []): void
+function writeXlsxRow($sheet, int $row, array $values, array $figureCols = []): void
 {
     $col = 'A';
     foreach ($values as $idx => $value) {
-        $cell = $col . $row;
         if (in_array($idx, $figureCols, true) && is_numeric($value)) {
-            $sheet->setCellValue($cell, (float) $value);
-            $sheet->getStyle($cell)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle($cell)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->setCellValue($col . $row, (float) $value);
+            $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle($col . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
         } else {
-            $sheet->setCellValue($cell, (string) $value);
+            $sheet->setCellValue($col . $row, (string) $value);
         }
         $col++;
     }
 }
 
-function applyTableBorders($sheet, int $startRow, int $endRow, int $colCount = 4): void
+function writeXlsxSummaryRows($sheet, int &$row, array $items, array $data, bool $hasPrev, string $prevLetter): void
 {
-    $lastCol = chr(64 + $colCount);
-    $sheet->getStyle("A{$startRow}:{$lastCol}{$endRow}")->getBorders()->getAllBorders()
-        ->setBorderStyle(Border::BORDER_THIN);
-}
-
-function writeSummaryRows($sheet, &$row, array $items, array $data, array $prevData, int $noteCol = 1): void
-{
-    $hasPrev = !empty($prevData);
     foreach ($items as $key => $label) {
         $currentVal = (float) ($data[$key] ?? 0);
-        $prevVal = (float) ($prevData[$key] ?? 0);
-        writeDataRow($sheet, $row, [$label, '', $currentVal], [2]);
+        writeXlsxRow($sheet, $row, [$label, '', $currentVal], [2]);
         if ($hasPrev) {
-            $sheet->setCellValue('D' . $row, $prevVal);
-            $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle('D' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $prevVal = (float) ($data['prev_' . $key] ?? 0);
+            $sheet->setCellValue($prevLetter . $row, $prevVal);
+            $sheet->getStyle($prevLetter . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle($prevLetter . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
         }
         $row++;
     }
+}
+
+function writeXlsxSection($sheet, int &$row, string $sectionName, array $section, array $data, bool $hasPrev, string $lastCol): void
+{
+    $prevCol = $hasPrev ? $lastCol : '';
+
+    $sheet->setCellValue('A' . $row, $sectionName);
+    $range = 'A' . $row . ':' . $lastCol . $row;
+    $sheet->getStyle($range)->getFont()->setBold(true);
+    $sheet->getStyle($range)->getFill()
+        ->setFillType(Fill::FILL_SOLID)
+        ->getStartColor()->setARGB('FFF0F4F8');
+    $row++;
+
+    writeXlsxSummaryRows($sheet, $row, $section['items'], $data, $hasPrev, $lastCol);
+
+    $totalVal = (float) ($data[$section['total']] ?? 0);
+    writeXlsxRow($sheet, $row, ['TOTAL', '', $totalVal], [2]);
+    if ($hasPrev) {
+        $prevTotalVal = (float) ($data['prev_' . $section['total']] ?? 0);
+        $sheet->setCellValue($lastCol . $row, $prevTotalVal);
+        $sheet->getStyle($lastCol . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle($lastCol . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+    }
+
+    $boldRange = 'A' . $row . ':' . $lastCol . $row;
+    $sheet->getStyle($boldRange)->getFont()->setBold(true);
+    $row++;
+    $row++;
 }
 
 function buildBsSheet(Spreadsheet $spreadsheet, array $fs, string $companyName, string $fyName): void
@@ -95,11 +108,8 @@ function buildBsSheet(Spreadsheet $spreadsheet, array $fs, string $companyName, 
     $sheet->setTitle('Balance Sheet');
 
     $data = $fs['data'] ?? [];
-    $prevData = [];
-    if (!($fs['is_first_year'] ?? false)) {
-        $prevData = array_filter($data, function ($k) { return str_starts_with((string) $k, 'prev_'); }, ARRAY_FILTER_USE_KEY);
-    }
-    $hasPrev = !empty($prevData);
+    $hasPrev = !($fs['is_first_year'] ?? false);
+    $lastCol = $hasPrev ? 'D' : 'C';
 
     $r = 1;
     $sheet->setCellValue('A1', $companyName);
@@ -110,61 +120,42 @@ function buildBsSheet(Spreadsheet $spreadsheet, array $fs, string $companyName, 
     $r = 4;
 
     if ($hasPrev) {
-        writeTableHeader($sheet, $r, ['Particulars', 'Note', 'Current (₹)', 'Previous (₹)']);
+        writeXlsxHeader($sheet, $r, ['Particulars', 'Note', 'Current (₹)', 'Previous (₹)']);
     } else {
-        writeTableHeader($sheet, $r, ['Particulars', 'Note', 'Current (₹)']);
+        writeXlsxHeader($sheet, $r, ['Particulars', 'Note', 'Current (₹)']);
     }
     $r++;
 
-    $bsSections = [
-        'EQUITY AND LIABILITIES' => [
-            'items' => [
-                'capital' => 'Capital / Equity',
-                'reserves' => 'Reserves & Surplus',
-                'borrowings' => 'Borrowings',
-                'payables' => 'Trade Payables',
-                'current_liabilities' => 'Other Current Liabilities',
-            ],
-            'total' => 'total_liabilities',
+    writeXlsxSection($sheet, $r, 'EQUITY AND LIABILITIES', [
+        'items' => [
+            'capital' => 'Capital / Equity',
+            'reserves' => 'Reserves & Surplus',
+            'borrowings' => 'Borrowings',
+            'payables' => 'Trade Payables',
+            'current_liabilities' => 'Other Current Liabilities',
         ],
-        'ASSETS' => [
-            'items' => [
-                'fixed_assets' => 'Fixed Assets',
-                'investments' => 'Investments',
-                'loans' => 'Loans & Advances',
-                'inventory' => 'Inventory',
-                'receivables' => 'Trade Receivables',
-                'cash' => 'Cash & Bank',
-                'other_current_assets' => 'Other Current Assets',
-            ],
-            'total' => 'total_assets',
+        'total' => 'total_liabilities',
+    ], $data, $hasPrev, $lastCol);
+
+    writeXlsxSection($sheet, $r, 'ASSETS', [
+        'items' => [
+            'fixed_assets' => 'Fixed Assets',
+            'investments' => 'Investments',
+            'loans' => 'Loans & Advances',
+            'inventory' => 'Inventory',
+            'receivables' => 'Trade Receivables',
+            'cash' => 'Cash & Bank',
+            'other_current_assets' => 'Other Current Assets',
         ],
-    ];
-
-    foreach ($bsSections as $sectionName => $section) {
-        $sheet->setCellValue('A' . $r, $sectionName);
-        applySectionStyle($sheet, $r);
-        $r++;
-
-        writeSummaryRows($sheet, $r, $section['items'], $data, $prevData);
-
-        $totalVal = (float) ($data[$section['total']] ?? 0);
-        $prevTotalVal = (float) ($prevData['prev_' . $section['total']] ?? 0);
-        writeDataRow($sheet, $r, ['TOTAL', '', $totalVal], [2]);
-        if ($hasPrev) {
-            $sheet->setCellValue('D' . $r, $prevTotalVal);
-            $sheet->getStyle('D' . $r)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle('D' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        }
-        $sheet->getStyle('A' . $r . ':' . ($hasPrev ? 'D' : 'C') . $r)->getFont()->setBold(true);
-        $r++;
-        $r++;
-    }
+        'total' => 'total_assets',
+    ], $data, $hasPrev, $lastCol);
 
     $colCount = $hasPrev ? 4 : 3;
-    applyTableBorders($sheet, 4, $r - 2, $colCount);
+    $lastColL = colLetter($colCount);
+    $sheet->getStyle("A4:{$lastColL}" . ($r - 2))->getBorders()->getAllBorders()
+        ->setBorderStyle(Border::BORDER_THIN);
 
-    foreach (range('A', chr(64 + $colCount)) as $col) {
+    foreach (range('A', $lastColL) as $col) {
         $sheet->getColumnDimension($col)->setAutoSize(true);
     }
 }
@@ -176,6 +167,9 @@ function buildPlSheet(Spreadsheet $spreadsheet, array $fs, string $companyName, 
 
     $data = $fs['data'] ?? [];
     $hasPrev = !($fs['is_first_year'] ?? false);
+    $lastCol = $hasPrev ? 'D' : 'C';
+
+    $plLabel = ($fs['entity_subcategory'] ?? '') === 'trust' ? 'Income & Expenditure' : 'Profit & Loss';
 
     $r = 1;
     $sheet->setCellValue('A1', $companyName);
@@ -185,74 +179,76 @@ function buildPlSheet(Spreadsheet $spreadsheet, array $fs, string $companyName, 
     $sheet->getStyle('A2')->getFont()->setSize(11);
     $r = 4;
 
-    $plLabel = ($fs['entity_subcategory'] ?? '') === 'trust' ? 'Income & Expenditure' : 'Profit & Loss';
-
     if ($hasPrev) {
-        writeTableHeader($sheet, $r, ['Particulars', 'Note', 'Current (₹)', 'Previous (₹)']);
+        writeXlsxHeader($sheet, $r, ['Particulars', 'Note', 'Current (₹)', 'Previous (₹)']);
     } else {
-        writeTableHeader($sheet, $r, ['Particulars', 'Note', 'Current (₹)']);
+        writeXlsxHeader($sheet, $r, ['Particulars', 'Note', 'Current (₹)']);
     }
     $r++;
 
-    $plItems = [
+    writeXlsxSummaryRows($sheet, $r, [
         'revenue' => 'Revenue / Income',
         'other_income' => 'Other Income',
-    ];
-    $expenseItems = [
-        'employee_cost' => 'Employee Cost',
-        'finance_cost' => 'Finance Cost',
-        'depreciation' => 'Depreciation',
-        'other_expenses' => 'Other Expenses',
-    ];
-
-    writeSummaryRows($sheet, $r, $plItems, $data, $prevData ?? [], 1);
+    ], $data, $hasPrev, $lastCol);
 
     $totalIncome = (float) ($data['revenue'] ?? 0) + (float) ($data['other_income'] ?? 0);
-    $prevTotalIncome = (float) ($prevData['prev_revenue'] ?? 0) + (float) ($prevData['prev_other_income'] ?? 0);
-    writeDataRow($sheet, $r, ['Total Income', '', $totalIncome], [2]);
+    writeXlsxRow($sheet, $r, ['Total Income', '', $totalIncome], [2]);
     $sheet->getStyle('A' . $r)->getFont()->setBold(true);
     if ($hasPrev) {
-        $sheet->setCellValue('D' . $r, $prevTotalIncome);
-        $sheet->getStyle('D' . $r)->getNumberFormat()->setFormatCode('#,##0.00');
-        $sheet->getStyle('D' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        $sheet->getStyle('D' . $r)->getFont()->setBold(true);
+        $prevTotalIncome = (float) ($data['prev_revenue'] ?? 0) + (float) ($data['prev_other_income'] ?? 0);
+        $sheet->setCellValue($lastCol . $r, $prevTotalIncome);
+        $sheet->getStyle($lastCol . $r)->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle($lastCol . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->getStyle($lastCol . $r)->getFont()->setBold(true);
     }
     $r++;
 
     $sheet->setCellValue('A' . $r, 'Expenses');
-    applySectionStyle($sheet, $r);
+    $range = 'A' . $r . ':' . $lastCol . $r;
+    $sheet->getStyle($range)->getFont()->setBold(true);
+    $sheet->getStyle($range)->getFill()
+        ->setFillType(Fill::FILL_SOLID)
+        ->getStartColor()->setARGB('FFF0F4F8');
     $r++;
 
-    writeSummaryRows($sheet, $r, $expenseItems, $data, $prevData ?? [], 1);
+    writeXlsxSummaryRows($sheet, $r, [
+        'employee_cost' => 'Employee Cost',
+        'finance_cost' => 'Finance Cost',
+        'depreciation' => 'Depreciation',
+        'other_expenses' => 'Other Expenses',
+    ], $data, $hasPrev, $lastCol);
 
     $totalExpenses = (float) ($data['expenses'] ?? 0);
-    $prevTotalExpenses = (float) ($prevData['prev_expenses'] ?? 0);
-    writeDataRow($sheet, $r, ['Total Expenses', '', $totalExpenses], [2]);
+    writeXlsxRow($sheet, $r, ['Total Expenses', '', $totalExpenses], [2]);
     $sheet->getStyle('A' . $r)->getFont()->setBold(true);
     if ($hasPrev) {
-        $sheet->setCellValue('D' . $r, $prevTotalExpenses);
-        $sheet->getStyle('D' . $r)->getNumberFormat()->setFormatCode('#,##0.00');
-        $sheet->getStyle('D' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        $sheet->getStyle('D' . $r)->getFont()->setBold(true);
+        $prevTotalExpenses = (float) ($data['prev_expenses'] ?? 0);
+        $sheet->setCellValue($lastCol . $r, $prevTotalExpenses);
+        $sheet->getStyle($lastCol . $r)->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle($lastCol . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->getStyle($lastCol . $r)->getFont()->setBold(true);
     }
     $r++;
 
     $netProfit = $totalIncome - $totalExpenses;
-    $prevNetProfit = $prevTotalIncome - $prevTotalExpenses;
-    writeDataRow($sheet, $r, ['Net ' . $plLabel, '', $netProfit], [2]);
+    writeXlsxRow($sheet, $r, ['Net ' . $plLabel, '', $netProfit], [2]);
     $sheet->getStyle('A' . $r)->getFont()->setBold(true);
     if ($hasPrev) {
-        $sheet->setCellValue('D' . $r, $prevNetProfit);
-        $sheet->getStyle('D' . $r)->getNumberFormat()->setFormatCode('#,##0.00');
-        $sheet->getStyle('D' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        $sheet->getStyle('D' . $r)->getFont()->setBold(true);
+        $prevNetProfit = (float) ($data['prev_revenue'] ?? 0) + (float) ($data['prev_other_income'] ?? 0)
+            - (float) ($data['prev_expenses'] ?? 0);
+        $sheet->setCellValue($lastCol . $r, $prevNetProfit);
+        $sheet->getStyle($lastCol . $r)->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle($lastCol . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->getStyle($lastCol . $r)->getFont()->setBold(true);
     }
     $r++;
 
     $colCount = $hasPrev ? 4 : 3;
-    applyTableBorders($sheet, 4, $r - 1, $colCount);
+    $lastColL = colLetter($colCount);
+    $sheet->getStyle("A4:{$lastColL}" . ($r - 1))->getBorders()->getAllBorders()
+        ->setBorderStyle(Border::BORDER_THIN);
 
-    foreach (range('A', chr(64 + $colCount)) as $col) {
+    foreach (range('A', $lastColL) as $col) {
         $sheet->getColumnDimension($col)->setAutoSize(true);
     }
 }
@@ -262,6 +258,7 @@ function buildNotesSheets(Spreadsheet $spreadsheet, array $fs): void
     $notes = $fs['notes'] ?? [];
     $sections = $notes['sections'] ?? [];
     $hasPrev = !($fs['is_first_year'] ?? false);
+    $lastCol = $hasPrev ? 'C' : 'B';
 
     foreach ($sections as $section) {
         $title = $section['title'] ?? 'Note';
@@ -279,9 +276,9 @@ function buildNotesSheets(Spreadsheet $spreadsheet, array $fs): void
         $r = 3;
 
         if ($hasPrev) {
-            writeTableHeader($sheet, $r, ['Particulars', 'Current (₹)', 'Previous (₹)']);
+            writeXlsxHeader($sheet, $r, ['Particulars', 'Current (₹)', 'Previous (₹)']);
         } else {
-            writeTableHeader($sheet, $r, ['Particulars', 'Current (₹)']);
+            writeXlsxHeader($sheet, $r, ['Particulars', 'Current (₹)']);
         }
         $r++;
 
@@ -289,30 +286,32 @@ function buildNotesSheets(Spreadsheet $spreadsheet, array $fs): void
             $label = $line['label'] ?? '';
             $current = (float) ($line['current'] ?? 0);
             $previous = (float) ($line['previous'] ?? 0);
-            writeDataRow($sheet, $r, [$label, $current], [1]);
+            writeXlsxRow($sheet, $r, [$label, $current], [1]);
             if ($hasPrev) {
-                $sheet->setCellValue('C' . $r, $previous);
-                $sheet->getStyle('C' . $r)->getNumberFormat()->setFormatCode('#,##0.00');
-                $sheet->getStyle('C' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                $sheet->setCellValue($lastCol . $r, $previous);
+                $sheet->getStyle($lastCol . $r)->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle($lastCol . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             }
             $r++;
         }
 
-        writeDataRow($sheet, $r, ['Total', $currentTotal], [1]);
+        writeXlsxRow($sheet, $r, ['Total', $currentTotal], [1]);
         $sheet->getStyle('A' . $r)->getFont()->setBold(true);
         $sheet->getStyle('B' . $r)->getFont()->setBold(true);
         if ($hasPrev) {
-            $sheet->setCellValue('C' . $r, $previousTotal);
-            $sheet->getStyle('C' . $r)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle('C' . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-            $sheet->getStyle('C' . $r)->getFont()->setBold(true);
+            $sheet->setCellValue($lastCol . $r, $previousTotal);
+            $sheet->getStyle($lastCol . $r)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle($lastCol . $r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet->getStyle($lastCol . $r)->getFont()->setBold(true);
         }
         $r++;
 
         $colCount = $hasPrev ? 3 : 2;
-        applyTableBorders($sheet, 3, $r, $colCount);
+        $lastColL = colLetter($colCount);
+        $sheet->getStyle("A3:{$lastColL}{$r}")->getBorders()->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN);
 
-        foreach (range('A', chr(64 + $colCount)) as $col) {
+        foreach (range('A', $lastColL) as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
     }

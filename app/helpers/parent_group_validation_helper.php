@@ -173,6 +173,11 @@ function isScheduleCodeAllowedForParentGroup(string $parentGroup, string $schedu
         return true;
     }
 
+    // inventory_change (Changes in Inventories) can come from either expense or stock groups
+    if ($scheduleCode === 'inventory_change' && str_contains(strtolower($parentGroup), 'stock')) {
+        return true;
+    }
+
     return $groupNature === $codeNature;
 }
 

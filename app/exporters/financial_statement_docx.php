@@ -8,7 +8,7 @@ use PhpOffice\PhpWord\Style\Table;
 function exportFinancialStatementsToDocx(array $fs, string $companyName, string $fyName): string
 {
     $phpWord = new PhpWord();
-    $phpWord->getProperties()->setTitle($companyName . ' - Financial Statements - ' . $fyName);
+    $phpWord->getDocumentProperties()->setTitle($companyName . ' - Financial Statements - ' . $fyName);
     $phpWord->setDefaultFontName('Calibri');
     $phpWord->setDefaultFontSize(10);
 
