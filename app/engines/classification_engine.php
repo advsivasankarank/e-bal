@@ -48,6 +48,19 @@ function normalizeScheduleBucket($scheduleCode)
         'finance_cost' => 'expenses',
         'depreciation' => 'expenses',
         'other_expenses' => 'expenses',
+        'opening_stock' => 'current_assets',
+        'purchases' => 'expenses',
+        'direct_expenses' => 'expenses',
+        'direct_income' => 'revenue',
+        'sales' => 'revenue',
+        'capital_introduced' => 'equity',
+        'drawings' => 'equity',
+        'donations' => 'revenue',
+        'grants' => 'revenue',
+        'membership_fees' => 'revenue',
+        'programme_expenses' => 'expenses',
+        'administrative_expenses' => 'expenses',
+        'corpus_fund' => 'equity',
     ];
 
     if (isset($explicitBuckets[$scheduleCode])) {
@@ -121,6 +134,19 @@ function scheduleCodeLabel($scheduleCode)
         'finance_cost' => 'Finance Cost',
         'depreciation' => 'Depreciation and Amortisation',
         'other_expenses' => 'Other Expenses',
+        'opening_stock' => 'Opening Stock',
+        'purchases' => 'Purchases',
+        'direct_expenses' => 'Direct Expenses',
+        'direct_income' => 'Direct Income',
+        'sales' => 'Sales',
+        'capital_introduced' => 'Capital Introduced',
+        'drawings' => 'Drawings',
+        'donations' => 'Donation Receipts',
+        'grants' => 'Grant Receipts',
+        'membership_fees' => 'Membership Fees',
+        'programme_expenses' => 'Programme Expenses',
+        'administrative_expenses' => 'Administrative Expenses',
+        'corpus_fund' => 'Corpus Fund',
     ];
 
     if (isset($labels[$scheduleCode])) {

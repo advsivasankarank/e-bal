@@ -118,6 +118,7 @@ function getNonCorporateSubcategoryOptions(): array
         'partnership' => 'Partnership',
         'huf' => 'HUF',
         'association_trust' => 'Association / Trust',
+        'society' => 'Society',
     ];
 }
 
@@ -305,6 +306,76 @@ function validateCompanyFormData(array $data): array
     return $errors;
 }
 
+function getEntitySubcategoryFromRow(array $row): string
+{
+    $category = strtolower((string) ($row['category'] ?? ''));
+    $category = str_replace(['-', ' '], '_', $category);
+    $noncorpSub = strtolower(trim((string) ($row['noncorp_subcategory'] ?? '')));
+
+    if ($category === 'corporate') {
+        $type = strtolower(trim((string) ($row['company_type'] ?? '')));
+        return match ($type) {
+            'plc' => 'public_limited',
+            'ptc' => 'private_limited',
+            'opc' => 'opc',
+            default => 'private_limited',
+        };
+    }
+
+    if ($category === 'llp') {
+        return 'llp';
+    }
+
+    return match ($noncorpSub) {
+        'sole_proprietorship' => 'proprietorship',
+        'partnership' => 'partnership',
+        'association_trust' => 'trust',
+        'society' => 'society',
+        'huf' => 'huf',
+        'individual' => 'individual',
+        default => 'proprietorship',
+    };
+}
+
+function getEntityTypeLabel(string $entitySubcategory): string
+{
+    return match ($entitySubcategory) {
+        'public_limited' => 'Public Limited Company',
+        'private_limited' => 'Private Limited Company',
+        'opc' => 'One Person Company',
+        'llp' => 'Limited Liability Partnership',
+        'proprietorship' => 'Proprietorship',
+        'partnership' => 'Partnership Firm',
+        'trust' => 'Trust',
+        'society' => 'Society',
+        'huf' => 'HUF',
+        'individual' => 'Individual',
+        default => 'Entity',
+    };
+}
+
+function getReportingFormat(string $entitySubcategory): string
+{
+    if (in_array($entitySubcategory, ['public_limited', 'private_limited', 'opc'], true)) {
+        return 'schedule_iii';
+    }
+    if ($entitySubcategory === 'llp') {
+        return 'llp';
+    }
+    return 'non_corporate';
+}
+
+function getConstitutionType(string $entitySubcategory): string
+{
+    if (in_array($entitySubcategory, ['public_limited', 'private_limited', 'opc'], true)) {
+        return 'Corporate';
+    }
+    if ($entitySubcategory === 'llp') {
+        return 'LLP';
+    }
+    return 'Non-Corporate';
+}
+
 function getCompanyReportingMeta(PDO $pdo, int $companyId): array
 {
     ensureCompanyReportingColumns($pdo);
@@ -342,6 +413,9 @@ function getCompanyReportingMeta(PDO $pdo, int $companyId): array
     $category = str_replace(['-', ' '], '_', $category);
     $defaultDesignation = getDefaultDesignationForCategory($category);
 
+    $entitySubcategory = getEntitySubcategoryFromRow($row);
+    $noncorpSub = strtolower(trim((string) ($row['noncorp_subcategory'] ?? '')));
+
     $signatory1Designation = (string) ($row['signatory_1_designation'] ?? '');
     if ($signatory1Designation === 'custom') {
         $signatory1Designation = (string) ($row['signatory_1_custom_designation'] ?? '');
@@ -368,5 +442,10 @@ function getCompanyReportingMeta(PDO $pdo, int $companyId): array
         'signatory_2_id_no' => (string) ($row['signatory_2_id_no'] ?? ''),
         'signatory_2_signing_authority' => (string) ($row['signatory_2_signing_authority'] ?? ''),
         'signatory_2_is_signing' => (int) ($row['signatory_2_is_signing'] ?? 0),
+        'entity_subcategory' => $entitySubcategory,
+        'entity_type' => getEntityTypeLabel($entitySubcategory),
+        'constitution_type' => getConstitutionType($entitySubcategory),
+        'reporting_format' => getReportingFormat($entitySubcategory),
+        'noncorp_subcategory' => $noncorpSub,
     ];
 }

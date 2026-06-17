@@ -94,7 +94,8 @@ if ($hasReportData) {
 <div class="active-info">
     Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
     FY: <strong><?= htmlspecialchars($fyName) ?></strong><br>
-    Format: <strong><?= htmlspecialchars($fs['title'] ?? 'Financial Statements') ?></strong>
+    Format: <strong><?= htmlspecialchars($fs['title'] ?? 'Financial Statements') ?></strong><br>
+    Entity: <strong><?= htmlspecialchars($fs['company_meta']['entity_type'] ?? 'N/A') ?></strong>
 </div>
 
 <?php if ($hasReportData): ?>

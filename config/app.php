@@ -34,6 +34,16 @@ if (!defined('TALLY_BRIDGE_WEBHOOK_TOKEN')) {
     $webhookToken = getenv('TALLY_BRIDGE_WEBHOOK_TOKEN');
     define('TALLY_BRIDGE_WEBHOOK_TOKEN', $webhookToken !== false && $webhookToken !== '' ? $webhookToken : TALLY_BRIDGE_TOKEN);
 }
+if (!defined('TALLY_ODBC_DRIVER')) {
+    define('TALLY_ODBC_DRIVER', getenv('TALLY_ODBC_DRIVER') ?: 'Tally ODBC Driver');
+}
+if (!defined('TALLY_ODBC_SERVER')) {
+    define('TALLY_ODBC_SERVER', getenv('TALLY_ODBC_SERVER') ?: 'localhost');
+}
+if (!defined('TALLY_ODBC_PORT')) {
+    define('TALLY_ODBC_PORT', getenv('TALLY_ODBC_PORT') ?: '9000');
+}
+
 define('MCA_LOOKUP_URL', getenv('MCA_LOOKUP_URL') ?: '');
 define('MCA_LOOKUP_TOKEN', getenv('MCA_LOOKUP_TOKEN') ?: '');
 define('DIRECTORS_REPORT_AI_URL', getenv('DIRECTORS_REPORT_AI_URL') ?: '');

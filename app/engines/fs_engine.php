@@ -14,6 +14,22 @@ function getEntityCategory(PDO $pdo, int $company_id): string
     return in_array($entity, ['corporate', 'llp', 'non_corporate'], true) ? $entity : 'non_corporate';
 }
 
+function getEntitySubcategory(PDO $pdo, int $company_id): string
+{
+    $meta = getCompanyReportingMeta($pdo, $company_id);
+    return $meta['entity_subcategory'] ?? 'proprietorship';
+}
+
+function isTradingEntity(string $subcategory): bool
+{
+    return in_array($subcategory, ['proprietorship', 'partnership', 'llp'], true);
+}
+
+function isReceiptsPaymentsEntity(string $subcategory): bool
+{
+    return in_array($subcategory, ['trust', 'society'], true);
+}
+
 function classifiedAmount(array $classified, string $code): float
 {
     return (float) ($classified['schedule_items'][$code]['amount'] ?? 0);
@@ -623,10 +639,12 @@ function buildLLPNotesPayload(array $classified): array
             buildDetailedNote('Partners Current Account / Reserves', buildLedgerLines($classified, ['reserves'])),
             buildDetailedNote('Borrowings', buildLedgerLines($classified, ['lt_borrowings', 'st_borrowings'])),
             buildDetailedNote('Trade Payables', buildLedgerLines($classified, ['trade_payables', 'trade_payables_msme'])),
-            buildDetailedNote('Fixed Assets', buildLedgerLines($classified, ['ppe', 'intangible_assets'])),
-            buildDetailedNote('Current Assets', buildLedgerLines($classified, ['inventory', 'receivables', 'cash', 'other_current_assets'])),
+            buildDetailedNote('Fixed Assets', buildLedgerLines($classified, ['ppe', 'cwip', 'intangible_assets'])),
+            buildDetailedNote('Loans', buildLedgerLines($classified, ['loans_non_current', 'loans_current'])),
+            buildDetailedNote('Investments', buildLedgerLines($classified, ['investments_non_current', 'investments_current'])),
+            buildDetailedNote('Current Assets', buildLedgerLines($classified, ['inventory', 'receivables', 'cash', 'bank_balances_other', 'other_current_assets'])),
             buildDetailedNote('Revenue', buildLedgerLines($classified, ['revenue', 'other_income'])),
-            buildDetailedNote('Expenses', buildLedgerLines($classified, ['materials', 'purchase_stock', 'inventory_change', 'employee_cost', 'finance_cost', 'depreciation', 'other_expenses'])),
+            buildDetailedNote('Expenses', buildLedgerLines($classified, ['materials', 'purchases', 'purchase_stock', 'inventory_change', 'direct_expenses', 'employee_cost', 'finance_cost', 'depreciation', 'other_expenses'])),
         ];
 
     return [
@@ -636,6 +654,8 @@ function buildLLPNotesPayload(array $classified): array
             'Borrowings',
             'Trade Payables',
             'Fixed Assets',
+            'Loans',
+            'Investments',
             'Current Assets',
             'Revenue',
             'Expenses',
@@ -643,32 +663,49 @@ function buildLLPNotesPayload(array $classified): array
     ];
 }
 
-function buildNonCorpNotesPayload(array $classified): array
+function buildNonCorpNotesPayload(array $classified, string $subcategory = 'proprietorship'): array
 {
-    $sections = [
-            buildDetailedNote('Capital', buildLedgerLines($classified, ['share_capital', 'reserves'])),
-            buildDetailedNote('Borrowings', buildLedgerLines($classified, ['lt_borrowings', 'st_borrowings'])),
-            buildDetailedNote('Payables', buildLedgerLines($classified, ['trade_payables', 'trade_payables_msme', 'other_current_liabilities', 'other_financial_liabilities'])),
-            buildDetailedNote('Fixed Assets', buildLedgerLines($classified, ['ppe', 'intangible_assets', 'other_non_current_assets'])),
-            buildDetailedNote('Inventory', buildLedgerLines($classified, ['inventory'])),
-            buildDetailedNote('Receivables', buildLedgerLines($classified, ['receivables'])),
-            buildDetailedNote('Cash and Bank', buildLedgerLines($classified, ['cash', 'bank_balances_other'])),
-            buildDetailedNote('Revenue', buildLedgerLines($classified, ['revenue', 'other_income'])),
-            buildDetailedNote('Expenses', buildLedgerLines($classified, ['materials', 'purchase_stock', 'inventory_change', 'employee_cost', 'finance_cost', 'depreciation', 'other_expenses'])),
+    $baseSections = [
+        'Capital' => buildDetailedNote('Capital', buildLedgerLines($classified, ['share_capital', 'reserves', 'corpus_fund'])),
+        'Borrowings' => buildDetailedNote('Borrowings', buildLedgerLines($classified, ['lt_borrowings', 'st_borrowings'])),
+        'Payables' => buildDetailedNote('Payables', buildLedgerLines($classified, ['trade_payables', 'trade_payables_msme', 'other_financial_liabilities'])),
+        'Current Liabilities' => buildDetailedNote('Current Liabilities', buildLedgerLines($classified, ['other_current_liabilities', 'short_term_provisions'])),
+        'Fixed Assets' => buildDetailedNote('Fixed Assets', buildLedgerLines($classified, ['ppe', 'cwip', 'intangible_assets'])),
+        'Loans' => buildDetailedNote('Loans', buildLedgerLines($classified, ['loans_non_current', 'loans_current'])),
+        'Investments' => buildDetailedNote('Investments', buildLedgerLines($classified, ['investments_non_current', 'investments_current'])),
+        'Inventory' => buildDetailedNote('Inventory', buildLedgerLines($classified, ['inventory'])),
+        'Receivables' => buildDetailedNote('Receivables', buildLedgerLines($classified, ['receivables'])),
+        'Cash and Bank' => buildDetailedNote('Cash and Bank', buildLedgerLines($classified, ['cash', 'bank_balances_other'])),
+        'Other Current Assets' => buildDetailedNote('Other Current Assets', buildLedgerLines($classified, ['other_current_assets'])),
+        'Revenue' => buildDetailedNote('Revenue', buildLedgerLines($classified, ['revenue', 'sales', 'direct_income', 'donations', 'grants', 'membership_fees'])),
+        'Expenses' => buildDetailedNote('Expenses', buildLedgerLines($classified, ['materials', 'purchases', 'purchase_stock', 'inventory_change', 'direct_expenses', 'employee_cost', 'finance_cost', 'depreciation', 'administrative_expenses', 'programme_expenses', 'other_expenses'])),
+    ];
+
+    $order = [
+        'Capital', 'Borrowings', 'Payables', 'Current Liabilities',
+        'Fixed Assets', 'Loans', 'Investments', 'Inventory',
+        'Receivables', 'Cash and Bank', 'Other Current Assets',
+        'Revenue', 'Expenses',
+    ];
+
+    if (isReceiptsPaymentsEntity($subcategory)) {
+        $order = [
+            'Capital', 'Borrowings', 'Payables', 'Current Liabilities',
+            'Fixed Assets', 'Loans', 'Investments', 'Inventory',
+            'Receivables', 'Cash and Bank', 'Other Current Assets',
+            'Revenue', 'Expenses',
         ];
+    }
+
+    $sections = [];
+    foreach ($order as $key) {
+        if (isset($baseSections[$key])) {
+            $sections[] = $baseSections[$key];
+        }
+    }
 
     return [
-        'sections' => assignSequentialNoteMetadata($sections, [
-            'Capital',
-            'Borrowings',
-            'Payables',
-            'Fixed Assets',
-            'Inventory',
-            'Receivables',
-            'Cash and Bank',
-            'Revenue',
-            'Expenses',
-        ]),
+        'sections' => assignSequentialNoteMetadata($sections, $order),
     ];
 }
 
@@ -846,12 +883,24 @@ function buildLLPSummaryFromNotes(array $classified, array $notes, string $fyLab
         'prev_expenses' => $sectionTotals['Expenses']['previous'] ?? 0,
         'remuneration' => 0,
         'prev_remuneration' => 0,
+        'purchases' => classifiedAmount($classified, 'purchases') ?: classifiedAmount($classified, 'purchase_stock'),
+        'prev_purchases' => classifiedPreviousAmount($classified, 'purchases') ?: classifiedPreviousAmount($classified, 'purchase_stock'),
+        'direct_expenses' => classifiedAmount($classified, 'direct_expenses') ?: classifiedAmount($classified, 'materials'),
+        'prev_direct_expenses' => classifiedPreviousAmount($classified, 'direct_expenses') ?: classifiedPreviousAmount($classified, 'materials'),
+        'capital_introduced' => classifiedAmount($classified, 'capital_introduced'),
+        'prev_capital_introduced' => classifiedPreviousAmount($classified, 'capital_introduced'),
+        'drawings' => classifiedAmount($classified, 'drawings'),
+        'prev_drawings' => classifiedPreviousAmount($classified, 'drawings'),
+        'inventory' => $sectionTotals['Current Assets']['current'] ?? 0,
+        'prev_inventory' => $sectionTotals['Current Assets']['previous'] ?? 0,
     ];
 
     $data['pbr'] = $data['revenue'] - $data['expenses'];
     $data['prev_pbr'] = $data['prev_revenue'] - $data['prev_expenses'];
     $data['pat'] = $data['pbr'] - $data['remuneration'];
     $data['prev_pat'] = $data['prev_pbr'] - $data['prev_remuneration'];
+    $data['current_accounts'] = ($sectionTotals['Partners Current Account / Reserves']['current'] ?? 0) + $data['pat'];
+    $data['prev_current_accounts'] = ($sectionTotals['Partners Current Account / Reserves']['previous'] ?? 0) + $data['prev_pat'];
     $data['total'] = $data['capital'] + $data['current_accounts'] + $data['borrowings'];
     $data['prev_total'] = $data['prev_capital'] + $data['prev_current_accounts'] + $data['prev_borrowings'];
     $data['note_refs'] = buildNoteIndex($notes['sections'] ?? []);
@@ -859,7 +908,7 @@ function buildLLPSummaryFromNotes(array $classified, array $notes, string $fyLab
     return $data;
 }
 
-function buildNonCorpSummaryFromNotes(array $classified, array $notes, string $fyLabel): array
+function buildNonCorpSummaryFromNotes(array $classified, array $notes, string $fyLabel, string $subcategory = 'proprietorship'): array
 {
     $sectionTotals = [];
     foreach (($notes['sections'] ?? []) as $section) {
@@ -869,49 +918,146 @@ function buildNonCorpSummaryFromNotes(array $classified, array $notes, string $f
         ];
     }
 
+    $capital = $sectionTotals['Capital']['current'] ?? 0;
+    $prevCapital = $sectionTotals['Capital']['previous'] ?? 0;
+    $borrowings = ($sectionTotals['Borrowings']['current'] ?? 0);
+    $prevBorrowings = ($sectionTotals['Borrowings']['previous'] ?? 0);
+    $payables = ($sectionTotals['Payables']['current'] ?? 0);
+    $prevPayables = ($sectionTotals['Payables']['previous'] ?? 0);
+    $currentLiabilities = ($sectionTotals['Current Liabilities']['current'] ?? 0);
+    $prevCurrentLiabilities = ($sectionTotals['Current Liabilities']['previous'] ?? 0);
+    $fixedAssets = $sectionTotals['Fixed Assets']['current'] ?? 0;
+    $prevFixedAssets = $sectionTotals['Fixed Assets']['previous'] ?? 0;
+    $loans = $sectionTotals['Loans']['current'] ?? 0;
+    $prevLoans = $sectionTotals['Loans']['previous'] ?? 0;
+    $investments = $sectionTotals['Investments']['current'] ?? 0;
+    $prevInvestments = $sectionTotals['Investments']['previous'] ?? 0;
+    $inventory = $sectionTotals['Inventory']['current'] ?? 0;
+    $prevInventory = $sectionTotals['Inventory']['previous'] ?? 0;
+    $receivables = $sectionTotals['Receivables']['current'] ?? 0;
+    $prevReceivables = $sectionTotals['Receivables']['previous'] ?? 0;
+    $cash = $sectionTotals['Cash and Bank']['current'] ?? 0;
+    $prevCash = $sectionTotals['Cash and Bank']['previous'] ?? 0;
+    $otherCurrentAssets = $sectionTotals['Other Current Assets']['current'] ?? 0;
+    $prevOtherCurrentAssets = $sectionTotals['Other Current Assets']['previous'] ?? 0;
+    $revenue = $sectionTotals['Revenue']['current'] ?? 0;
+    $prevRevenue = $sectionTotals['Revenue']['previous'] ?? 0;
+    $expenses = $sectionTotals['Expenses']['current'] ?? 0;
+    $prevExpenses = $sectionTotals['Expenses']['previous'] ?? 0;
+
     $data = [
         'date' => $fyLabel,
-        'capital' => $sectionTotals['Capital']['current'] ?? 0,
-        'prev_capital' => $sectionTotals['Capital']['previous'] ?? 0,
+        'capital' => $capital,
+        'prev_capital' => $prevCapital,
         'reserves' => 0,
         'prev_reserves' => 0,
-        'borrowings' => ($sectionTotals['Borrowings']['current'] ?? 0),
-        'prev_borrowings' => ($sectionTotals['Borrowings']['previous'] ?? 0),
-        'payables' => ($sectionTotals['Payables']['current'] ?? 0),
-        'prev_payables' => ($sectionTotals['Payables']['previous'] ?? 0),
-        'fixed_assets' => $sectionTotals['Fixed Assets']['current'] ?? 0,
-        'prev_fixed_assets' => $sectionTotals['Fixed Assets']['previous'] ?? 0,
-        'inventory' => $sectionTotals['Inventory']['current'] ?? 0,
-        'prev_inventory' => $sectionTotals['Inventory']['previous'] ?? 0,
-        'receivables' => $sectionTotals['Receivables']['current'] ?? 0,
-        'prev_receivables' => $sectionTotals['Receivables']['previous'] ?? 0,
-        'cash' => $sectionTotals['Cash and Bank']['current'] ?? 0,
-        'prev_cash' => $sectionTotals['Cash and Bank']['previous'] ?? 0,
-        'revenue' => $sectionTotals['Revenue']['current'] ?? 0,
-        'prev_revenue' => $sectionTotals['Revenue']['previous'] ?? 0,
-        'other_income' => 0,
-        'prev_other_income' => 0,
-        'expenses' => $sectionTotals['Expenses']['current'] ?? 0,
-        'prev_expenses' => $sectionTotals['Expenses']['previous'] ?? 0,
+        'borrowings' => $borrowings,
+        'prev_borrowings' => $prevBorrowings,
+        'payables' => $payables,
+        'prev_payables' => $prevPayables,
+        'current_liabilities' => $currentLiabilities,
+        'prev_current_liabilities' => $prevCurrentLiabilities,
+        'fixed_assets' => $fixedAssets,
+        'prev_fixed_assets' => $prevFixedAssets,
+        'loans' => $loans,
+        'prev_loans' => $prevLoans,
+        'investments' => $investments,
+        'prev_investments' => $prevInvestments,
+        'inventory' => $inventory,
+        'prev_inventory' => $prevInventory,
+        'receivables' => $receivables,
+        'prev_receivables' => $prevReceivables,
+        'cash' => $cash,
+        'prev_cash' => $prevCash,
+        'other_current_assets' => $otherCurrentAssets,
+        'prev_other_current_assets' => $prevOtherCurrentAssets,
+        'current_assets' => $inventory + $receivables + $cash + $otherCurrentAssets,
+        'prev_current_assets' => $prevInventory + $prevReceivables + $prevCash + $prevOtherCurrentAssets,
+        'revenue' => $revenue,
+        'prev_revenue' => $prevRevenue,
+        'expenses' => $expenses,
+        'prev_expenses' => $prevExpenses,
         'tax' => 0,
         'prev_tax' => 0,
+        'other_income' => classifiedAmount($classified, 'other_income') ?: 0,
+        'prev_other_income' => classifiedPreviousAmount($classified, 'other_income') ?: 0,
+        'employee_cost' => classifiedAmount($classified, 'employee_cost') ?: 0,
+        'prev_employee_cost' => classifiedPreviousAmount($classified, 'employee_cost') ?: 0,
+        'finance_cost' => classifiedAmount($classified, 'finance_cost') ?: 0,
+        'prev_finance_cost' => classifiedPreviousAmount($classified, 'finance_cost') ?: 0,
+        'depreciation' => classifiedAmount($classified, 'depreciation') ?: 0,
+        'prev_depreciation' => classifiedPreviousAmount($classified, 'depreciation') ?: 0,
+        'other_expenses' => classifiedAmount($classified, 'other_expenses') ?: 0,
+        'prev_other_expenses' => classifiedPreviousAmount($classified, 'other_expenses') ?: 0,
     ];
 
-    $data['pbt'] = $data['revenue'] + $data['other_income'] - $data['expenses'];
-    $data['prev_pbt'] = $data['prev_revenue'] + $data['prev_other_income'] - $data['prev_expenses'];
-    $data['pat'] = $data['pbt'] - $data['tax'];
-    $data['prev_pat'] = $data['prev_pbt'] - $data['prev_tax'];
-    $data['total'] = $data['capital'] + $data['reserves'] + $data['borrowings'] + $data['payables'];
-    $data['prev_total'] = $data['prev_capital'] + $data['prev_reserves'] + $data['prev_borrowings'] + $data['prev_payables'];
+    $data['sales'] = classifiedAmount($classified, 'sales') ?: $revenue;
+    $data['prev_sales'] = classifiedPreviousAmount($classified, 'sales') ?: $prevRevenue;
+    $data['purchases'] = classifiedAmount($classified, 'purchases') ?: classifiedAmount($classified, 'purchase_stock');
+    $data['prev_purchases'] = classifiedPreviousAmount($classified, 'purchases') ?: classifiedPreviousAmount($classified, 'purchase_stock');
+    $data['direct_expenses'] = classifiedAmount($classified, 'direct_expenses') ?: classifiedAmount($classified, 'materials');
+    $data['prev_direct_expenses'] = classifiedPreviousAmount($classified, 'direct_expenses') ?: classifiedPreviousAmount($classified, 'materials');
+    $data['opening_stock_val'] = classifiedAmount($classified, 'opening_stock');
+    $data['prev_opening_stock_val'] = classifiedPreviousAmount($classified, 'opening_stock');
+    $data['closing_stock_val'] = $inventory;
+    $data['prev_closing_stock_val'] = $prevInventory;
+
+    $data['capital_introduced'] = classifiedAmount($classified, 'capital_introduced');
+    $data['prev_capital_introduced'] = classifiedPreviousAmount($classified, 'capital_introduced');
+    $data['drawings'] = classifiedAmount($classified, 'drawings');
+    $data['prev_drawings'] = classifiedPreviousAmount($classified, 'drawings');
+
+    $data['corpus_fund'] = classifiedAmount($classified, 'corpus_fund') ?: 0;
+    $data['prev_corpus_fund'] = classifiedPreviousAmount($classified, 'corpus_fund') ?: 0;
+
+    $data['donations'] = classifiedAmount($classified, 'donations');
+    $data['prev_donations'] = classifiedPreviousAmount($classified, 'donations');
+    $data['grants'] = classifiedAmount($classified, 'grants');
+    $data['prev_grants'] = classifiedPreviousAmount($classified, 'grants');
+    $data['membership_fees'] = classifiedAmount($classified, 'membership_fees');
+    $data['prev_membership_fees'] = classifiedPreviousAmount($classified, 'membership_fees');
+    $data['administrative_expenses'] = classifiedAmount($classified, 'administrative_expenses');
+    $data['prev_administrative_expenses'] = classifiedPreviousAmount($classified, 'administrative_expenses');
+    $data['programme_expenses'] = classifiedAmount($classified, 'programme_expenses');
+    $data['prev_programme_expenses'] = classifiedPreviousAmount($classified, 'programme_expenses');
+
+    $operatingExpenses = $data['employee_cost'] + $data['finance_cost'] + $data['depreciation'] + $data['other_expenses'];
+    $prevOperatingExpenses = $data['prev_employee_cost'] + $data['prev_finance_cost'] + $data['prev_depreciation'] + $data['prev_other_expenses'];
+    $data['operating_expenses'] = $operatingExpenses;
+    $data['prev_operating_expenses'] = $prevOperatingExpenses;
+
+    $isTradingEntity = in_array($subcategory, ['proprietorship', 'partnership', 'llp'], true);
+    if ($isTradingEntity) {
+        $gp = $data['sales'] + $data['closing_stock_val'] - $data['opening_stock_val'] - $data['purchases'] - $data['direct_expenses'];
+        $prevGp = $data['prev_sales'] + $data['prev_closing_stock_val'] - $data['prev_opening_stock_val'] - $data['prev_purchases'] - $data['prev_direct_expenses'];
+        $data['pbt'] = max($gp, 0) + $data['other_income'] - $operatingExpenses - ($gp < 0 ? abs($gp) : 0);
+        $data['prev_pbt'] = max($prevGp, 0) + $data['prev_other_income'] - $prevOperatingExpenses - ($prevGp < 0 ? abs($prevGp) : 0);
+    } else {
+        $data['pbt'] = $revenue + $data['other_income'] - $expenses;
+        $data['prev_pbt'] = $prevRevenue + $data['prev_other_income'] - $prevExpenses;
+    }
+    $data['pat'] = $data['pbt'];
+    $data['prev_pat'] = $data['prev_pbt'];
+    $data['capital'] = $capital + $data['pat'];
+    $data['prev_capital'] = $prevCapital + $data['prev_pat'];
+    $data['total_liabilities'] = $data['capital'] + $borrowings + $payables + $currentLiabilities;
+    $data['prev_total_liabilities'] = $data['prev_capital'] + $prevBorrowings + $prevPayables + $prevCurrentLiabilities;
+    $data['total_assets'] = $fixedAssets + $loans + $investments + $data['current_assets'];
+    $data['prev_total_assets'] = $prevFixedAssets + $prevLoans + $prevInvestments + $data['prev_current_assets'];
+    $data['total'] = $data['total_liabilities'];
+    $data['prev_total'] = $data['prev_total_liabilities'];
+
     $data['note_refs'] = buildNoteIndex($notes['sections'] ?? []);
+
+    $data['subcategory'] = $subcategory;
 
     return $data;
 }
 
-function buildExpectedNoteTitles(string $entity): array
+function buildExpectedNoteTitles(string $entity, string $subcategory = ''): array
 {
-    return match ($entity) {
-        'corporate' => [
+    if ($entity === 'corporate') {
+        return [
             'Share Capital',
             'Reserves & Surplus',
             'Borrowings',
@@ -940,29 +1086,41 @@ function buildExpectedNoteTitles(string $entity): array
             'Finance Cost',
             'Depreciation & Amortisation',
             'Other Expenses',
-        ],
-        'llp' => [
+        ];
+    }
+
+    if ($entity === 'llp') {
+        return [
             'Partners Capital',
             'Partners Current Account / Reserves',
             'Borrowings',
             'Trade Payables',
             'Fixed Assets',
+            'Loans',
+            'Investments',
             'Current Assets',
             'Revenue',
             'Expenses',
-        ],
-        default => [
-            'Capital',
-            'Borrowings',
-            'Payables',
-            'Fixed Assets',
-            'Inventory',
-            'Receivables',
-            'Cash and Bank',
-            'Revenue',
-            'Expenses',
-        ],
-    };
+        ];
+    }
+
+    $titles = [
+        'Capital',
+        'Borrowings',
+        'Payables',
+        'Current Liabilities',
+        'Fixed Assets',
+        'Loans',
+        'Investments',
+        'Inventory',
+        'Receivables',
+        'Cash and Bank',
+        'Other Current Assets',
+        'Revenue',
+        'Expenses',
+    ];
+
+    return $titles;
 }
 
 function normalizeNoteAuditTitle(string $title): string
@@ -973,9 +1131,9 @@ function normalizeNoteAuditTitle(string $title): string
     return trim((string) $normalized);
 }
 
-function buildNoteCompletenessAudit(string $entity, array $sections): array
+function buildNoteCompletenessAudit(string $entity, array $sections, string $subcategory = ''): array
 {
-    $expected = buildExpectedNoteTitles($entity);
+    $expected = buildExpectedNoteTitles($entity, $subcategory);
     $availableMap = [];
 
     foreach ($sections as $section) {
@@ -1007,6 +1165,7 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
     $entity = getEntityCategory($pdo, $company_id);
     $classified = getClassifiedData($pdo, $company_id, $fy_id);
     $companyMeta = getCompanyReportingMeta($pdo, $company_id);
+    $subcategory = $companyMeta['entity_subcategory'] ?? 'proprietorship';
     $fyDisplay = $fyLabel !== '' ? $fyLabel : ('FY ' . $fy_id);
 
     switch ($entity) {
@@ -1028,17 +1187,20 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
 
         case 'non_corporate':
         default:
-            $notes = buildNonCorpNotesPayload($classified);
-            $data = buildNonCorpSummaryFromNotes($classified, $notes, $fyDisplay);
+            $notes = buildNonCorpNotesPayload($classified, $subcategory);
+            $data = buildNonCorpSummaryFromNotes($classified, $notes, $fyDisplay, $subcategory);
             $formatTemplate = __DIR__ . '/../../public/reports_dashboard/formats/noncorporate_format.php';
             $notesTemplate = __DIR__ . '/../../public/reports_dashboard/formats/notes_noncorp.php';
             $title = 'Non-Corporate Financial Statements';
             break;
     }
 
+    $data['entity_subcategory'] = $subcategory;
+
     return [
         'title' => $title,
         'entity_category' => $entity,
+        'entity_subcategory' => $subcategory,
         'format_template' => $formatTemplate,
         'notes_template' => $notesTemplate,
         'data' => $data,
@@ -1051,7 +1213,7 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
             'current_balance_difference' => round((float) (($data['total_assets'] ?? $data['total'] ?? 0) - ($data['total_liabilities'] ?? $data['total'] ?? 0)), 2),
             'previous_balance_difference' => round((float) (($data['prev_total_assets'] ?? $data['prev_total'] ?? 0) - ($data['prev_total_liabilities'] ?? $data['prev_total'] ?? 0)), 2),
             'parent_group_conflicts' => $classified['validation']['parent_group_conflicts'] ?? [],
-            'note_completeness' => buildNoteCompletenessAudit($entity, $notes['sections'] ?? []),
+            'note_completeness' => buildNoteCompletenessAudit($entity, $notes['sections'] ?? [], $subcategory),
         ],
         'has_data' => array_sum(array_map(static fn ($value) => abs((float) $value), $classified['summary'])) > 0,
     ];

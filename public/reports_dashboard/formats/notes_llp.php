@@ -1,9 +1,30 @@
 <?php
+$llpNetProfit = max(($data['pbr'] ?? 0), 0);
+$prevLlpNetProfit = max(($data['prev_pbr'] ?? 0), 0);
 ?>
 
 <section class="report-page notes-shell" id="notes-to-accounts">
 <h2 class="report-page-title">Notes to Accounts (LLP)</h2>
 <p class="report-page-subtitle notes-cover">Detailed disclosures supporting the LLP financial statements.</p>
+
+<div class="note-block">
+<h3 class="note-heading" id="note-capital-movement">Capital Account Movement</h3>
+<table class="note-table" border="1" width="100%">
+    <thead>
+    <tr><th>Particulars</th><th class="figure">Current Year</th><th class="figure">Previous Year</th></tr>
+    </thead>
+    <tbody>
+    <tr><td>Opening Capital</td><td class="figure"><?= format_inr($data['prev_capital']) ?></td><td class="figure"><?= format_inr(0) ?></td></tr>
+    <tr><td>Add: Capital Introduced</td><td class="figure"><?= format_inr($data['capital_introduced'] ?? 0) ?></td><td class="figure"><?= format_inr($data['prev_capital_introduced'] ?? 0) ?></td></tr>
+    <tr><td>Add: Net Profit</td><td class="figure"><?= format_inr(max($data['pat'], 0)) ?></td><td class="figure"><?= format_inr(max($data['prev_pat'], 0)) ?></td></tr>
+    <tr><td>Less: Drawings</td><td class="figure"><?= format_inr($data['drawings'] ?? 0) ?></td><td class="figure"><?= format_inr($data['prev_drawings'] ?? 0) ?></td></tr>
+    <?php if ($data['pat'] < 0): ?>
+    <tr><td>Less: Net Loss</td><td class="figure"><?= format_inr(abs($data['pat'])) ?></td><td class="figure"><?= format_inr(abs($data['prev_pat'])) ?></td></tr>
+    <?php endif; ?>
+    <tr><td><strong>Closing Capital</strong></td><td class="figure"><strong><?= format_inr($data['capital']) ?></strong></td><td class="figure"><strong><?= format_inr($data['prev_capital']) ?></strong></td></tr>
+    </tbody>
+</table>
+</div>
 
 <?php foreach (($notes['sections'] ?? []) as $index => $section): ?>
     <div class="note-block">

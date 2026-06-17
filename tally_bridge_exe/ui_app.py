@@ -27,6 +27,7 @@ BRIDGE_VERSION = "1.1.0"
 TALLY_URL = "http://localhost:9000"
 LEDGER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_ledger.php"
 TB_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_tb.php"
+VOUCHER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/api/voucher_sync.php?action=sync"
 LISTEN_HOST_DEFAULT = "127.0.0.1"
 LISTEN_PORT_DEFAULT = 9123
 
@@ -101,6 +102,190 @@ COMPANY_XML = """<ENVELOPE>
 """
 
 
+VOUCHER_XML_TEMPLATE = """<ENVELOPE>
+    <HEADER>
+        <VERSION>1</VERSION>
+        <TALLYREQUEST>Export</TALLYREQUEST>
+        <TYPE>Collection</TYPE>
+        <ID>VoucherCollection</ID>
+    </HEADER>
+    <BODY>
+        <DESC>
+            <STATICVARIABLES>
+                <SVFROMDATE>{from_date}</SVFROMDATE>
+                <SVTODATE>{to_date}</SVTODATE>
+                <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+            </STATICVARIABLES>
+            <TDL>
+                <TDLMESSAGE>
+                    <COLLECTION NAME="VoucherCollection">
+                        <TYPE>Voucher</TYPE>
+                        <CHILDOF>$$VchVouchers</CHILDOF>
+                        <FETCH>GUID, VoucherTypeName, VoucherNumber, Date, EffectiveDate, Narration, PartyLedgerName, IsOptional, IsCancelled, AlterDate, EnteredDate, LedgerEntries</FETCH>
+                        {type_filter}
+                    </COLLECTION>
+                </TDLMESSAGE>
+            </TDL>
+        </DESC>
+    </BODY>
+</ENVELOPE>"""
+
+
+def fetch_vouchers_via_odbc(from_date, to_date, last_altered=None):
+    try:
+        import pyodbc
+    except ImportError:
+        return None
+
+    try:
+        conn_str = os.environ.get(
+            "TALLY_ODBC_CONNECTION",
+            "DSN=TallyODBC64;Server=localhost;Port=9000",
+        )
+        conn = pyodbc.connect(conn_str, timeout=5)
+        cursor = conn.cursor()
+
+        tables = [row.table_name for row in cursor.tables() if "voucher" in (row.table_name or "").lower()]
+        vtable = tables[0] if tables else "Voucher"
+
+        cursor.execute(f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{vtable}'")
+        cols = [row.column_name for row in cursor.fetchall()]
+
+        guid_col = next((c for c in cols if c in ("$GUID", "GUID", "Guid")), "$GUID")
+        alter_col = next((c for c in cols if c in ("AlteredDate", "$AlteredDate")), None)
+
+        sql = f'SELECT * FROM "{vtable}" WHERE Date >= ? AND Date <= ?'
+        params = [from_date, to_date]
+
+        if last_altered and alter_col:
+            sql += f' AND {alter_col} >= ?'
+            params.append(last_altered)
+
+        sql += ' ORDER BY Date ASC'
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+
+        vouchers = []
+        for row in rows:
+            row_dict = dict(zip([col[0] for col in cursor.description], row))
+            guid = str(row_dict.get(guid_col, "") or "")
+            if not guid:
+                continue
+
+            entries = []
+            ledger_col = next((c for c in cols if ("LedgerName" in c or "Ledger" in c) and c != guid_col and "Name" in c), None)
+            amount_col = next((c for c in cols if "Amount" in c), None)
+            if ledger_col and amount_col:
+                entries.append({
+                    "ledger_name": str(row_dict.get(ledger_col, "") or "").strip(),
+                    "amount": abs(float(row_dict.get(amount_col, 0) or 0)),
+                    "dr_cr": "DR" if float(row_dict.get(amount_col, 0) or 0) >= 0 else "CR",
+                })
+
+            vouchers.append({
+                "tally_guid": guid,
+                "voucher_type": str(row_dict.get("VoucherTypeName", "") or "").strip(),
+                "voucher_number": str(row_dict.get("VoucherNumber", "") or "").strip(),
+                "date": str(row_dict.get("Date", "") or "")[:10],
+                "narration": str(row_dict.get("Narration", "") or "").strip(),
+                "party_ledger_name": str(row_dict.get("PartyLedgerName", "") or "").strip(),
+                "is_optional": int(row_dict.get("IsOptional", 0) or 0),
+                "is_cancelled": int(row_dict.get("IsCancelled", 0) or 0),
+                "altered_date": str(row_dict.get(alter_col, "") or "")[:19] if alter_col else None,
+                "source": "odbc",
+                "entries": entries,
+            })
+
+        conn.close()
+        return vouchers if vouchers else []
+    except Exception as exc:
+        logging.warning("ODBC voucher fetch failed: %s", exc)
+        return None
+
+
+def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
+    from_date_display = datetime.strptime(from_date[:10], "%Y-%m-%d").strftime("%d-%b-%Y") if from_date else "01-Apr-2024"
+    to_date_display = datetime.strptime(to_date[:10], "%Y-%m-%d").strftime("%d-%b-%Y") if to_date else "31-Mar-2025"
+
+    type_filter = ""
+    if voucher_type:
+        type_filter = f"<VOUCHERTYPENAME>{voucher_type}</VOUCHERTYPENAME>"
+
+    xml_request = VOUCHER_XML_TEMPLATE.format(from_date=from_date_display, to_date=to_date_display, type_filter=type_filter)
+    response = fetch_from_tally(xml_request)
+
+    try:
+        root = ET.fromstring(response)
+    except ET.ParseError:
+        return None
+
+    vouchers = []
+    for voucher_node in root.iter():
+        tag = voucher_node.tag.upper()
+        if not tag.endswith("VOUCHER"):
+            continue
+        if tag.endswith("VOUCHERTYPE") or tag.endswith("VOUCHERLIST"):
+            continue
+
+        guid = voucher_node.attrib.get("GUID", "") or ""
+        if not guid:
+            continue
+
+        entries = []
+        for entry in voucher_node.iter():
+            etag = entry.tag.upper()
+            if not etag.endswith("LEDGERENTRY"):
+                continue
+            lname = (entry.findtext("LEDGERNAME") or "").strip()
+            if not lname:
+                continue
+            amt = float(entry.findtext("AMOUNT", "0") or 0)
+            entries.append({
+                "ledger_name": lname,
+                "parent_group": (entry.findtext("PARENT") or "").strip(),
+                "amount": abs(amt),
+                "dr_cr": "DR" if amt >= 0 else "CR",
+            })
+
+        alter_raw = (voucher_node.findtext("ALTERDATE") or voucher_node.findtext("ALTEREDDATE") or "").strip()
+        altered_date = None
+        if alter_raw:
+            try:
+                altered_date = datetime.strptime(alter_raw[:11], "%d %b %Y").strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                altered_date = alter_raw[:19]
+
+        vouchers.append({
+            "tally_guid": guid,
+            "voucher_type": (voucher_node.findtext("VOUCHERTYPENAME") or "").strip(),
+            "voucher_number": (voucher_node.findtext("VOUCHERNUMBER") or "").strip(),
+            "date": (voucher_node.findtext("DATE") or "")[:10],
+            "narration": (voucher_node.findtext("NARRATION") or "").strip(),
+            "party_ledger_name": (voucher_node.findtext("PARTYLEDGERNAME") or "").strip(),
+            "is_optional": int(voucher_node.findtext("ISOPTIONAL", "0") or 0),
+            "is_cancelled": int(voucher_node.findtext("ISCANCELLED", "0") or 0),
+            "altered_date": altered_date,
+            "source": "xml",
+            "entries": entries,
+        })
+
+    return vouchers if vouchers else []
+
+
+def fetch_vouchers_from_tally(from_date, to_date, last_altered=None, voucher_type=None):
+    vouchers = fetch_vouchers_via_odbc(from_date, to_date, last_altered)
+    if vouchers is not None:
+        logging.info("Fetched %d vouchers via ODBC", len(vouchers))
+        return vouchers, "odbc"
+
+    vouchers = fetch_vouchers_via_xml(from_date, to_date, voucher_type)
+    if vouchers is not None:
+        logging.info("Fetched %d vouchers via XML (fallback)", len(vouchers))
+        return vouchers, "xml"
+
+    return [], "none"
+
+
 def app_dir():
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
@@ -133,6 +318,8 @@ def load_config():
             "token": "",
             "ledger_upload_url": LEDGER_UPLOAD_DEFAULT,
             "tb_upload_url": TB_UPLOAD_DEFAULT,
+            "voucher_upload_url": VOUCHER_UPLOAD_DEFAULT,
+            "voucher_sync_enabled": True,
             "listen_host": LISTEN_HOST_DEFAULT,
             "listen_port": LISTEN_PORT_DEFAULT,
             "auto_sync": False,
@@ -158,6 +345,8 @@ def load_config():
             "token": "",
             "ledger_upload_url": LEDGER_UPLOAD_DEFAULT,
             "tb_upload_url": TB_UPLOAD_DEFAULT,
+            "voucher_upload_url": VOUCHER_UPLOAD_DEFAULT,
+            "voucher_sync_enabled": True,
             "listen_host": LISTEN_HOST_DEFAULT,
             "listen_port": LISTEN_PORT_DEFAULT,
             "auto_sync": False,
@@ -319,21 +508,28 @@ def resolve_upload_targets(base_config, override):
     site_origin = str(override.get("site_origin", "") or "").strip().rstrip("/")
     ledger_url = str(override.get("ledger_upload_url", "") or "").strip()
     tb_url = str(override.get("tb_upload_url", "") or "").strip()
+    voucher_url = str(override.get("voucher_upload_url", "") or "").strip()
 
     if site_origin:
         if ledger_url and not is_absolute_url(ledger_url):
             ledger_url = join_url(site_origin, ledger_url)
         if tb_url and not is_absolute_url(tb_url):
             tb_url = join_url(site_origin, tb_url)
+        if voucher_url and not is_absolute_url(voucher_url):
+            voucher_url = join_url(site_origin, voucher_url)
         if not ledger_url:
             ledger_url = join_url(site_origin, "/bridge_ledger.php")
         if not tb_url:
             tb_url = join_url(site_origin, "/bridge_tb.php")
+        if not voucher_url:
+            voucher_url = join_url(site_origin, "/api/voucher_sync.php?action=sync")
 
     if ledger_url:
         active_config["ledger_upload_url"] = ledger_url
     if tb_url:
         active_config["tb_upload_url"] = tb_url
+    if voucher_url:
+        active_config["voucher_upload_url"] = voucher_url
 
     for key in ("client_id",):
         value = override.get(key)
@@ -476,6 +672,7 @@ class SmartBridgeUI:
         self.sync_override = None
         ledger_url = active_config.get("ledger_upload_url") or LEDGER_UPLOAD_DEFAULT
         tb_url = active_config.get("tb_upload_url") or TB_UPLOAD_DEFAULT
+        voucher_url = active_config.get("voucher_upload_url") or VOUCHER_UPLOAD_DEFAULT
         self.target_var.set(f"Ledger: {ledger_url} | TB: {tb_url}")
 
         try:
@@ -523,15 +720,51 @@ class SmartBridgeUI:
 
         try:
             result = upload_to_server(active_config, tb_xml, tb_url)
-            self.set_last_upload("Success")
+            self.set_last_upload("TB: Success")
             logging.info("TB upload success: %s", result)
             ok, msg = is_upload_ok(result)
             if not ok:
                 raise RuntimeError(msg or "Trial balance upload failed.")
         except Exception as exc:
-            self.set_last_upload("Failed")
+            self.set_last_upload("TB: Failed")
             logging.error(str(exc))
             messagebox.showerror(APP_TITLE, f"TB upload error: {exc}")
+            self.release_sync_lock()
+            return
+
+        # Phase 2: Incremental Voucher Sync (ODBC primary, XML fallback)
+        voucher_sync_enabled = active_config.get("voucher_sync_enabled", True)
+        if voucher_sync_enabled:
+            try:
+                self.set_status("Syncing vouchers...")
+                fy_start = "01-Apr-2024"
+                fy_end = "31-Mar-2025"
+                from_date = "2024-04-01"
+                to_date = "2025-03-31"
+
+                params = {"client_id": active_config.get("client_id", ""), "action": "sync"}
+                token = str(active_config.get("token", "")).strip()
+                headers = {"Content-Type": "application/json", "User-Agent": "eBAL-Bridge/1.0 (Windows)"}
+                if token:
+                    headers["X-Bridge-Token"] = token
+                payload = {"from_date": from_date, "to_date": to_date, "fy_start": fy_start, "fy_end": fy_end}
+
+                logging.info("Voucher sync start: url=%s", voucher_url)
+                response = requests.post(voucher_url, params=params, json=payload, headers=headers, timeout=120)
+                if response.status_code >= 400:
+                    raise RuntimeError(f"Voucher sync HTTP error: {response.status_code}")
+                result_text = response.text.strip()
+                logging.info("Voucher sync response: %s", result_text[:500])
+                self.set_last_upload("Vouchers: OK")
+            except Exception as exc:
+                self.set_last_upload("Vouchers: Failed")
+                logging.error("Voucher sync error: %s", exc)
+                messagebox.showerror(APP_TITLE, f"Voucher sync error: {exc}")
+        else:
+            logging.info("Voucher sync disabled by config.")
+
+        try:
+            self.set_last_upload("All Done")
         finally:
             self.release_sync_lock()
             self.set_status("Running")
@@ -590,6 +823,7 @@ class SmartBridgeUI:
                 self.apply_cors_headers()
                 self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
+                self.send_header("Access-Control-Allow-Private-Network", "true")
                 self.end_headers()
 
             def do_GET(self):
@@ -611,6 +845,22 @@ class SmartBridgeUI:
                         self.send_json(200, {"ok": True, "company": data})
                     except Exception as exc:
                         self.send_json(502, {"ok": False, "message": f"Bridge error: {exc}"})
+                    return
+                if parsed.path == "/voucher":
+                    token = self.get_token(parsed)
+                    if not ui.is_authorized(token, "voucher"):
+                        self.send_json(401, {"ok": False, "message": "Unauthorized"})
+                        return
+                    query = urllib.parse.parse_qs(parsed.query)
+                    from_date = query.get("from_date", ["2024-04-01"])[0]
+                    to_date = query.get("to_date", ["2025-03-31"])[0]
+                    last_altered = query.get("last_altered", [None])[0]
+                    vtype = query.get("voucher_type", [None])[0]
+                    vouchers, source = fetch_vouchers_from_tally(from_date, to_date, last_altered, vtype)
+                    if vouchers is None:
+                        self.send_json(502, {"ok": False, "message": "Failed to fetch vouchers from Tally"})
+                        return
+                    self.send_json(200, {"ok": True, "count": len(vouchers), "source": source, "vouchers": vouchers})
                     return
                 if parsed.path == "/sync":
                     token = self.get_token(parsed)
@@ -646,6 +896,32 @@ class SmartBridgeUI:
                     except Exception as exc:
                         self.send_json(502, {"ok": False, "message": f"Bridge error: {exc}"})
                     return
+                if parsed.path == "/voucher":
+                    token = self.get_token(parsed)
+                    if not ui.is_authorized(token, "voucher"):
+                        self.send_json(401, {"ok": False, "message": "Unauthorized"})
+                        return
+                    length = int(self.headers.get("Content-Length", "0") or 0)
+                    body = self.rfile.read(length) if length > 0 else b""
+                    params = {"from_date": "2024-04-01", "to_date": "2025-03-31"}
+                    if body:
+                        try:
+                            payload = json.loads(body.decode("utf-8"))
+                            if isinstance(payload, dict):
+                                params.update(payload)
+                        except Exception:
+                            pass
+                    vouchers, source = fetch_vouchers_from_tally(
+                        params.get("from_date", "2024-04-01"),
+                        params.get("to_date", "2025-03-31"),
+                        params.get("last_altered"),
+                        params.get("voucher_type"),
+                    )
+                    if vouchers is None:
+                        self.send_json(502, {"ok": False, "message": "Failed to fetch vouchers from Tally"})
+                        return
+                    self.send_json(200, {"ok": True, "count": len(vouchers), "source": source, "vouchers": vouchers})
+                    return
                 if parsed.path != "/sync":
                     self.send_json(404, {"ok": False, "message": "Not found"})
                     return
@@ -664,6 +940,7 @@ class SmartBridgeUI:
                                 "client_id": payload.get("client_id", ""),
                                 "ledger_upload_url": payload.get("ledger_upload_url", ""),
                                 "tb_upload_url": payload.get("tb_upload_url", ""),
+                                "voucher_upload_url": payload.get("voucher_upload_url", ""),
                                 "site_origin": payload.get("site_origin", ""),
                             }
                     except Exception:
@@ -679,6 +956,7 @@ class SmartBridgeUI:
                         "targets": {
                             "ledger_upload_url": resolved.get("ledger_upload_url", ""),
                             "tb_upload_url": resolved.get("tb_upload_url", ""),
+                            "voucher_upload_url": resolved.get("voucher_upload_url", ""),
                         },
                     },
                 )

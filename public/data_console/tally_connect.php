@@ -152,8 +152,8 @@ $hasLivePeriod = $tallyContext && !empty($tallyContext['period_from']) && !empty
         const activeFyId = <?= (int) $fy_id ?>;
         const bridgeUrl = 'http://127.0.0.1:9123/sync';
         const bridgeContextUrl = '<?= BASE_URL ?>bridge_context.php';
-        const ledgerUploadUrl = <?= json_encode($appOrigin . BASE_URL . 'bridge_ledger.php') ?>;
-        const tbUploadUrl = <?= json_encode($appOrigin . BASE_URL . 'bridge_tb.php') ?>;
+        const ledgerUploadUrl = <?= json_encode(BASE_URL . 'bridge_ledger.php') ?>;
+        const tbUploadUrl = <?= json_encode(BASE_URL . 'bridge_tb.php') ?>;
 
         function setStatus(text) {
             const el = document.getElementById('bridgeStatus');
