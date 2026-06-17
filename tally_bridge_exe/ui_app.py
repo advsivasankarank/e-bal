@@ -449,10 +449,12 @@ def parse_company_info(xml_text):
 
 
 def upload_to_server(config, xml_data, upload_url):
+    token = str(config.get("token", "")).strip()
     params = {
         "client_id": config.get("client_id", ""),
     }
-    token = str(config.get("token", "")).strip()
+    if token:
+        params["token"] = token
     headers = {
         "Content-Type": "application/xml",
         "User-Agent": "eBAL-Bridge/1.0 (Windows)",

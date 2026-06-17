@@ -7,10 +7,14 @@ require_once __DIR__ . '/../app/helpers/runtime_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-$token = trim((string) ($_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? ''));
-$clientId = trim((string) ($_GET['client_id'] ?? ($_SERVER['HTTP_X_CLIENT_ID'] ?? '')));
-$companyId = (int) ($_SERVER['HTTP_X_COMPANY_ID'] ?? 0);
-$fyId = (int) ($_SERVER['HTTP_X_FY_ID'] ?? 0);
+$allHeaders = function_exists('getallheaders') ? getallheaders() : [];
+$token = trim((string) (
+    $allHeaders['X-Bridge-Token'] ?? $allHeaders['x-bridge-token']
+    ?? $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? $_GET['token'] ?? ''
+));
+$clientId = trim((string) ($_GET['client_id'] ?? $allHeaders['X-Client-Id'] ?? $_SERVER['HTTP_X_CLIENT_ID'] ?? ''));
+$companyId = (int) ($allHeaders['X-Company-Id'] ?? $_SERVER['HTTP_X_COMPANY_ID'] ?? 0);
+$fyId = (int) ($allHeaders['X-Fy-Id'] ?? $_SERVER['HTTP_X_FY_ID'] ?? 0);
 $xmlRaw = file_get_contents('php://input');
 
 $expected = defined('TALLY_BRIDGE_TOKEN') ? trim((string) TALLY_BRIDGE_TOKEN) : '';
