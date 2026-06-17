@@ -4,6 +4,7 @@ require_once '../../app/workflow_engine.php';
 require_once '../../config/database.php';
 require_once '../../app/engines/ai_mapping_engine.php';
 require_once '../../app/helpers/mapping_ai_helper.php';
+require_once '../../app/helpers/parent_group_validation_helper.php';
 
 requireFullContext();
 
