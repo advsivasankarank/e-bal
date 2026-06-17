@@ -331,74 +331,229 @@ foreach ($rows as $row) {
     $crTotal += (float) $row['cr'];
 }
 
-$page_title = 'Trial Balance Preview';
+$page_title = 'Trial Balance Preview & Mapping';
+$showSidebar = true;
 require_once __DIR__ . '/../layouts/header.php';
 ?>
 
 <style>
-    .tb-preview-form {
-        max-width: none;
-        background: transparent;
-        border: 0;
-        box-shadow: none;
-        padding: 0;
-    }
+:root {
+    --font-sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --bg: #f1f5f9; --panel: #fff; --border: #e2e8f0;
+    --text: #0f172a; --muted: #64748b; --brand: #0f4c81;
+    --success: #16a34a; --warning: #d97706; --danger: #dc2626;
+    --radius: 10px; --shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
 
-    .tb-preview-filter-card {
-        padding: 18px;
-    }
+/* ---- STATS ROW ---- */
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+}
+.stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow);
+}
+.stat-card .num { font-size: 1.6rem; font-weight: 700; color: var(--brand); }
+.stat-card .lbl { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
 
-    .tb-preview-filter-grid {
-        margin-top: 12px;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-        gap: 10px;
-        align-items: start;
-    }
+/* ---- METHOD CARDS ---- */
+.method-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 18px;
+}
+.method-card {
+    background: var(--panel);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    text-decoration: none;
+    display: block;
+    color: inherit;
+}
+.method-card:hover {
+    border-color: var(--brand);
+    box-shadow: 0 4px 12px rgba(15,76,129,0.12);
+    transform: translateY(-2px);
+}
+.method-card .icon { font-size: 1.8rem; margin-bottom: 10px; }
+.method-card h4 { font-size: 0.95rem; margin: 0 0 4px; }
+.method-card p { font-size: 0.78rem; color: var(--muted); line-height: 1.5; margin: 0; }
+.method-card .tag {
+    position: absolute; top: 10px; right: 10px;
+    font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; font-weight: 600;
+}
+.method-card .tag.recommended { background: #dcfce7; color: var(--success); }
+.method-card .tag.popular { background: #eff6ff; color: #2563eb; }
 
-    .tb-preview-filter-grid input,
-    .tb-preview-filter-grid select {
-        width: 100%;
-        padding: 8px;
-        min-width: 0;
-    }
+/* ---- STEPPER ---- */
+.stepper {
+    display: flex;
+    align-items: center;
+    margin-bottom: 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 20px;
+    box-shadow: var(--shadow);
+}
+.step { display: flex; align-items: center; gap: 8px; }
+.step-circle {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.78rem; font-weight: 700;
+}
+.step-circle.done { background: var(--success); color: #fff; }
+.step-circle.active { background: var(--brand); color: #fff; box-shadow: 0 0 0 3px rgba(15,76,129,0.2); }
+.step-circle.pending { background: var(--bg); color: var(--muted); border: 2px solid var(--border); }
+.step-label { font-size: 0.82rem; }
+.step-label.muted { color: var(--muted); }
+.step-line { width: 36px; height: 2px; background: var(--border); margin: 0 6px; }
+.step-line.done { background: var(--success); }
 
-    .tb-preview-table-wrap {
-        width: 100%;
-        overflow-x: auto;
-        background: #fff;
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        box-shadow: var(--shadow);
-    }
-
-    .tb-preview-table {
-        width: 100%;
-        min-width: 1080px;
-        border-collapse: collapse;
-        background: #fff;
-    }
-
-    .tb-preview-table th,
-    .tb-preview-table td {
-        vertical-align: top;
-    }
-
-    .tb-preview-note-select {
-        min-width: 260px;
-        max-width: 100%;
-    }
+/* ---- MAPPING SECTION ---- */
+.mapping-section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 24px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--brand);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.tb-preview-form {
+    max-width: none;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+}
+.tb-preview-filter-card {
+    padding: 18px;
+}
+.tb-preview-filter-grid {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    align-items: start;
+}
+.tb-preview-filter-grid input,
+.tb-preview-filter-grid select {
+    width: 100%;
+    padding: 8px;
+    min-width: 0;
+}
+.tb-preview-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+}
+.tb-preview-table {
+    width: 100%;
+    min-width: 1080px;
+    border-collapse: collapse;
+    background: #fff;
+}
+.tb-preview-table th,
+.tb-preview-table td {
+    vertical-align: top;
+}
+.tb-preview-note-select {
+    min-width: 260px;
+    max-width: 100%;
+}
 </style>
 
-<div class="page-title">Trial Balance Preview</div>
+<div class="page-title">TB Import Dashboard</div>
 
 <div class="active-info">
     Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
     FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
 </div>
 
-<div class="card" style="margin-bottom:16px;">
-    Review the imported trial balance before proceeding to reports. The Tally group is shown alongside each ledger so wrong note placement can be corrected quickly. Save the final note mapping here, and the notes plus summary statements will follow it.
+<?php
+$totalLedgers = count($rows);
+$mappedLedgers = count(array_filter($rows, fn($r) => $r['schedule_code'] !== ''));
+$unmappedLedgers = $totalLedgers - $mappedLedgers;
+$conflictLedgers = count($inlineConflicts);
+$mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) : 0;
+?>
+
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="num"><?= $totalLedgers ?></div>
+        <div class="lbl">Ledgers Synced</div>
+    </div>
+    <div class="stat-card">
+        <div class="num"><?= $mappedLedgers ?></div>
+        <div class="lbl">Ledgers Mapped</div>
+    </div>
+    <div class="stat-card">
+        <div class="num"><?= $mappingPct ?>%</div>
+        <div class="lbl">Mapping Complete</div>
+    </div>
+    <div class="stat-card">
+        <div class="num"><?= $conflictLedgers ?></div>
+        <div class="lbl" style="color:var(--danger);">Conflicts</div>
+    </div>
+</div>
+
+<div class="stepper">
+    <div class="step">
+        <span class="step-circle done">&#10003;</span>
+        <span class="step-label">Import</span>
+    </div>
+    <div class="step-line done"></div>
+    <div class="step">
+        <span class="step-circle done">&#10003;</span>
+        <span class="step-label">Validate</span>
+    </div>
+    <div class="step-line done"></div>
+    <div class="step">
+        <span class="step-circle active">3</span>
+        <span class="step-label">Map Notes</span>
+    </div>
+    <div class="step-line"></div>
+    <div class="step">
+        <span class="step-circle pending">4</span>
+        <span class="step-label muted">Complete</span>
+    </div>
+</div>
+
+<h2 style="font-size:1rem; margin-bottom:12px;">Import Method</h2>
+<div class="method-grid">
+    <a class="method-card" href="<?= BASE_URL ?>data_console/tally_online.php">
+        <span class="tag recommended">Recommended</span>
+        <div class="icon">&#128279;</div>
+        <h4>Tally Online Sync</h4>
+        <p>Connect directly to Tally via ODBC. Real-time ledger and TB sync.</p>
+    </a>
+    <a class="method-card" href="<?= BASE_URL ?>data_console/xml_import.php">
+        <span class="tag popular">Popular</span>
+        <div class="icon">&#128196;</div>
+        <h4>XML Upload</h4>
+        <p>Upload Tally-exported XML files for ledgers and trial balance.</p>
+    </a>
+    <a class="method-card" href="<?= BASE_URL ?>data_console/tally_offline.php">
+        <div class="icon">&#128203;</div>
+        <h4>CSV / Manual</h4>
+        <p>Import from CSV/Excel or enter data manually. Best for offline data.</p>
+    </a>
 </div>
 
 <?php if (!empty($_SESSION['success'])): ?>
@@ -421,14 +576,18 @@ require_once __DIR__ . '/../layouts/header.php';
     </div>
 <?php endif; ?>
 
+<div class="mapping-section-title">
+    <span>Note Mapping</span>
+</div>
+
 <?php if (!empty($noteGroups)): ?>
     <div class="card" style="margin-bottom:16px;">
         <strong>View By Note</strong>
         <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php">All Notes</a>
+                <a class="btn-outline btn-sm <?= $selectedNote === '' ? 'btn' : '' ?>" href="<?= BASE_URL ?>data_console/trial_balance_preview.php">All Notes</a>
                 <?php foreach ($noteGroups as $noteKey => $noteGroup): ?>
-                    <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php?note=<?= urlencode($noteKey) ?>">
+                    <a class="btn-outline btn-sm <?= $selectedNote === $noteKey ? 'btn' : '' ?>" href="<?= BASE_URL ?>data_console/trial_balance_preview.php?note=<?= urlencode($noteKey) ?>">
                         <?= htmlspecialchars($noteGroup['label']) ?> (<?= (int) $noteGroup['count'] ?>)
                     </a>
                 <?php endforeach; ?>
@@ -479,7 +638,7 @@ require_once __DIR__ . '/../layouts/header.php';
     </div>
     <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
         <button type="submit" class="btn">Apply Filters</button>
-        <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php<?= $selectedNote !== '' ? '?note=' . urlencode($selectedNote) : '' ?>">Clear Filters</a>
+        <a class="btn-outline btn-sm" href="<?= BASE_URL ?>data_console/trial_balance_preview.php<?= $selectedNote !== '' ? '?note=' . urlencode($selectedNote) : '' ?>">Clear Filters</a>
     </div>
 </form>
 
@@ -556,7 +715,7 @@ require_once __DIR__ . '/../layouts/header.php';
         </label>
         <button type="submit" class="btn">Save Note Changes</button>
         <a class="btn" href="<?= BASE_URL ?>dashboard_report.php">Go to Reports</a>
-        <a class="btn" href="<?= BASE_URL ?>data_console/process_result.php">Back to Summary</a>
+        <a class="btn-outline btn-sm" href="<?= BASE_URL ?>data_console/process_result.php">Back to Summary</a>
     </div>
 </form>
 

@@ -40,7 +40,8 @@ if ($headerIsSuperAdmin && $isOwnershipPage) {
     ];
 }
 
-$bodyClass = $headerIsSuperAdmin && $isOwnershipPage ? 'ownership-shell' : 'workspace-shell';
+$enableSidebar = !empty($showSidebar) && !$headerIsSuperAdmin;
+$bodyClass = $headerIsSuperAdmin && $isOwnershipPage ? 'ownership-shell' : ($enableSidebar ? 'workspace-shell sidebar-shell' : 'workspace-shell');
 $topbarClass = $headerIsSuperAdmin && $isOwnershipPage ? 'topbar topbar-superadmin' : 'topbar';
 $tagline = $headerIsSuperAdmin && $isOwnershipPage
     ? 'Commercial control center for subscriptions, licensing, and revenue'
@@ -97,5 +98,43 @@ $tagline = $headerIsSuperAdmin && $isOwnershipPage
         <a class="nav-link" href="<?= BASE_URL ?>logout.php">Logout</a>
     </div>
 </div>
+
+<?php if ($enableSidebar): ?>
+<?php
+$sidebarSections = [
+    'Data Operations' => [
+        ['label' => 'TB Import & Mapping', 'href' => BASE_URL . 'data_console/trial_balance_preview.php', 'icon' => '&#128228;'],
+        ['label' => 'Mapping Workbench', 'href' => BASE_URL . 'data_console/mapping_workbench.php', 'icon' => '&#128451;'],
+        ['label' => 'Validation Console', 'href' => BASE_URL . 'reconciliation_console.php', 'icon' => '&#9878;'],
+        ['label' => 'Financial Statements', 'href' => BASE_URL . 'reports.php', 'icon' => '&#128202;'],
+        ['label' => 'Export Centre', 'href' => BASE_URL . 'export_centre.php', 'icon' => '&#128228;'],
+    ],
+    'Company' => [
+        ['label' => 'Dashboard', 'href' => BASE_URL . 'dashboard_main.php', 'icon' => '&#127968;'],
+        ['label' => 'Company Settings', 'href' => BASE_URL . 'dashboard_company.php', 'icon' => '&#9881;'],
+    ],
+];
+?>
+<aside class="sidebar">
+    <div class="sidebar-brand">
+        <div class="sidebar-logo">eB</div>
+        <div class="sidebar-title">e-BAL</div>
+    </div>
+    <nav class="sidebar-nav">
+        <?php foreach ($sidebarSections as $sectionName => $sectionItems): ?>
+            <div class="sidebar-section-label"><?= htmlspecialchars($sectionName) ?></div>
+            <?php foreach ($sectionItems as $sItem): ?>
+                <?php
+                $sActive = basename($sItem['href'] ?? '') === $currentScript;
+                ?>
+                <a class="sidebar-link <?= $sActive ? 'active' : '' ?>" href="<?= $sItem['href'] ?>">
+                    <span class="sidebar-icon"><?= $sItem['icon'] ?></span>
+                    <?= htmlspecialchars($sItem['label']) ?>
+                </a>
+            <?php endforeach; ?>
+        <?php endforeach; ?>
+    </nav>
+</aside>
+<?php endif; ?>
 
 <div class="page-wrapper">

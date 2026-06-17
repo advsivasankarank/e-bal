@@ -19,7 +19,7 @@ $companyName = $_SESSION['company_name'] ?? 'Not Selected';
 $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 
 $format = strtolower(trim((string) ($_GET['format'] ?? 'pdf')));
-$allowedFormats = ['pdf', 'word', 'excel', 'docx', 'xlsx'];
+$allowedFormats = ['pdf', 'word', 'excel', 'docx', 'xlsx', 'html'];
 
 if (!in_array($format, $allowedFormats, true)) {
     http_response_code(400);
@@ -41,9 +41,23 @@ if (!($fs['has_data'] ?? false)) {
     exit('No report data available for export.');
 }
 
+$subcategory = $fs['entity_subcategory'] ?? '';
+if ($subcategory === 'trust') {
+    $fs['format_template'] = __DIR__ . '/reports_dashboard/formats/trust_format.php';
+    $fs['notes_template'] = __DIR__ . '/reports_dashboard/formats/notes_trust.php';
+} elseif ($subcategory === 'society') {
+    $fs['format_template'] = __DIR__ . '/reports_dashboard/formats/society_format.php';
+    $fs['notes_template'] = __DIR__ . '/reports_dashboard/formats/notes_society.php';
+}
+
 $title = ($fs['title'] ?? 'Financial Statements') . ' - ' . $companyName . ' - ' . $fyName;
 $htmlBody = renderFinancialReportDocument($fs, $companyName, $fyName);
 $htmlDocument = wrapReportHtmlDocument($title, $htmlBody);
+
+if ($format === 'html') {
+    echo $htmlDocument;
+    exit;
+}
 
 if ($format === 'pdf') {
     $options = new Options();
