@@ -10,6 +10,8 @@ $publicAllowList = [
     'index.php',
     'login.php',
     'logout.php',
+    'bridge_download.php',
+    'support.php',
 ];
 
 if (!in_array($currentScript, $publicAllowList, true)) {

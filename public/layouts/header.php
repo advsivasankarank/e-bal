@@ -113,6 +113,12 @@ $sidebarSections = [
         ['label' => 'Dashboard', 'href' => BASE_URL . 'dashboard_main.php', 'icon' => '&#127968;'],
         ['label' => 'Company Settings', 'href' => BASE_URL . 'dashboard_company.php', 'icon' => '&#9881;'],
     ],
+    'Account & Support' => [
+        ['label' => 'Upgrade Plan', 'href' => BASE_URL . 'upgrade.php', 'icon' => '&#128176;'],
+        ['label' => 'Invoice History', 'href' => BASE_URL . 'invoice_history.php', 'icon' => '&#128196;'],
+        ['label' => 'Smart Bridge Download', 'href' => BASE_URL . 'bridge_download.php', 'icon' => '&#128229;'],
+        ['label' => 'Support Centre', 'href' => BASE_URL . 'support.php', 'icon' => '&#128221;'],
+    ],
 ];
 ?>
 <aside class="sidebar">

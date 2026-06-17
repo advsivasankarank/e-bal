@@ -87,10 +87,10 @@ require_once __DIR__ . '/layouts/header.php';
     <div class="card section-card">
         <strong>Payment Notes</strong>
         <ul class="upgrade-list">
-            <li>Starter: 5 companies, 1 user, annual price Rs.2,999.</li>
-            <li>Professional: 10 companies, 3 users, annual price Rs.4,999.</li>
-            <li>Pro Plus: Unlimited companies, 5 users, annual price Rs.9,999.</li>
-            <li>AI-assisted drafting is available from Professional upwards.</li>
+            <li>e-BAL Base: 1 user, 10 entities, annual price ₹7,499.</li>
+            <li>e-BAL Pro: 10 users, 25 entities, annual price ₹14,999.</li>
+            <li>e-BAL Elite: Unlimited users, unlimited entities, annual price ₹29,999.</li>
+            <li>AI-assisted drafting is available from Pro upwards.</li>
         </ul>
 
         <?php if (!$razorpayEnabled): ?>

@@ -1,0 +1,55 @@
+e-BAL Web Application - Deployment Guide
+Version: 1.0.0
+
+Target Hosting
+- cPanel / shared hosting
+- Production URL example:
+  https://ebal.etaxadv.com
+
+Required Before Deployment
+1. PHP and MySQL enabled on hosting
+2. Production database created
+3. Database user and password created
+4. Domain or subdomain document root configured
+
+Files
+1. Application package:
+   eBAL_Web_App_Release_2026-06-01.zip
+2. Database export:
+   ebal_db.sql
+
+Deployment Steps
+1. Extract or deploy application files to the web root for e-BAL
+2. Import ebal_db.sql into the production database
+3. Confirm the database credentials in:
+   config/database.php
+4. Confirm the base URL and bridge settings in:
+   config/app.php
+5. If using cPanel Git deployment, keep .cpanel.yml in the project root
+
+Production Settings To Check
+- DB_NAME
+- DB_USER
+- DB_PASS
+- APP_ENV
+- APP_BASE_URL
+- EBAL_BRIDGE_TOKEN
+
+Post-Deployment Checks
+1. Login page opens first
+2. Superadmin login works
+3. Company creation works
+4. Smart Bridge sync pages work
+5. Reports open and export correctly
+6. Upgrade / licensing pages work
+
+Commercial Checks
+1. Workspace Admin can assign plans
+2. Superadmin Dashboard shows revenue and billing activity
+3. Client users cannot open Workspace Admin
+
+Suggested First Login
+- superadmin@ebal.local
+- SuperAdmin@123
+
+Change the default superadmin password after first production login.

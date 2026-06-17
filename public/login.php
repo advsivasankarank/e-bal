@@ -82,6 +82,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <button class="auth-button" type="submit">Login</button>
             </form>
+
+            <div class="auth-help">
+                <a href="<?= BASE_URL ?>forgot_password.php" style="color:#0f766e; text-decoration:none; font-weight:600;">Forgot your password?</a>
+            </div>
         </div>
     </div>
 </body>

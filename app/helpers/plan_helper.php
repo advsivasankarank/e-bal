@@ -26,6 +26,8 @@ function ensurePlanTables(PDO $pdo): void
                 name VARCHAR(120) NOT NULL,
                 email VARCHAR(190) NOT NULL UNIQUE,
                 password VARCHAR(255) NOT NULL,
+                reset_token VARCHAR(255) NULL,
+                reset_token_expires_at TIMESTAMP NULL,
                 role ENUM('superadmin','admin','staff') NOT NULL DEFAULT 'admin',
                 company_owner_id INT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -108,9 +110,9 @@ function ensurePlanTables(PDO $pdo): void
 function seedPlans(PDO $pdo): void
 {
     $plans = [
-        ['starter', 'Starter', 2999, 5, 1, 0, '5 companies, 1 user, core workflow access'],
-        ['professional', 'Professional', 4999, 10, 3, 1, '10 companies, 3 users, AI assisted drafting'],
-        ['pro_plus', 'Pro Plus', 9999, 999, 5, 1, 'Unlimited companies, 5 users, full feature access'],
+        ['base', 'e-BAL Base', 7499, 10, 1, 0, '1 user, 10 entities, core workflow access'],
+        ['pro', 'e-BAL Pro', 14999, 25, 10, 1, '10 users, 25 entities, AI assisted drafting'],
+        ['elite', 'e-BAL Elite', 29999, 999, 999, 1, 'Unlimited users, unlimited entities, full feature access'],
     ];
 
     $stmt = $pdo->prepare("
@@ -472,6 +474,69 @@ function recordLicenseTransaction(
         $billedAt,
         trim($notes),
     ]);
+
+    // Get transaction ID for invoice linking
+    $transactionId = (int) $pdo->lastInsertId();
+
+    // Generate invoice and send payment success email if payment is successful
+    if ($paymentStatus === 'paid' && $transactionId > 0) {
+        try {
+            require_once __DIR__ . '/mail_helper.php';
+            require_once __DIR__ . '/invoice_helper.php';
+
+            $user = getUserById($pdo, $ownerId);
+            $plan = getPlanDefinition($pdo, $planCode);
+
+            if ($user && $plan) {
+                // Create and issue invoice
+                $invoiceAmount = max(0, $amountInr) * 100; // Convert to paise
+                $planId = (int) ($plan['id'] ?? 0);
+                
+                $invoice = createAndIssueInvoice(
+                    $pdo,
+                    $ownerId,
+                    $planId,
+                    $transactionId,
+                    $user['name'] ?? '',
+                    $user['email'] ?? '',
+                    $invoiceAmount,
+                    null,  // gstin
+                    null   // pan
+                );
+
+                if ($invoice) {
+                    // Send payment success email with invoice details
+                    $paymentDetails = [
+                        'plan_name' => $plan['name'] ?? '',
+                        'amount_inr' => $amountInr,
+                        'license_expires' => date('d M Y', strtotime('+1 year')),
+                    ];
+                    
+                    sendPaymentSuccessEmail($pdo, $user, $paymentDetails);
+
+                    // Send invoice email
+                    $downloadUrl = defined('BASE_URL') 
+                        ? BASE_URL . 'invoice_download.php?invoice_number=' . urlencode($invoice['invoice_number'])
+                        : '';
+                    
+                    $invoiceDetails = [
+                        'invoice_number' => $invoice['invoice_number'] ?? '',
+                        'invoice_date' => $invoice['invoice_date'] ?? '',
+                        'total_value' => $invoice['total_value'] ?? 0,
+                        'download_url' => $downloadUrl,
+                    ];
+                    
+                    sendInvoiceGeneratedEmail($pdo, $user, $invoiceDetails);
+                }
+            }
+        } catch (Throwable $e) {
+            appLog('WARN', 'Failed to generate invoice or send emails after payment', [
+                'error' => $e->getMessage(),
+                'transaction_id' => $transactionId,
+            ]);
+            // Don't fail the transaction recording if email/invoice fails
+        }
+    }
 }
 
 function upsertWorkspaceLicense(
@@ -596,7 +661,25 @@ function createClientAdmin(PDO $pdo, string $name, string $email, string $passwo
     ");
     $stmt->execute([$name, $email, $hash]);
 
-    return (int) $pdo->lastInsertId();
+    $userId = (int) $pdo->lastInsertId();
+
+    // Send welcome email
+    try {
+        require_once __DIR__ . '/mail_helper.php';
+        
+        $user = getUserById($pdo, $userId);
+        if ($user) {
+            sendWelcomeEmail($pdo, $user);
+        }
+    } catch (Throwable $e) {
+        appLog('WARN', 'Failed to send welcome email', [
+            'user_id' => $userId,
+            'error' => $e->getMessage(),
+        ]);
+        // Don't fail user creation if email fails
+    }
+
+    return $userId;
 }
 
 function getSuperAdminSummary(PDO $pdo): array
@@ -741,8 +824,200 @@ function getRecentLicenseActivity(PDO $pdo, int $limit = 10): array
         ORDER BY t.billed_at DESC, t.id DESC
         LIMIT ?
     ");
-    $stmt->bindValue(1, $limit, PDO::PARAM_INT);
-    $stmt->execute();
+     $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+     $stmt->execute();
+ 
+     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
 
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+/**
+ * Ensure grace period columns exist in licenses table
+ */
+function ensureGracePeriodSchema(PDO $pdo): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+
+    try {
+        if (!appAllowsRuntimeSchema()) {
+            assertColumnExists($pdo, 'licenses', 'grace_period_active');
+            assertColumnExists($pdo, 'licenses', 'grace_period_expires_at');
+            $checked = true;
+            return;
+        }
+
+        $columns = $pdo->query("SHOW COLUMNS FROM licenses")->fetchAll(PDO::FETCH_COLUMN);
+        
+        if (!in_array('grace_period_active', $columns, true)) {
+            $pdo->exec("ALTER TABLE licenses ADD COLUMN grace_period_active TINYINT(1) DEFAULT 0 AFTER status");
+        }
+        
+        if (!in_array('grace_period_expires_at', $columns, true)) {
+            $pdo->exec("ALTER TABLE licenses ADD COLUMN grace_period_expires_at DATE NULL AFTER grace_period_active");
+        }
+
+        $checked = true;
+    } catch (Throwable $e) {
+        appLog('ERROR', 'Grace period schema validation failed', ['message' => $e->getMessage()]);
+        // Don't fail app on schema issues
+    }
+}
+
+/**
+ * Get license status: returns 'active', 'grace_period', or 'expired'
+ * @param PDO $pdo Database connection
+ * @param int $licenseId License ID
+ * @return string License status
+ */
+function getLicenseStatus(PDO $pdo, int $licenseId): string
+{
+    ensurePlanTables($pdo);
+    ensureGracePeriodSchema($pdo);
+
+    $stmt = $pdo->prepare("
+        SELECT expires_at, status, grace_period_active, grace_period_expires_at 
+        FROM licenses 
+        WHERE id = ?
+    ");
+    $stmt->execute([$licenseId]);
+    $license = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$license) {
+        return 'expired';
+    }
+
+    $expiresAt = (string) ($license['expires_at'] ?? '');
+    $today = date('Y-m-d');
+
+    // Check if license is still active
+    if ($expiresAt !== '' && $expiresAt >= $today) {
+        return 'active';
+    }
+
+    // Check if in grace period
+    $graceActive = (int) ($license['grace_period_active'] ?? 0);
+    $graceExpiresAt = (string) ($license['grace_period_expires_at'] ?? '');
+
+    if ($graceActive === 1 && $graceExpiresAt !== '' && $graceExpiresAt >= $today) {
+        return 'grace_period';
+    }
+
+    return 'expired';
+}
+
+/**
+ * Apply 15-day grace period to expired license (only if not already applied)
+ * @param PDO $pdo Database connection
+ * @param int $licenseId License ID
+ * @return bool Success status
+ */
+function applyGracePeriod(PDO $pdo, int $licenseId): bool
+{
+    ensurePlanTables($pdo);
+    ensureGracePeriodSchema($pdo);
+
+    try {
+        // Check if grace period already applied
+        $stmt = $pdo->prepare("SELECT grace_period_active FROM licenses WHERE id = ?");
+        $stmt->execute([$licenseId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$result || (int) ($result['grace_period_active'] ?? 0) === 1) {
+            // Already applied
+            return false;
+        }
+
+        $graceExpiresAt = date('Y-m-d', time() + (15 * 24 * 3600)); // 15 days from now
+
+        $stmt = $pdo->prepare("
+            UPDATE licenses 
+            SET grace_period_active = 1, grace_period_expires_at = ? 
+            WHERE id = ?
+        ");
+
+        $success = $stmt->execute([$graceExpiresAt, $licenseId]);
+
+        if ($success) {
+            appLog('INFO', 'Grace period applied', ['license_id' => $licenseId, 'expires' => $graceExpiresAt]);
+        }
+
+        return $success;
+    } catch (Throwable $e) {
+        appLog('ERROR', 'Failed to apply grace period', ['license_id' => $licenseId, 'error' => $e->getMessage()]);
+        return false;
+    }
+}
+
+/**
+ * Check if license is in grace period
+ * @param PDO $pdo Database connection
+ * @param int $licenseId License ID
+ * @return bool True if in grace period, false otherwise
+ */
+function isInGracePeriod(PDO $pdo, int $licenseId): bool
+{
+    return getLicenseStatus($pdo, $licenseId) === 'grace_period';
+}
+
+/**
+ * Get days remaining in grace period
+ * @param PDO $pdo Database connection
+ * @param int $licenseId License ID
+ * @return int Days remaining (0-15), or -1 if not in grace period
+ */
+function getGraceDaysRemaining(PDO $pdo, int $licenseId): int
+{
+    ensurePlanTables($pdo);
+    ensureGracePeriodSchema($pdo);
+
+    if (!isInGracePeriod($pdo, $licenseId)) {
+        return -1;
+    }
+
+    $stmt = $pdo->prepare("SELECT grace_period_expires_at FROM licenses WHERE id = ?");
+    $stmt->execute([$licenseId]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$result) {
+        return -1;
+    }
+
+    $expiresAt = (string) ($result['grace_period_expires_at'] ?? '');
+    if ($expiresAt === '') {
+        return -1;
+    }
+
+    $today = new DateTime(date('Y-m-d'));
+    $expireDate = new DateTime($expiresAt);
+    $interval = $today->diff($expireDate);
+
+    // If negative, grace period has expired
+    if ($interval->invert === 1) {
+        return 0;
+    }
+
+    return (int) $interval->days;
+}
+
+/**
+ * Clear grace period from a license (when renewed)
+ * @param PDO $pdo Database connection
+ * @param int $licenseId License ID
+ * @return bool Success status
+ */
+function clearGracePeriod(PDO $pdo, int $licenseId): bool
+{
+    try {
+        $stmt = $pdo->prepare("
+            UPDATE licenses 
+            SET grace_period_active = 0, grace_period_expires_at = NULL 
+            WHERE id = ?
+        ");
+        return $stmt->execute([$licenseId]);
+    } catch (Throwable $e) {
+        appLog('ERROR', 'Failed to clear grace period', ['license_id' => $licenseId, 'error' => $e->getMessage()]);
+        return false;
+    }
 }

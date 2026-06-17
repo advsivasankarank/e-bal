@@ -36,6 +36,28 @@ ul{list-style:none}
 .topbar-links .btn-topbar:hover{background:#115e59}
 @media(max-width:480px){.topbar-links{gap:8px}.topbar-links a{font-size:11px}.topbar-links .btn-topbar{padding:4px 10px;font-size:10px}}
 
+/* ===== POSITIONING BADGE ===== */
+.positioning-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(94,234,212,0.12);color:var(--teal-light);font-size:10px;font-weight:700;padding:4px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;border:1px solid rgba(94,234,212,0.15)}
+
+/* ===== COMPLIANCE STRIP ===== */
+.compliance-strip{background:var(--navy);padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.compliance-strip .container{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 16px}
+.compliance-item{display:flex;align-items:center;gap:4px;font-size:10px;color:#94a3b8;font-weight:500}
+.compliance-item svg{width:12px;height:12px;flex-shrink:0}
+
+/* ===== SAMPLE OUTPUT ===== */
+.sample-output{background:#fff;border-radius:8px;padding:14px;font-family:'Courier New',monospace;font-size:10px;line-height:1.5;color:#1e293b;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
+.sample-output .so-header{font-size:10px;font-weight:700;color:var(--navy);text-align:center;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #e2e8f0}
+.sample-output .so-row{display:flex;justify-content:space-between;padding:1px 0}
+.sample-output .so-row .so-label{color:#475569}
+.sample-output .so-row .so-value{font-weight:600;color:var(--navy)}
+.sample-output .so-row .so-value.neg{color:#dc2626}
+.sample-output .so-total{border-top:1px solid #1e293b;margin-top:3px;padding-top:3px;font-weight:700}
+.sample-output .so-section-label{font-weight:600;color:var(--teal);font-size:9px;margin:4px 0 2px}
+.sample-output-sm{font-size:9px;padding:10px}
+.sample-output-sm .so-header{font-size:9px}
+.sample-output-sm .so-row{font-size:8px}
+
 /* ===== BUTTONS ===== */
 .btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 24px;background:var(--teal);color:#fff;border-radius:7px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .2s}
 .btn-primary:hover{background:#115e59;box-shadow:0 4px 16px rgba(15,118,110,0.3)}
@@ -120,13 +142,6 @@ ul{list-style:none}
 @media(max-width:400px){.rf-grid{grid-template-columns:1fr}}
 
 /* ===== BUILT FOR PROFESSIONAL PRACTICE ===== */
-.practice-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;max-width:800px;margin:0 auto}
-.practice-item{text-align:center;padding:16px 10px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;transition:box-shadow .2s}
-.practice-item:hover{box-shadow:0 3px 12px rgba(0,0,0,0.04)}
-.practice-item svg{width:24px;height:24px;margin-bottom:6px}
-.practice-item span{display:block;font-size:11px;font-weight:500;color:#475569}
-@media(max-width:700px){.practice-grid{grid-template-columns:repeat(3,1fr);gap:8px}}
-@media(max-width:400px){.practice-grid{grid-template-columns:repeat(2,1fr)}}
 
 /* ===== COMPARISON ===== */
 .compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:760px;margin:0 auto}
@@ -159,14 +174,6 @@ ul{list-style:none}
 @media(max-width:480px){.features-grid{grid-template-columns:1fr;gap:10px}.feature-card{padding:16px 14px}}
 
 /* ===== HOW IT WORKS ===== */
-.workflow{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
-.workflow-step{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 12px;text-align:center;transition:box-shadow .2s}
-.workflow-step:hover{box-shadow:0 4px 16px rgba(0,0,0,0.04)}
-.workflow-step svg{width:20px;height:20px;margin-bottom:8px}
-.workflow-step strong{display:block;font-size:12px;color:#1e293b;margin-bottom:2px}
-.workflow-step span{font-size:10px;color:#64748b;display:block;line-height:1.3}
-@media(max-width:800px){.workflow{grid-template-columns:repeat(3,1fr);gap:8px}}
-@media(max-width:480px){.workflow{grid-template-columns:1fr 1fr;gap:8px}.workflow-step{padding:14px 10px}}
 
 /* ===== BRIDGE ===== */
 .bridge-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
@@ -253,15 +260,14 @@ ul{list-style:none}
 @media(max-width:640px){.contact-grid{grid-template-columns:1fr;gap:16px}}
 
 /* ===== STICKY CTA ===== */
-.sticky-cta{position:fixed;bottom:0;left:0;right:0;background:var(--navy);border-top:1px solid rgba(255,255,255,0.08);padding:8px 0;z-index:200;display:none}
+.sticky-cta{position:fixed;bottom:0;left:0;right:0;background:var(--navy);border-top:1px solid rgba(255,255,255,0.08);padding:8px 0;z-index:200}
 .sticky-cta .container{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
 .sticky-cta span{font-size:12px;color:#e2e8f0;font-weight:500}
 .sticky-cta .btn-primary{padding:7px 18px;font-size:11px}
 .sticky-cta .btn-outline-light{padding:7px 18px;font-size:11px}
 .sticky-cta .btn-orange{padding:7px 18px;font-size:11px}
-@media(min-width:768px){.sticky-cta{display:block}}
-body{padding-bottom:44px}
-@media(max-width:767px){body{padding-bottom:0}.sticky-cta{display:none}}
+body{padding-bottom:52px}
+@media(max-width:480px){.sticky-cta span{display:none}body{padding-bottom:48px}}
 
 /* ===== FOOTER ===== */
 .footer{background:#071526;padding:32px 0 22px;border-top:1px solid rgba(255,255,255,0.04)}
@@ -298,31 +304,13 @@ body{padding-bottom:44px}
 <section class="hero" id="hero">
   <div class="container">
     <div class="hero-content">
+      <div class="positioning-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="10" height="10"><polyline points="20 6 9 17 4 12"/></svg>
+        Financial Statement Preparation Platform
+      </div>
       <h1>Financial Statements<br><span>Ready in Minutes</span></h1>
       <p class="hero-sub">Trial Balance In &mdash; Financial Statements Out</p>
       <p class="hero-desc">Import Trial Balance from Tally and generate professional financial statements, schedules, notes and comparative reports in a structured workflow.</p>
-      <div class="hero-position">
-        <span class="hero-position-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Schedule III
-        </span>
-        <span class="hero-position-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          LLP
-        </span>
-        <span class="hero-position-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Partnership
-        </span>
-        <span class="hero-position-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Proprietorship
-        </span>
-        <span class="hero-position-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Trust &amp; Society
-        </span>
-      </div>
       <div class="hero-kpis">
         <div class="hero-kpi">
           <div class="hero-kpi-value">100%</div>
@@ -338,100 +326,104 @@ body{padding-bottom:44px}
         </div>
       </div>
       <div class="hero-actions">
-        <a href="login.php" class="btn-primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-          Login to e-BAL
+        <a href="#pricing" class="btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Choose Your Plan
         </a>
-        <a href="#bridge" class="btn-secondary">Download Smart Bridge</a>
+        <a href="login.php" class="btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Login
+        </a>
       </div>
     </div>
     <div class="hero-visual">
-      <!-- Main screenshot: FS Workspace -->
       <div class="hero-screen-main">
         <div class="hero-screen-header">
           <div class="hero-screen-dots"><span></span><span></span><span></span></div>
-          <span class="hero-screen-title">Financial Statement Workspace &mdash; e-BAL</span>
+          <span class="hero-screen-title">Generated Output &mdash; Balance Sheet (Schedule III)</span>
         </div>
-        <div class="hero-screen-body">
-          <svg width="100%" height="120" viewBox="0 0 460 120" preserveAspectRatio="xMidYMid meet" style="display:block">
-            <rect x="0" y="0" width="460" height="120" fill="none"/>
-            <rect x="0" y="0" width="460" height="24" fill="rgba(255,255,255,0.04)" rx="3"/>
-            <rect x="10" y="6" width="60" height="12" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="80" y="6" width="60" height="12" fill="rgba(255,255,255,0.08)" rx="2"/>
-            <rect x="150" y="6" width="60" height="12" fill="rgba(255,255,255,0.08)" rx="2"/>
-            <rect x="220" y="6" width="60" height="12" fill="rgba(255,255,255,0.08)" rx="2"/>
-            <rect x="290" y="6" width="70" height="12" fill="rgba(94,234,212,0.15)" rx="2"/>
-            <rect x="380" y="6" width="70" height="12" fill="rgba(94,234,212,0.15)" rx="2"/>
-            <rect x="0" y="30" width="120" height="14" fill="rgba(255,255,255,0.06)" rx="2"/>
-            <rect x="0" y="48" width="120" height="14" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="0" y="66" width="120" height="14" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="0" y="84" width="120" height="14" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="0" y="102" width="120" height="14" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="135" y="30" width="310" height="86" fill="rgba(255,255,255,0.04)" rx="3"/>
-            <rect x="145" y="36" width="120" height="10" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="145" y="50" width="290" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="145" y="62" width="290" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="145" y="74" width="200" height="8" fill="rgba(94,234,212,0.08)" rx="1"/>
-            <rect x="145" y="86" width="290" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="145" y="98" width="160" height="8" fill="rgba(94,234,212,0.08)" rx="1"/>
-          </svg>
+        <div class="hero-screen-body" style="background:#fff;border-radius:0 0 10px 10px">
+          <div class="sample-output" style="border:none;box-shadow:none">
+            <div class="so-header">Balance Sheet as at 31 March 2026</div>
+            <div class="so-section-label">EQUITY &amp; LIABILITIES</div>
+            <div class="so-row"><span class="so-label">Shareholders' Funds</span></div>
+            <div class="so-row" style="padding-left:12px"><span class="so-label">Share Capital</span><span class="so-value">50,00,000</span></div>
+            <div class="so-row" style="padding-left:12px"><span class="so-label">Reserves &amp; Surplus</span><span class="so-value">12,45,000</span></div>
+            <div class="so-row"><span class="so-label">Non-Current Liabilities</span></div>
+            <div class="so-row" style="padding-left:12px"><span class="so-label">Long-Term Borrowings</span><span class="so-value">18,00,000</span></div>
+            <div class="so-row"><span class="so-label">Current Liabilities</span></div>
+            <div class="so-row" style="padding-left:12px"><span class="so-label">Trade Payables</span><span class="so-value">8,20,000</span></div>
+            <div class="so-row so-total"><span class="so-label">Total</span><span class="so-value">88,65,000</span></div>
+            <div class="so-section-label" style="margin-top:6px">ASSETS</div>
+            <div class="so-row"><span class="so-label">Non-Current Assets</span></div>
+            <div class="so-row" style="padding-left:12px"><span class="so-label">Fixed Assets</span><span class="so-value">42,00,000</span></div>
+            <div class="so-row" style="padding-left:12px"><span class="so-label">Intangible Assets</span><span class="so-value">5,50,000</span></div>
+            <div class="so-row"><span class="so-label">Current Assets</span></div>
+            <div class="so-row" style="padding-left:12px"><span class="so-label">Inventories</span><span class="so-value">18,75,000</span></div>
+            <div class="so-row" style="padding-left:12px"><span class="so-label">Trade Receivables</span><span class="so-value">14,90,000</span></div>
+            <div class="so-row" style="padding-left:12px"><span class="so-label">Cash &amp; Bank</span><span class="so-value">7,50,000</span></div>
+            <div class="so-row so-total"><span class="so-label">Total</span><span class="so-value">88,65,000</span></div>
+          </div>
         </div>
       </div>
-      <!-- Two smaller screens -->
       <div class="hero-screens">
         <div class="hero-screen-sm">
           <div class="hero-screen-header">
             <div class="hero-screen-dots"><span></span><span></span><span></span></div>
-            <span class="hero-screen-title">TB Dashboard</span>
+            <span class="hero-screen-title">Statement of Profit &amp; Loss</span>
           </div>
-          <div class="hero-screen-body">
-            <svg width="100%" height="70" viewBox="0 0 220 70" preserveAspectRatio="xMidYMid meet" style="display:block">
-              <rect width="220" height="70" fill="none"/>
-              <rect x="0" y="0" width="220" height="18" fill="rgba(255,255,255,0.04)" rx="2"/>
-              <rect x="6" y="4" width="40" height="10" fill="rgba(94,234,212,0.15)" rx="2"/>
-              <rect x="56" y="4" width="40" height="10" fill="rgba(255,255,255,0.06)" rx="2"/>
-              <rect x="106" y="4" width="50" height="10" fill="rgba(255,255,255,0.06)" rx="2"/>
-              <rect x="166" y="4" width="44" height="10" fill="rgba(94,234,212,0.15)" rx="2"/>
-              <rect x="0" y="22" width="108" height="10" fill="rgba(255,255,255,0.06)" rx="2"/>
-              <rect x="116" y="22" width="96" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-              <rect x="0" y="36" width="108" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-              <rect x="116" y="36" width="96" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-              <rect x="0" y="50" width="108" height="10" fill="rgba(94,234,212,0.06)" rx="2"/>
-              <rect x="116" y="50" width="96" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-              <rect x="0" y="64" width="220" height="4" fill="rgba(94,234,212,0.1)" rx="2"/>
-            </svg>
+          <div class="hero-screen-body" style="background:#fff;border-radius:0 0 8px 8px">
+            <div class="sample-output sample-output-sm" style="border:none;box-shadow:none">
+              <div class="so-header">Profit &amp; Loss for the year ended 31 Mar 2026</div>
+              <div class="so-row"><span class="so-label">Revenue from Operations</span><span class="so-value">1,25,00,000</span></div>
+              <div class="so-row"><span class="so-label">Other Income</span><span class="so-value">3,20,000</span></div>
+              <div class="so-row" style="border-bottom:1px solid #e2e8f0;padding-bottom:3px;margin-bottom:3px"><span class="so-label" style="font-weight:600">Total Revenue</span><span class="so-value" style="font-weight:700">1,28,20,000</span></div>
+              <div class="so-row"><span class="so-label">Cost of Materials</span><span class="so-value">52,00,000</span></div>
+              <div class="so-row"><span class="so-label">Employee Benefits</span><span class="so-value">28,50,000</span></div>
+              <div class="so-row"><span class="so-label">Finance Costs</span><span class="so-value">2,30,000</span></div>
+              <div class="so-row"><span class="so-label">Depreciation</span><span class="so-value">4,20,000</span></div>
+              <div class="so-row"><span class="so-label">Other Expenses</span><span class="so-value">18,60,000</span></div>
+              <div class="so-row so-total"><span class="so-label">Profit Before Tax</span><span class="so-value">22,60,000</span></div>
+              <div class="so-row"><span class="so-label">Tax Expense</span><span class="so-value" class="neg">5,65,000</span></div>
+              <div class="so-row so-total"><span class="so-label">Profit for the Year</span><span class="so-value">16,95,000</span></div>
+            </div>
           </div>
         </div>
         <div class="hero-screen-sm">
           <div class="hero-screen-header">
             <div class="hero-screen-dots"><span></span><span></span><span></span></div>
-            <span class="hero-screen-title">Mapping Workbench</span>
+            <span class="hero-screen-title">Notes to Accounts</span>
           </div>
-          <div class="hero-screen-body">
-            <svg width="100%" height="70" viewBox="0 0 220 70" preserveAspectRatio="xMidYMid meet" style="display:block">
-              <rect width="220" height="70" fill="none"/>
-              <rect x="4" y="4" width="66" height="10" fill="rgba(94,234,212,0.12)" rx="2"/>
-              <rect x="80" y="4" width="50" height="10" fill="rgba(255,255,255,0.06)" rx="2"/>
-              <rect x="155" y="4" width="55" height="10" fill="rgba(94,234,212,0.15)" rx="2"/>
-              <rect x="0" y="20" width="220" height="1" fill="rgba(255,255,255,0.06)"/>
-              <rect x="4" y="26" width="60" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-              <rect x="72" y="26" width="80" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-              <rect x="160" y="26" width="36" height="8" fill="rgba(94,234,212,0.15)" rx="1"/>
-              <text x="205" y="33" fill="rgba(94,234,212,0.4)" font-size="6" font-weight="700">OK</text>
-              <rect x="4" y="38" width="60" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-              <rect x="72" y="38" width="80" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-              <rect x="160" y="38" width="36" height="8" fill="rgba(234,179,8,0.15)" rx="1"/>
-              <rect x="4" y="50" width="60" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-              <rect x="72" y="50" width="80" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-              <rect x="160" y="50" width="36" height="8" fill="rgba(94,234,212,0.15)" rx="1"/>
-              <rect x="4" y="62" width="210" height="6" fill="rgba(94,234,212,0.08)" rx="3"/>
-            </svg>
+          <div class="hero-screen-body" style="background:#fff;border-radius:0 0 8px 8px">
+            <div class="sample-output sample-output-sm" style="border:none;box-shadow:none">
+              <div class="so-header">Notes Forming Part of Financial Statements</div>
+              <div class="so-section-label">Note 1 &mdash; Share Capital</div>
+              <div class="so-row"><span class="so-label">Authorised Capital</span><span class="so-value">1,00,00,000</span></div>
+              <div class="so-row"><span class="so-label">Issued Capital</span><span class="so-value">50,00,000</span></div>
+              <div class="so-row"><span class="so-label">Subscribed &amp; Paid-up</span><span class="so-value">50,00,000</span></div>
+              <div class="so-section-label">Note 2 &mdash; Fixed Assets</div>
+              <div class="so-row"><span class="so-label">Tangible</span><span class="so-value">38,00,000</span></div>
+              <div class="so-row"><span class="so-label">Intangible</span><span class="so-value">4,00,000</span></div>
+              <div class="so-row so-total"><span class="so-label">Total</span><span class="so-value">42,00,000</span></div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
 </section>
+
+<!-- ===== COMPLIANCE TRUST STRIP ===== -->
+<div class="compliance-strip">
+  <div class="container">
+    <span class="compliance-item"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Schedule III Ready</span>
+    <span class="compliance-item"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>LLP Reporting</span>
+    <span class="compliance-item"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Comparative Statements</span>
+    <span class="compliance-item"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>MCA Aligned Reporting</span>
+    <span class="compliance-item"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Tally Prime Compatible</span>
+    <span class="compliance-item"><svg viewBox="0 0 24 24" fill="none" stroke="var(--teal-light)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>PDF &bull; Excel &bull; Word</span>
+  </div>
+</div>
 
 <!-- ===== CREDIBILITY BAR ===== -->
 <div class="cred-bar">
@@ -458,158 +450,110 @@ body{padding-bottom:44px}
         Finance Professionals
       </span>
     </div>
-    <span class="cred-developer">Developed by <strong>E Tax Advisors Private Limited</strong></span>
+    <span class="cred-developer">Built by Tax &amp; Compliance Professionals &mdash; Developed by <strong>E Tax Advisors Private Limited</strong></span>
   </div>
 </div>
 
-<!-- ===== INSIDE e-BAL ===== -->
+<!-- ===== SAMPLE OUTPUT SHOWCASE ===== -->
 <section class="section section-alt" id="workspace">
   <div class="container">
     <div class="section-header">
-      <h2>Inside e-BAL</h2>
-      <p>Five integrated modules that power the statement preparation pipeline.</p>
+      <h2>Professional Financial Statements</h2>
+      <p>e-BAL generates audit-ready Balance Sheet, Profit &amp; Loss, Cash Flow, Schedules, and Notes to Accounts in Schedule III, LLP, Partnership, Proprietorship, Trust &amp; Society formats.</p>
     </div>
     <div class="inside-grid">
       <div class="inside-card">
-        <div class="inside-card-visual">
-          <svg width="100%" height="100%" viewBox="0 0 180 130" preserveAspectRatio="xMidYMid meet" style="display:block;padding:8px">
-            <rect x="0" y="0" width="164" height="16" fill="rgba(255,255,255,0.06)" rx="2"/>
-            <rect x="4" y="3" width="28" height="10" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="40" y="3" width="28" height="10" fill="rgba(255,255,255,0.08)" rx="2"/>
-            <rect x="76" y="3" width="36" height="10" fill="rgba(255,255,255,0.08)" rx="2"/>
-            <rect x="120" y="3" width="36" height="10" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="0" y="22" width="78" height="10" fill="rgba(255,255,255,0.06)" rx="2"/>
-            <rect x="86" y="22" width="78" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="0" y="36" width="78" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="86" y="36" width="78" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="0" y="50" width="78" height="10" fill="rgba(94,234,212,0.06)" rx="2"/>
-            <rect x="86" y="50" width="78" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="0" y="64" width="78" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="86" y="64" width="78" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="0" y="78" width="164" height="20" fill="rgba(94,234,212,0.08)" rx="3"/>
-            <rect x="0" y="102" width="50" height="10" fill="rgba(94,234,212,0.15)" rx="2"/>
-            <rect x="114" y="102" width="50" height="10" fill="rgba(255,255,255,0.06)" rx="2"/>
-          </svg>
+        <div class="inside-card-visual" style="background:#fff;padding:8px">
+          <div class="sample-output" style="border:1px solid #e2e8f0;box-shadow:none;font-size:7px;padding:6px;width:100%">
+            <div class="so-header" style="font-size:7px">Balance Sheet</div>
+            <div class="so-row" style="font-size:6px"><span>Share Capital</span><span>50,00,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Reserves</span><span>12,45,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Borrowings</span><span>18,00,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Payables</span><span>8,20,000</span></div>
+            <div class="so-row so-total" style="font-size:6px"><span>Total</span><span>88,65,000</span></div>
+            <div class="so-row" style="font-size:6px;margin-top:2px"><span>Fixed Assets</span><span>42,00,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Current Assets</span><span>46,65,000</span></div>
+            <div class="so-row so-total" style="font-size:6px"><span>Total</span><span>88,65,000</span></div>
+          </div>
         </div>
         <div class="inside-card-caption">
-          <strong>TB Dashboard</strong>
-          <span>Import &amp; validate trial balance data</span>
+          <strong>Balance Sheet</strong>
+          <span>Schedule III, LLP, Partnership formats</span>
         </div>
       </div>
       <div class="inside-card">
-        <div class="inside-card-visual">
-          <svg width="100%" height="100%" viewBox="0 0 180 130" preserveAspectRatio="xMidYMid meet" style="display:block;padding:8px">
-            <rect x="0" y="0" width="40" height="10" fill="rgba(94,234,212,0.15)" rx="2"/>
-            <rect x="48" y="0" width="50" height="10" fill="rgba(255,255,255,0.06)" rx="2"/>
-            <rect x="130" y="0" width="30" height="10" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="0" y="14" width="164" height="1" fill="rgba(255,255,255,0.06)"/>
-            <rect x="0" y="20" width="50" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="58" y="20" width="60" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="126" y="20" width="20" height="8" fill="rgba(94,234,212,0.2)" rx="1"/>
-            <rect x="0" y="32" width="50" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="58" y="32" width="60" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="126" y="32" width="20" height="8" fill="rgba(234,179,8,0.2)" rx="1"/>
-            <rect x="0" y="44" width="50" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="58" y="44" width="60" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="126" y="44" width="20" height="8" fill="rgba(94,234,212,0.2)" rx="1"/>
-            <rect x="0" y="60" width="164" height="20" fill="rgba(255,255,255,0.04)" rx="3"/>
-            <rect x="4" y="65" width="80" height="10" fill="rgba(94,234,212,0.1)" rx="2"/>
-            <rect x="92" y="65" width="68" height="10" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="0" y="86" width="164" height="6" fill="rgba(94,234,212,0.1)" rx="3"/>
-            <text x="4" y="108" fill="rgba(94,234,212,0.3)" font-size="6" font-weight="700">AI Suggestion Confidence: 92%</text>
-          </svg>
+        <div class="inside-card-visual" style="background:#fff;padding:8px">
+          <div class="sample-output" style="border:1px solid #e2e8f0;box-shadow:none;font-size:7px;padding:6px;width:100%">
+            <div class="so-header" style="font-size:7px">Profit &amp; Loss</div>
+            <div class="so-row" style="font-size:6px"><span>Revenue</span><span>1,25,00,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Other Income</span><span>3,20,000</span></div>
+            <div class="so-row" style="font-size:6px;border-bottom:1px solid #e2e8f0;padding-bottom:2px"><span style="font-weight:600">Total</span><span style="font-weight:700">1,28,20,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Expenses</span><span>1,05,60,000</span></div>
+            <div class="so-row so-total" style="font-size:6px"><span>PBT</span><span>22,60,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Tax</span><span>5,65,000</span></div>
+            <div class="so-row so-total" style="font-size:6px"><span>PAT</span><span>16,95,000</span></div>
+          </div>
         </div>
         <div class="inside-card-caption">
-          <strong>Mapping Workbench</strong>
-          <span>AI-assisted ledger classification</span>
+          <strong>Profit &amp; Loss</strong>
+          <span>Comparative year-over-year statements</span>
         </div>
       </div>
       <div class="inside-card">
-        <div class="inside-card-visual">
-          <svg width="100%" height="100%" viewBox="0 0 180 130" preserveAspectRatio="xMidYMid meet" style="display:block;padding:8px">
-            <rect x="0" y="0" width="164" height="14" fill="rgba(255,255,255,0.06)" rx="2"/>
-            <rect x="4" y="3" width="30" height="8" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="42" y="3" width="40" height="8" fill="rgba(255,255,255,0.08)" rx="2"/>
-            <rect x="90" y="3" width="30" height="8" fill="rgba(255,255,255,0.08)" rx="2"/>
-            <rect x="128" y="3" width="30" height="8" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="0" y="20" width="164" height="1" fill="rgba(255,255,255,0.05)"/>
-            <rect x="0" y="26" width="110" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="118" y="26" width="40" height="8" fill="rgba(94,234,212,0.08)" rx="1"/>
-            <rect x="0" y="38" width="110" height="8" fill="rgba(255,255,255,0.04)" rx="1"/>
-            <rect x="118" y="38" width="40" height="8" fill="rgba(94,234,212,0.08)" rx="1"/>
-            <rect x="0" y="50" width="110" height="8" fill="rgba(255,255,255,0.04)" rx="1"/>
-            <rect x="118" y="50" width="40" height="8" fill="rgba(94,234,212,0.08)" rx="1"/>
-            <rect x="0" y="62" width="110" height="8" fill="rgba(94,234,212,0.06)" rx="1"/>
-            <rect x="118" y="62" width="40" height="8" fill="rgba(94,234,212,0.08)" rx="1"/>
-            <rect x="0" y="74" width="110" height="8" fill="rgba(255,255,255,0.04)" rx="1"/>
-            <rect x="118" y="74" width="40" height="8" fill="rgba(94,234,212,0.08)" rx="1"/>
-            <rect x="0" y="90" width="164" height="4" fill="rgba(94,234,212,0.12)" rx="2"/>
-            <text x="4" y="110" fill="rgba(255,255,255,0.2)" font-size="5">Balance Sheet</text>
-            <text x="90" y="110" fill="rgba(94,234,212,0.25)" font-size="5">Profit &amp; Loss</text>
-          </svg>
+        <div class="inside-card-visual" style="background:#fff;padding:8px">
+          <div class="sample-output" style="border:1px solid #e2e8f0;box-shadow:none;font-size:7px;padding:6px;width:100%">
+            <div class="so-header" style="font-size:7px">Schedules &amp; Notes</div>
+            <div class="so-section-label" style="font-size:6px">Schedule 1 &mdash; Share Capital</div>
+            <div class="so-row" style="font-size:6px"><span>Authorised</span><span>1,00,00,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Issued</span><span>50,00,000</span></div>
+            <div class="so-section-label" style="font-size:6px;margin-top:3px">Schedule 2 &mdash; Fixed Assets</div>
+            <div class="so-row" style="font-size:6px"><span>Tangible</span><span>38,00,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Intangible</span><span>4,00,000</span></div>
+            <div class="so-section-label" style="font-size:6px;margin-top:3px">Schedule 3 &mdash; Inventories</div>
+            <div class="so-row" style="font-size:6px"><span>RM &amp; WIP</span><span>18,75,000</span></div>
+          </div>
         </div>
         <div class="inside-card-caption">
-          <strong>FS Workspace</strong>
-          <span>Statement generation &amp; review</span>
+          <strong>Schedules &amp; Notes</strong>
+          <span>Auto-generated detailed disclosures</span>
         </div>
       </div>
       <div class="inside-card">
-        <div class="inside-card-visual">
-          <svg width="100%" height="100%" viewBox="0 0 180 130" preserveAspectRatio="xMidYMid meet" style="display:block;padding:8px">
-            <rect x="0" y="0" width="164" height="14" fill="rgba(255,255,255,0.06)" rx="2"/>
-            <rect x="4" y="3" width="50" height="8" fill="rgba(234,179,8,0.15)" rx="2"/>
-            <rect x="60" y="3" width="50" height="8" fill="rgba(255,255,255,0.06)" rx="2"/>
-            <rect x="116" y="3" width="42" height="8" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="0" y="20" width="164" height="1" fill="rgba(255,255,255,0.05)"/>
-            <rect x="0" y="26" width="100" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="108" y="26" width="20" height="8" fill="rgba(234,179,8,0.2)" rx="1"/>
-            <rect x="132" y="26" width="20" height="8" fill="rgba(94,234,212,0.15)" rx="1"/>
-            <rect x="0" y="38" width="100" height="8" fill="rgba(255,255,255,0.04)" rx="1"/>
-            <rect x="108" y="38" width="20" height="8" fill="rgba(94,234,212,0.15)" rx="1"/>
-            <rect x="132" y="38" width="20" height="8" fill="rgba(94,234,212,0.15)" rx="1"/>
-            <rect x="0" y="50" width="100" height="8" fill="rgba(255,255,255,0.04)" rx="1"/>
-            <rect x="108" y="50" width="20" height="8" fill="rgba(234,179,8,0.2)" rx="1"/>
-            <rect x="132" y="50" width="20" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="0" y="62" width="100" height="8" fill="rgba(255,255,255,0.04)" rx="1"/>
-            <rect x="108" y="62" width="20" height="8" fill="rgba(94,234,212,0.15)" rx="1"/>
-            <rect x="132" y="62" width="20" height="8" fill="rgba(94,234,212,0.15)" rx="1"/>
-            <rect x="0" y="76" width="164" height="14" fill="rgba(255,255,255,0.04)" rx="3"/>
-            <rect x="4" y="79" width="60" height="8" fill="rgba(94,234,212,0.1)" rx="2"/>
-            <rect x="100" y="79" width="56" height="8" fill="rgba(255,255,255,0.04)" rx="2"/>
-            <rect x="0" y="96" width="164" height="6" fill="rgba(234,179,8,0.08)" rx="3"/>
-          </svg>
+        <div class="inside-card-visual" style="background:#fff;padding:8px">
+          <div class="sample-output" style="border:1px solid #e2e8f0;box-shadow:none;font-size:7px;padding:6px;width:100%">
+            <div class="so-header" style="font-size:7px">Cash Flow Statement</div>
+            <div class="so-section-label" style="font-size:6px">Operating Activities</div>
+            <div class="so-row" style="font-size:6px"><span>PBT</span><span>22,60,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Depreciation</span><span>4,20,000</span></div>
+            <div class="so-row" style="font-size:6px"><span>Working Capital</span><span>(2,30,000)</span></div>
+            <div class="so-section-label" style="font-size:6px;margin-top:3px">Investing Activities</div>
+            <div class="so-row" style="font-size:6px"><span>Asset Purchase</span><span>(8,00,000)</span></div>
+            <div class="so-section-label" style="font-size:6px;margin-top:3px">Financing Activities</div>
+            <div class="so-row" style="font-size:6px"><span>Loan Repayment</span><span>(3,00,000)</span></div>
+          </div>
         </div>
         <div class="inside-card-caption">
-          <strong>Validation Console</strong>
-          <span>Error &amp; compliance checking</span>
+          <strong>Cash Flow Statement</strong>
+          <span>Indirect method as per Schedule III</span>
         </div>
       </div>
       <div class="inside-card">
-        <div class="inside-card-visual">
-          <svg width="100%" height="100%" viewBox="0 0 180 130" preserveAspectRatio="xMidYMid meet" style="display:block;padding:8px">
-            <rect x="0" y="0" width="164" height="14" fill="rgba(255,255,255,0.06)" rx="2"/>
-            <rect x="4" y="3" width="30" height="8" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="42" y="3" width="30" height="8" fill="rgba(255,255,255,0.08)" rx="2"/>
-            <rect x="80" y="3" width="30" height="8" fill="rgba(255,255,255,0.08)" rx="2"/>
-            <rect x="118" y="3" width="40" height="8" fill="rgba(94,234,212,0.2)" rx="2"/>
-            <rect x="0" y="20" width="164" height="1" fill="rgba(255,255,255,0.05)"/>
-            <rect x="0" y="26" width="100" height="8" fill="rgba(255,255,255,0.06)" rx="1"/>
-            <rect x="108" y="26" width="50" height="8" fill="rgba(94,234,212,0.1)" rx="1"/>
-            <rect x="0" y="38" width="100" height="8" fill="rgba(255,255,255,0.04)" rx="1"/>
-            <rect x="108" y="38" width="50" height="8" fill="rgba(94,234,212,0.1)" rx="1"/>
-            <rect x="0" y="50" width="100" height="8" fill="rgba(94,234,212,0.06)" rx="1"/>
-            <rect x="108" y="50" width="50" height="8" fill="rgba(94,234,212,0.1)" rx="1"/>
-            <rect x="0" y="62" width="100" height="8" fill="rgba(255,255,255,0.04)" rx="1"/>
-            <rect x="108" y="62" width="50" height="8" fill="rgba(94,234,212,0.1)" rx="1"/>
-            <rect x="0" y="78" width="164" height="20" fill="rgba(94,234,212,0.06)" rx="3"/>
-            <rect x="4" y="85" width="80" height="8" fill="rgba(94,234,212,0.15)" rx="2"/>
-            <rect x="0" y="102" width="50" height="8" fill="rgba(94,234,212,0.15)" rx="2"/>
-            <rect x="108" y="102" width="50" height="8" fill="rgba(255,255,255,0.06)" rx="2"/>
-          </svg>
+        <div class="inside-card-visual" style="background:#fff;padding:8px">
+          <div class="sample-output" style="border:1px solid #e2e8f0;box-shadow:none;font-size:7px;padding:6px;width:100%">
+            <div class="so-header" style="font-size:7px">Export Formats</div>
+            <div class="so-section-label" style="font-size:6px">PDF</div>
+            <div class="so-row" style="font-size:6px"><span>Audit-ready print layout</span><span style="color:var(--teal)">&#10003;</span></div>
+            <div class="so-section-label" style="font-size:6px;margin-top:3px">Excel (XLSX)</div>
+            <div class="so-row" style="font-size:6px"><span>Editable schedules</span><span style="color:var(--teal)">&#10003;</span></div>
+            <div class="so-section-label" style="font-size:6px;margin-top:3px">Word (DOCX)</div>
+            <div class="so-row" style="font-size:6px"><span>Notes &amp; reports</span><span style="color:var(--teal)">&#10003;</span></div>
+            <div class="so-section-label" style="font-size:6px;margin-top:3px">Comparative</div>
+            <div class="so-row" style="font-size:6px"><span>Current vs Previous year</span><span style="color:var(--teal)">&#10003;</span></div>
+          </div>
         </div>
         <div class="inside-card-caption">
-          <strong>Export Centre</strong>
-          <span>PDF, Excel &amp; Word exports</span>
+          <strong>Export Formats</strong>
+          <span>PDF, Excel &amp; Word with comparatives</span>
         </div>
       </div>
     </div>
@@ -653,37 +597,7 @@ body{padding-bottom:44px}
 </section>
 
 <!-- ===== BUILT FOR PROFESSIONAL PRACTICE ===== -->
-<section class="section section-alt" id="audience">
-  <div class="container">
-    <div class="section-header">
-      <h2>Built for Professional Practice</h2>
-      <p>Designed by CAs for CAs, tax practitioners, and audit firms.</p>
-    </div>
-    <div class="practice-grid">
-      <div class="practice-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Chartered Accountants</span>
-      </div>
-      <div class="practice-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Tax Practitioners</span>
-      </div>
-      <div class="practice-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Audit Firms</span>
-      </div>
-      <div class="practice-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>MSME Consultants</span>
-      </div>
-      <div class="practice-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Finance Professionals</span>
-      </div>
-    </div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:#94a3b8">Developed by <strong style="color:var(--teal);font-weight:600">E Tax Advisors Private Limited</strong></div>
-  </div>
-</section>
+<!-- merged into credibility bar above -->
 
 <!-- ===== TRADITIONAL vs e-BAL ===== -->
 <section class="section" id="compare">
@@ -810,43 +724,6 @@ body{padding-bottom:44px}
   </div>
 </section>
 
-<!-- ===== HOW IT WORKS ===== -->
-<section class="section" id="how-it-works">
-  <div class="container">
-    <div class="section-header">
-      <h2>How It Works</h2>
-      <p>From trial balance to completed statements in five simple steps.</p>
-    </div>
-    <div class="workflow">
-      <div class="workflow-step">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M3 9h18"/></svg>
-        <strong>Connect Tally</strong>
-        <span>Export from Tally Prime or ERP 9</span>
-      </div>
-      <div class="workflow-step">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        <strong>Import TB</strong>
-        <span>XML, Excel, or CSV import</span>
-      </div>
-      <div class="workflow-step">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg>
-        <strong>Map Ledgers</strong>
-        <span>AI-assisted classification</span>
-      </div>
-      <div class="workflow-step">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
-        <strong>Generate FS</strong>
-        <span>Statements, schedules &amp; notes</span>
-      </div>
-      <div class="workflow-step">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
-        <strong>Export</strong>
-        <span>PDF, Excel, or Word</span>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- ===== e-BAL SMART BRIDGE ===== -->
 <section class="section section-alt" id="bridge">
   <div class="container">
@@ -959,9 +836,9 @@ body{padding-bottom:44px}
     </div>
     <div class="pricing-grid">
       <div class="pricing-card">
-        <div class="pricing-name">Solo</div>
-        <div class="pricing-original">&#8377;15,000/yr</div>
-        <div class="pricing-price">&#8377;7,499 <span>/ Year</span></div>
+        <div class="pricing-name">e-BAL Base</div>
+        <div class="pricing-original">₹15,000/yr</div>
+        <div class="pricing-price">₹7,499 <span>/ Year</span></div>
         <div class="pricing-save">Save 50%</div>
         <p class="pricing-desc">For individual practitioners and sole proprietors.</p>
         <div class="pricing-divider"></div>
@@ -978,9 +855,9 @@ body{padding-bottom:44px}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="10" height="10"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg>
           Most Popular
         </div>
-        <div class="pricing-name">Firm</div>
-        <div class="pricing-original">&#8377;30,000/yr</div>
-        <div class="pricing-price">&#8377;14,999 <span>/ Year</span></div>
+        <div class="pricing-name">e-BAL Pro</div>
+        <div class="pricing-original">₹30,000/yr</div>
+        <div class="pricing-price">₹14,999 <span>/ Year</span></div>
         <div class="pricing-save">Save 50%</div>
         <p class="pricing-desc">For growing CA firms and tax practices.</p>
         <div class="pricing-divider"></div>
@@ -994,9 +871,9 @@ body{padding-bottom:44px}
         <a href="upgrade.php" class="pricing-btn orange">Get Started</a>
       </div>
       <div class="pricing-card">
-        <div class="pricing-name">Elite</div>
-        <div class="pricing-original">&#8377;50,000/yr</div>
-        <div class="pricing-price">&#8377;29,999 <span>/ Year</span></div>
+        <div class="pricing-name">e-BAL Elite</div>
+        <div class="pricing-original">₹50,000/yr</div>
+        <div class="pricing-price">₹29,999 <span>/ Year</span></div>
         <div class="pricing-save">Save 40%</div>
         <p class="pricing-desc">For established firms with large client bases.</p>
         <div class="pricing-divider"></div>
@@ -1031,9 +908,13 @@ body{padding-bottom:44px}
     <h2>Ready to Prepare Financial Statements Faster?</h2>
     <p>No accounting software migration required. Start with your Tally data today.</p>
     <div class="cta-actions">
-      <a href="login.php" class="btn-primary">
+      <a href="#pricing" class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Choose Your Plan
+      </a>
+      <a href="login.php" class="btn-outline-light">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-        Login to e-BAL
+        Login
       </a>
       <a href="#bridge" class="btn-outline-light">Download Smart Bridge</a>
       <a href="https://etaxadv.com/contact" class="btn-outline-light">Request a Demo</a>
@@ -1078,7 +959,11 @@ body{padding-bottom:44px}
 <div class="sticky-cta">
   <div class="container">
     <span>Start preparing statements in minutes:</span>
-    <a href="login.php" class="btn-orange">
+    <a href="#pricing" class="btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Choose Your Plan
+    </a>
+    <a href="login.php" class="btn-outline-light">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
       Login
     </a>
@@ -1108,12 +993,17 @@ body{padding-bottom:44px}
         <ul>
           <li><a href="#features">Capabilities</a></li>
           <li><a href="#pricing">Pricing</a></li>
-          <li><a href="#how-it-works">How It Works</a></li>
+          <li><a href="#workspace">How It Works</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-bottom">
       &copy; 2026 e-BAL &mdash; A product by E Tax Advisors Private Limited. All rights reserved.
+      <span style="margin-left:16px;">
+        <a href="privacy_policy.php" style="color:#94a3b8;">Privacy Policy</a> &middot;
+        <a href="terms_of_service.php" style="color:#94a3b8;">Terms of Service</a> &middot;
+        <a href="refund_policy.php" style="color:#94a3b8;">Refund Policy</a>
+      </span>
     </div>
   </div>
 </footer>

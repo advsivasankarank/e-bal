@@ -1,0 +1,20 @@
+e-BAL Web Application - Release Notes
+Release: 1.0.0
+Date: 2026-06-01
+
+Highlights
+- Commercial login-first application flow
+- Superadmin and workspace licensing controls
+- Plan-based commercial model:
+  Starter / Professional / Pro Plus
+- Revenue dashboard based on billing entries
+- Tally Smart Bridge integration for ledger and TB sync
+- Report exports:
+  PDF, Word, Excel
+- A4-oriented financial statement and notes layout
+
+Deployment Scope
+- Web application package
+- Database export
+- Licensing schema reference
+- cPanel deployment file

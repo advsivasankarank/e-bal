@@ -1,0 +1,14 @@
+e-BAL Web Application
+Release Version: 1.0.0
+Release Date: 2026-06-01
+Package Name: eBAL_Web_App_Release_2026-06-01
+
+Contents
+- eBAL_Web_App_Release_2026-06-01.zip
+- ebal_db.sql
+- license_schema.sql
+- .cpanel.yml
+- README.txt
+- INSTALLATION_GUIDE.txt
+- RELEASE_NOTES.txt
+- VERSION.txt
