@@ -7,12 +7,9 @@ if ($userId <= 0) {
     exit;
 }
 
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../app/workflow_engine.php';
-require_once __DIR__ . '/../app/helpers/plan_helper.php';
-
-$page_title = "Dashboard Main";
-require_once __DIR__ . '/layouts/header.php';
+/* Authenticated users enter the V2 Workspace */
+header('Location: ' . BASE_URL . 'my_assignments.php');
+exit;
 
 ensureWorkflowColumns();
 
