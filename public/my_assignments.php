@@ -25,6 +25,8 @@ $v2Assignments = [];
 if ($v2OwnerId > 0 || $v2UserId > 0) {
     $ownerClause = $v2OwnerId > 0 ? " AND c.owner_user_id = {$v2OwnerId}" : "";
 
+    /* TODO: Remove NULL fallback after migrating legacy companies with NULL owner_user_id.
+       See migration plan: UPDATE companies SET owner_user_id = <id> WHERE owner_user_id IS NULL */
     $v2Stmt = $pdo->prepare("
         SELECT
             c.id AS company_id,
@@ -46,7 +48,7 @@ if ($v2OwnerId > 0 || $v2UserId > 0) {
         FROM companies c
         INNER JOIN financial_years fy ON fy.company_id = c.id
         LEFT JOIN workflow_status ws ON ws.company_id = c.id AND ws.fy_id = fy.id
-        WHERE c.owner_user_id = ?
+        WHERE c.owner_user_id = ? OR c.owner_user_id IS NULL
         ORDER BY c.name ASC, fy.fy_start DESC
     ");
     $v2Stmt->execute([$v2OwnerId > 0 ? $v2OwnerId : $v2UserId]);
