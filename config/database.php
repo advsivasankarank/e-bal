@@ -30,7 +30,7 @@ if ($env !== 'local') {
         die('Database configuration missing.');
     }
 } else {
-    $db   = $db ?: 'ebal_db';
+    $db   = $db ?: 'etaxadv_ebal';
     $user = $user ?: 'root';
     $pass = $pass !== false ? $pass : '';
 }
