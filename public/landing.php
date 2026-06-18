@@ -756,7 +756,7 @@ body{padding-bottom:52px}
             Real-time sync status monitoring
           </li>
         </ul>
-        <a href="tally_bridge_exe/release/eBAL_Smart_Bridge_Client_Release_2026-06-01/eBAL_Smart_Bridge_Client_2026-06-01.zip" class="btn-primary">
+        <a href="downloads/e-bal-bridge-setup.exe" class="btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Download Smart Bridge
         </a>
