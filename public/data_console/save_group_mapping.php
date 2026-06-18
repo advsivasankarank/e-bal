@@ -5,6 +5,8 @@ require_once '../../config/database.php';
 require_once '../../config/app.php';
 requireFullContext();
 
+requireCsrfToken();
+
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
 

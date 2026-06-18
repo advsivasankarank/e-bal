@@ -13,6 +13,7 @@ require_once __DIR__ . '/../layouts/header.php';
 </div>
 
 <form method="post" action="xml_ledger_upload.php" enctype="multipart/form-data">
+    <?= csrfInput() ?>
     <div class="form-group">
         <label>Upload Ledger XML</label>
         <input type="file" name="ledger_xml" accept=".xml,text/xml,application/xml" required>
@@ -23,6 +24,7 @@ require_once __DIR__ . '/../layouts/header.php';
 <br>
 
 <form method="post" action="xml_tb_upload.php" enctype="multipart/form-data">
+    <?= csrfInput() ?>
     <div class="form-group">
         <label>Upload Trial Balance XML</label>
         <input type="file" name="tb_xml" accept=".xml,text/xml,application/xml" required>

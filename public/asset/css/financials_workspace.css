@@ -1,0 +1,343 @@
+/* ============================================================
+   FINANCIALS WORKSPACE - Sprint 4B
+   V2 Statement View / Spreadsheet View / Print Preview
+   ============================================================ */
+
+/* --- Tab Bar --- */
+.fs-tab-bar {
+    display: flex;
+    gap: 2px;
+    background: var(--panel-strong, #f8fafc);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+}
+.fs-tab {
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--muted, #64748b);
+    transition: all 0.15s;
+    border: none;
+    background: none;
+    white-space: nowrap;
+}
+.fs-tab:hover { color: var(--text, #0f172a); background: var(--bg, #f1f5f9); }
+.fs-tab.active { background: var(--brand, #0f4c81); color: #fff; font-weight: 600; }
+.fs-tab-spacer { flex: 1; }
+
+/* --- Control Bars (View Mode + WP Toggle + Year Toggle) --- */
+.fs-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.fs-control-group {
+    display: flex;
+    gap: 3px;
+    background: var(--bg, #f1f5f9);
+    border-radius: 8px;
+    padding: 3px;
+    width: fit-content;
+}
+.fs-control-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+}
+.fs-ctrl-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: none;
+    color: var(--muted, #64748b);
+    transition: all 0.12s;
+}
+.fs-ctrl-btn:hover { color: var(--text, #0f172a); background: rgba(255,255,255,0.6); }
+.fs-ctrl-btn.active { background: var(--panel-strong, #fff); color: var(--text, #0f172a); box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06)); font-weight: 600; }
+
+/* --- Validation Strip --- */
+.fs-validation-strip {
+    display: flex;
+    gap: 16px;
+    padding: 10px 16px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    font-size: 0.8rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.fs-validation-strip .item { display: flex; align-items: center; gap: 6px; }
+.fs-validation-strip .item.error { color: #dc2626; }
+.fs-validation-strip .item.warning { color: #d97706; }
+
+/* --- Three-Panel Workspace Grid --- */
+.fs-workspace {
+    display: grid;
+    grid-template-columns: 200px 1fr 0fr;
+    gap: 14px;
+    min-height: 550px;
+    transition: grid-template-columns 0.3s ease;
+}
+.fs-workspace.input-open {
+    grid-template-columns: 200px 1fr 320px;
+}
+
+/* --- Section Sidebar --- */
+.fs-section-sidebar {
+    background: var(--panel-strong, #f8fafc);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+    overflow-y: auto;
+    max-height: 650px;
+}
+.fs-section-sidebar h3 {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--muted, #64748b);
+    margin: 0 0 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.fs-section-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.83rem;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.1s;
+}
+.fs-section-item:hover { background: var(--bg, #f1f5f9); }
+.fs-section-item.active { background: var(--brand, #0f4c81); color: #fff; font-weight: 600; }
+.fs-section-item .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.fs-section-item .dot.ok { background: #16a34a; }
+.fs-section-item .dot.warn { background: #d97706; }
+.fs-section-item .dot.err { background: #dc2626; }
+
+/* --- Report Canvas --- */
+.fs-canvas {
+    background: transparent;
+    overflow-y: auto;
+    max-height: 750px;
+}
+.fs-canvas .report-page {
+    width: 100%;
+    min-height: auto;
+    margin: 0 0 16px;
+    background: #fff;
+    border: 1px solid #d8e2ef;
+    border-radius: 12px;
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.07);
+    padding: 28px 32px;
+    box-sizing: border-box;
+}
+.fs-canvas .report-page:last-child { margin-bottom: 0; }
+.fs-canvas .report-page[data-tab]:not([data-tab="active"]) { display: none; }
+
+/* --- Input Panel (Manual Adjustments) --- */
+.fs-input-panel {
+    background: var(--panel-strong, #f8fafc);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    max-height: 650px;
+}
+.fs-input-panel .panel-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.fs-input-panel .panel-header h3 { font-size: 0.92rem; margin: 0; }
+.fs-input-panel .panel-header .toggle { font-size: 0.8rem; color: var(--brand, #0f4c81); cursor: pointer; }
+.fs-input-panel .panel-body { padding: 14px 16px; flex: 1; overflow-y: auto; }
+.fs-input-panel .form-group { margin-bottom: 14px; }
+.fs-input-panel .form-group label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--muted, #64748b); margin-bottom: 4px; }
+.fs-input-panel .form-group input,
+.fs-input-panel .form-group select { width: 100%; padding: 8px 10px; border: 1px solid var(--border, #e2e8f0); border-radius: 8px; font-size: 0.85rem; }
+.fs-input-panel .form-group .hint { font-size: 0.73rem; color: var(--muted, #64748b); margin-top: 3px; }
+
+/* --- Compliance Zone --- */
+.fs-compliance-zone {
+    margin-top: 24px;
+    border-top: 2px solid var(--border, #e2e8f0);
+    padding-top: 20px;
+}
+.fs-compliance-zone-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+    padding-left: 4px;
+}
+.fs-compliance-card {
+    background: #fff;
+    border: 1px solid #d8e2ef;
+    border-radius: 12px;
+    padding: 24px 28px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+.fs-compliance-card h3 {
+    font-size: 1.05rem;
+    margin: 0 0 12px;
+    color: #0f172a;
+}
+.fs-compliance-placeholder {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted, #64748b);
+    font-size: 0.9rem;
+}
+.fs-compliance-placeholder .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background: #f1f5f9;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted, #64748b);
+    margin-bottom: 8px;
+}
+
+/* --- Directors Report in Compliance Zone --- */
+.fs-dr-form textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 10px 12px;
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-family: inherit;
+    resize: vertical;
+    margin-bottom: 10px;
+}
+.fs-dr-form label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--muted, #64748b);
+    margin-bottom: 4px;
+}
+
+/* --- No Data State --- */
+.fs-no-data {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted, #64748b);
+}
+.fs-no-data .icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.3; }
+
+/* --- Print Preview Container --- */
+.fs-print-preview-container {
+    max-width: 210mm;
+    margin: 0 auto;
+    background: #fff;
+    border: 1px solid #d8e2ef;
+    border-radius: 4px;
+    padding: 15mm;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+.fs-print-controls {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 14px;
+}
+.fs-print-controls button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border, #e2e8f0);
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 500;
+}
+.fs-print-controls button:hover { background: var(--bg, #f1f5f9); }
+
+/* --- WP Sub-view Content --- */
+.fs-wp-section {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #eef2f7;
+}
+.fs-wp-section:last-child { border-bottom: none; }
+.fs-wp-section h4 {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0 0 10px;
+}
+.fs-wp-derivation {
+    font-size: 0.83rem;
+    color: #475569;
+    margin-bottom: 6px;
+    padding: 6px 10px;
+    background: #f8fafc;
+    border-radius: 6px;
+    border-left: 3px solid var(--brand, #0f4c81);
+}
+.fs-wp-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+.fs-wp-table th,
+.fs-wp-table td { padding: 6px 10px; text-align: left; border: 1px solid #e2e8f0; }
+.fs-wp-table th { background: #f1f5f9; font-weight: 600; }
+.fs-wp-table td.amount { text-align: right; font-variant-numeric: tabular-nums; }
+.fs-wp-table tfoot td { font-weight: 700; background: #f8fafc; }
+
+/* --- Responsive --- */
+@media (max-width: 1024px) {
+    .fs-workspace { grid-template-columns: 1fr 0fr; }
+    .fs-workspace.input-open { grid-template-columns: 1fr 320px; }
+    .fs-section-sidebar { display: none; }
+}
+@media (max-width: 768px) {
+    .fs-workspace { grid-template-columns: 1fr; }
+    .fs-workspace.input-open { grid-template-columns: 1fr; }
+    .fs-controls { flex-direction: column; align-items: stretch; }
+    .fs-compliance-zone { padding-top: 14px; }
+}
+
+/* --- Print --- */
+@media print {
+    @page { size: A4; margin: 10mm; }
+    body { background: #fff !important; }
+    .topbar, .page-title, .active-info, .fs-tab-bar, .fs-controls,
+    .fs-validation-strip, .fs-section-sidebar, .fs-input-panel,
+    .btn, .btn-primary, .success-box, .error-box,
+    .fs-compliance-zone { display: none !important; }
+    .fs-workspace { display: block !important; grid-template-columns: 1fr !important; }
+    .fs-canvas { max-height: none !important; }
+    .fs-canvas .report-page {
+        width: auto; min-height: auto; margin: 0 0 10mm;
+        border: 0; border-radius: 0; box-shadow: none; padding: 0;
+        page-break-after: always;
+    }
+    .fs-canvas .report-page:last-child { page-break-after: auto; }
+    .fs-canvas .report-page[data-tab] { display: block !important; }
+}

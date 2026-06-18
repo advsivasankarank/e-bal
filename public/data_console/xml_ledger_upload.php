@@ -4,6 +4,7 @@ require_once '../../app/context_check.php';
 require_once '../../app/helpers/xml_sanitizer.php';
 
 requireFullContext();
+requireCsrfToken();
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];

@@ -34,6 +34,8 @@ if ((int) ($workflow['mapping_completed'] ?? 0) !== 1) {
     exit;
 }
 
+requireCsrfToken();
+
 $liveCompanyName = trim((string) ($_POST['live_company_name'] ?? ''));
 $selectedCompanyNormalized = normalizeCompanyComparisonName($selectedCompanyName);
 $liveCompanyNormalized = normalizeCompanyComparisonName($liveCompanyName);

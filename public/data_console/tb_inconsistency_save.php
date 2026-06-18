@@ -10,6 +10,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+requireCsrfToken();
+
 $rows = $_SESSION['pending_tb_rows'] ?? [];
 $unknowns = $_SESSION['pending_tb_unknowns'] ?? [];
 

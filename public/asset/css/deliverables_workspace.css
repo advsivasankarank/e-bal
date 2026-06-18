@@ -1,0 +1,199 @@
+/* ============================================================
+   DELIVERABLES WORKSPACE - Sprint 4D
+   Final Output Centre
+   ============================================================ */
+
+/* --- Delivery Status Banner --- */
+.dw-status-banner {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: #fff;
+    border: 1px solid var(--border, #e0e4e8);
+    border-radius: 12px;
+    padding: 20px 24px;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+    margin-bottom: 16px;
+}
+.dw-status-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    border: 3px solid;
+}
+.dw-status-icon.ready { border-color: #16a34a; color: #16a34a; background: #dcfce7; }
+.dw-status-icon.blocked { border-color: #dc2626; color: #dc2626; background: #fee2e2; }
+.dw-status-icon.draft { border-color: #6b7280; color: #6b7280; background: #f3f4f6; }
+.dw-status-info { flex: 1; }
+.dw-status-info h3 { margin: 0 0 4px; font-size: 1rem; }
+.dw-status-info .dw-status-msg { font-size: 0.88rem; color: var(--muted, #6b7280); }
+.dw-status-info .dw-status-counts { display: flex; gap: 16px; margin-top: 6px; font-size: 0.8rem; color: var(--muted, #6b7280); }
+.dw-status-info .dw-status-counts strong { color: var(--text, #1a1d21); }
+
+/* --- Section Block --- */
+.dw-section {
+    background: #fff;
+    border: 1px solid var(--border, #e0e4e8);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+.dw-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border, #e0e4e8);
+    cursor: pointer;
+    user-select: none;
+}
+.dw-section-header h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+.dw-section-header .dw-badge {
+    font-size: 0.72rem;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+.dw-section-header .dw-badge.client { background: #dbeafe; color: #2563eb; }
+.dw-section-header .dw-badge.internal { background: #f3e8ff; color: #7c3aed; }
+.dw-section-header .dw-toggle { font-size: 0.8rem; color: var(--muted, #6b7280); transition: transform 0.2s; }
+.dw-section-header .dw-toggle.collapsed { transform: rotate(-90deg); }
+.dw-section-body { padding: 16px 20px; }
+.dw-section-body.collapsed { display: none; }
+
+/* --- Package Document List --- */
+.dw-pkg-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text, #1a1d21);
+    margin-bottom: 12px;
+}
+.dw-doc-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border, #e0e4e8);
+}
+.dw-doc-item:last-child { border-bottom: none; }
+.dw-doc-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.7rem;
+}
+.dw-doc-icon.ready { background: #dcfce7; color: #16a34a; }
+.dw-doc-icon.not-ready { background: #fee2e2; color: #dc2626; }
+.dw-doc-icon.generated { background: #dbeafe; color: #2563eb; }
+.dw-doc-name { flex: 1; font-size: 0.88rem; }
+.dw-doc-formats { display: flex; gap: 4px; flex-shrink: 0; }
+.dw-format-btn {
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border, #e0e4e8);
+    background: #fff;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--text, #1a1d21);
+    transition: all 0.12s;
+}
+.dw-format-btn:hover { border-color: var(--brand, #0f4c81); background: var(--brand-light, #e8f0f8); color: var(--brand, #0f4c81); }
+.dw-format-btn.disabled { opacity: 0.4; pointer-events: none; }
+
+/* --- Export Format Cards --- */
+.dw-export-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+}
+.dw-export-card {
+    flex: 1;
+    min-width: 120px;
+    padding: 14px;
+    border: 2px solid var(--border, #e0e4e8);
+    border-radius: 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+    color: var(--text, #1a1d21);
+}
+.dw-export-card:hover { border-color: var(--brand, #0f4c81); box-shadow: var(--shadow-sm); }
+.dw-export-card.active { border-color: var(--brand, #0f4c81); background: var(--brand-light, #e8f0f8); }
+.dw-export-card .dw-ext { font-size: 0.75rem; font-weight: 700; color: var(--brand, #0f4c81); text-transform: uppercase; }
+.dw-export-card .dw-label { font-size: 0.82rem; margin-top: 4px; }
+
+/* --- Package Preview --- */
+.dw-preview-frame {
+    width: 100%;
+    height: 500px;
+    border: 1px solid var(--border, #e0e4e8);
+    border-radius: 8px;
+}
+
+/* --- Review Snapshot --- */
+.dw-review-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+}
+.dw-review-card {
+    padding: 14px;
+    border: 1px solid var(--border, #e0e4e8);
+    border-radius: 8px;
+}
+.dw-review-card .dw-rc-label { font-size: 0.75rem; color: var(--muted, #6b7280); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.dw-review-card .dw-rc-value { font-size: 0.92rem; font-weight: 600; }
+.dw-review-card .dw-rc-sub { font-size: 0.78rem; color: var(--muted, #6b7280); margin-top: 2px; }
+
+/* --- Delivery Actions --- */
+.dw-actions-bar {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    padding: 16px;
+    background: #fff;
+    border: 1px solid var(--border, #e0e4e8);
+    border-radius: 12px;
+    margin-top: 16px;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+}
+
+/* --- Blocked Items --- */
+.dw-blocked-list { margin-top: 8px; }
+.dw-blocked-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 0.85rem;
+    color: #dc2626;
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+    .dw-status-banner { flex-direction: column; text-align: center; }
+    .dw-status-info .dw-status-counts { justify-content: center; flex-wrap: wrap; }
+    .dw-export-row { flex-direction: column; }
+    .dw-actions-bar { flex-direction: column; }
+    .dw-doc-item { flex-wrap: wrap; }
+}
+
+/* --- Print --- */
+@media print {
+    .dw-actions-bar, .dw-format-btn, .dw-export-row { display: none !important; }
+    .dw-section-body.collapsed { display: block !important; }
+}

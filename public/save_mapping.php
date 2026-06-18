@@ -1,8 +1,9 @@
 <?php
-session_start();
-
+require_once __DIR__ . '/../app/session_bootstrap.php';
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/core/mapping_engine.php';
+
+requireCsrfToken();
 
 $company_id = $_SESSION['company_id'] ?? 1;
 $fy_id      = $_SESSION['fy_id'] ?? null;

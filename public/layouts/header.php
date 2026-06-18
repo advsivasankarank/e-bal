@@ -1,6 +1,13 @@
 <?php
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../app/session_bootstrap.php';
+
+/* V2 mode: delegate to V2 shell when flag is set */
+if (!empty($_SESSION['v2_mode'])) {
+    require_once __DIR__ . '/header_v2.php';
+    return;
+}
+
 require_once __DIR__ . '/../../app/middleware/license_check.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../app/helpers/plan_helper.php';

@@ -12,6 +12,8 @@ $financialYears = getFinancialYears($pdo);
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrfToken();
+
     $fy_id = (int) ($_POST['fy_id'] ?? 0);
 
     if ($fy_id <= 0) {

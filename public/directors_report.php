@@ -52,6 +52,8 @@ if (!$hasSavedSections && trim($draft) !== '') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireCsrfToken();
+
     $action = (string) ($_POST['directors_report_action'] ?? '');
 
     if ($action === 'generate_ai') {
