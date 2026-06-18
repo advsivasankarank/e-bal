@@ -11,8 +11,8 @@
  */
 $page_title = 'Assignment Home';
 require_once __DIR__ . '/layouts/header_v2.php';
-require_once __DIR__ . '/app/workflow_engine.php';
-require_once __DIR__ . '/app/context_check.php';
+require_once __DIR__ . '/../app/workflow_engine.php';
+require_once __DIR__ . '/../app/context_check.php';
 
 ensureWorkflowColumns();
 
