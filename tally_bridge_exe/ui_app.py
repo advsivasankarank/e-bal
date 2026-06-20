@@ -2,8 +2,6 @@ import json
 import logging
 import os
 import re
-import ssl
-import subprocess
 import threading
 import sys
 import time
@@ -32,10 +30,6 @@ TB_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_tb.php"
 VOUCHER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/voucher_sync.php?action=sync"
 LISTEN_HOST_DEFAULT = "127.0.0.1"
 LISTEN_PORT_DEFAULT = 9123
-HTTPS_PORT_DEFAULT = 9124
-CERT_DIR_NAME = "certs"
-CERT_FILE = "bridge.pem"
-KEY_FILE = "bridge.key"
 
 LEDGER_XML = """<ENVELOPE>
  <HEADER>
@@ -427,92 +421,10 @@ def allowed_browser_origins():
     return {
         "http://localhost",
         "http://127.0.0.1",
-        "http://localhost:9123",
-        "http://127.0.0.1:9123",
         "https://ebal.etaxadv.com",
         "https://etaxadv.com",
         "https://www.etaxadv.com",
     }
-
-
-def ensure_self_signed_cert():
-    """Generate a self-signed certificate for HTTPS if not present."""
-    app_dir = Path(__file__).resolve().parent
-    cert_dir = app_dir / CERT_DIR_NAME
-    cert_path = cert_dir / CERT_FILE
-    key_path = cert_dir / KEY_FILE
-
-    if cert_path.exists() and key_path.exists():
-        return str(cert_path), str(key_path)
-
-    cert_dir.mkdir(exist_ok=True)
-
-    try:
-        subprocess.run(
-            [
-                "openssl", "req", "-x509", "-newkey", "rsa:2048",
-                "-keyout", str(key_path), "-out", str(cert_path),
-                "-days", "3650", "-nodes",
-                "-subj", "/CN=localhost/O=e-BAL Smart Bridge/C=IN",
-            ],
-            check=True,
-            capture_output=True,
-            timeout=15,
-        )
-        logging.info("Self-signed certificate generated: %s", cert_path)
-        return str(cert_path), str(key_path)
-    except Exception as exc:
-        logging.warning("openssl failed (%s), falling back to Python ssl", exc)
-
-    try:
-        from cryptography import x509
-        from cryptography.x509.oid import NameOID
-        from cryptography.hazmat.primitives import hashes, serialization
-        from cryptography.hazmat.primitives.asymmetric import rsa
-        import ipaddress
-
-        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        subject = issuer = x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "e-BAL Smart Bridge"),
-        ])
-        cert = (
-            x509.CertificateBuilder()
-            .subject_name(subject)
-            .issuer_name(issuer)
-            .public_key(key.public_key())
-            .serial_number(x509.random_serial_number())
-            .not_valid_before(datetime.utcnow())
-            .not_valid_after(datetime.utcnow().replace(year=datetime.utcnow().year + 10))
-            .add_extension(
-                x509.SubjectAlternativeName([
-                    x509.DNSName("localhost"),
-                    x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
-                ]),
-                critical=False,
-            )
-            .sign(key, hashes.SHA256())
-        )
-        key_path.write_bytes(key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.TraditionalOpenSSL,
-            serialization.NoEncryption(),
-        ))
-        cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
-        logging.info("Certificate generated via cryptography lib: %s", cert_path)
-        return str(cert_path), str(key_path)
-    except ImportError:
-        pass
-
-    logging.warning("No cert generation available — HTTPS disabled")
-    return None, None
-
-
-def create_https_context(cert_path, key_path):
-    """Create an SSL context for the HTTPS server."""
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.load_cert_chain(cert_path, key_path)
-    return ctx
 
 
 def sanitize_xml(raw_xml):
@@ -1026,7 +938,6 @@ class SmartBridgeUI:
     def start_command_server(self):
         host = self.config.get("listen_host") or LISTEN_HOST_DEFAULT
         port = int(self.config.get("listen_port") or LISTEN_PORT_DEFAULT)
-        https_port = int(self.config.get("https_port") or HTTPS_PORT_DEFAULT)
         try:
             server = HTTPServer((host, port), self.make_handler())
         except OSError as exc:
@@ -1042,40 +953,15 @@ class SmartBridgeUI:
         self.server_thread = threading.Thread(target=run, daemon=True)
         self.server_thread.start()
 
-        cert_path, key_path = ensure_self_signed_cert()
-        if cert_path and key_path:
-            try:
-                https_server = HTTPServer((host, https_port), self.make_handler())
-                https_server.socket = create_https_context(cert_path, key_path).wrap_socket(
-                    https_server.socket, server_side=True
-                )
-                self.https_server = https_server
-
-                def run_https():
-                    https_server.serve_forever()
-
-                self.https_thread = threading.Thread(target=run_https, daemon=True)
-                self.https_thread.start()
-                logging.info("HTTPS server started on %s:%d", host, https_port)
-            except Exception as exc:
-                logging.warning("HTTPS server failed to start: %s", exc)
-                self.https_server = None
-
     def stop_command_server(self):
-        if self.server:
-            try:
-                self.server.shutdown()
-            except Exception:
-                pass
-            self.server = None
-            self.server_thread = None
-        if getattr(self, "https_server", None):
-            try:
-                self.https_server.shutdown()
-            except Exception:
-                pass
-            self.https_server = None
-            self.https_thread = None
+        if not self.server:
+            return
+        try:
+            self.server.shutdown()
+        except Exception:
+            pass
+        self.server = None
+        self.server_thread = None
 
     def make_handler(self):
         ui = self
