@@ -506,6 +506,8 @@ include __DIR__ . '/../layouts/header.php';
             </button>
         </div>
         <div class="emw-modal-body" id="tally-modal-body">
+            <!-- Bridge Diagnostics -->
+            <div id="tally-diagnostics" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;margin-bottom:14px;"></div>
             <!-- Step 1: Loading / Company List -->
             <div id="tally-step-list">
                 <div id="tally-loading" style="text-align:center;padding:30px;color:#64748b;">

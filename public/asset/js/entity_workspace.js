@@ -230,8 +230,8 @@
 
     /* ---- Tally Company Import ---- */
     /*
-     * Architecture: Browser → PHP Server → Tally XML API (port 9000)
-     * PHP uses existing fetchFromTally() function.
+     * Architecture: Browser → PHP Server → Smart Bridge (port 9123) → Tally (port 9000)
+     * PHP uses bridge /fetch endpoint to forward XML requests.
      */
     var tallySelectedCompany = null;
     var tallyMappedData = null;
@@ -244,6 +244,7 @@
         document.getElementById('tally-error').style.display = 'none';
         document.getElementById('tally-company-list').style.display = 'none';
         document.getElementById('tally-import-btn').style.display = 'none';
+        document.getElementById('tally-diagnostics').style.display = 'none';
         document.getElementById('tally-modal-title').textContent = 'Fetch from Tally';
         tallySelectedCompany = null;
         tallyMappedData = null;
@@ -257,6 +258,7 @@
     window.retryTallyConnection = function() {
         document.getElementById('tally-loading').style.display = '';
         document.getElementById('tally-error').style.display = 'none';
+        document.getElementById('tally-diagnostics').style.display = 'none';
         loadTallyCompanies();
     };
 
@@ -265,11 +267,25 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             document.getElementById('tally-loading').style.display = 'none';
+
+            /* Show diagnostics */
+            var diagEl = document.getElementById('tally-diagnostics');
+            if (diagEl) {
+                var bridgeStatus = data.bridge_status || 'unknown';
+                var tallyStatus = data.tally_status || 'unknown';
+                diagEl.innerHTML =
+                    '<div style="display:flex;gap:16px;font-size:.78rem;margin-bottom:12px;">' +
+                    '<span>Bridge: <strong style="color:' + (bridgeStatus === 'online' ? '#047857' : '#dc2626') + ';">' + esc(bridgeStatus) + '</strong></span>' +
+                    '<span>Tally: <strong style="color:' + (tallyStatus === 'connected' ? '#047857' : '#dc2626') + ';">' + esc(tallyStatus) + '</strong></span>' +
+                    '</div>';
+                diagEl.style.display = '';
+            }
+
             if (!data.ok) {
                 document.getElementById('tally-error').style.display = '';
                 document.getElementById('tally-error-msg').innerHTML =
                     '<div style="color:#dc2626;font-weight:600;margin-bottom:6px;">' + esc(data.message || 'Connection failed.') + '</div>' +
-                    '<div style="font-size:.78rem;">Ensure Tally is running on this machine and listening on port 9000.</div>';
+                    '<div style="font-size:.78rem;">Ensure the e-BAL Smart Bridge is running and Tally is open.</div>';
                 return;
             }
             var companies = data.companies || [];
