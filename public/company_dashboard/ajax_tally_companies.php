@@ -30,31 +30,62 @@ $bridgeToken = defined('TALLY_BRIDGE_TOKEN') ? trim((string) TALLY_BRIDGE_TOKEN)
 /* Step 1: Health check via bridge /health endpoint */
 $healthOk = false;
 $healthData = null;
+$healthError = '';
 $healthCh = curl_init($bridgeUrl . '/health');
 curl_setopt_array($healthCh, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_TIMEOUT => 5,
     CURLOPT_CONNECTTIMEOUT => 3,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
     CURLOPT_HTTPHEADER => array_filter([
         'Accept: application/json',
         $bridgeToken !== '' ? 'X-Bridge-Token: ' . $bridgeToken : null,
     ]),
 ]);
 $healthResponse = curl_exec($healthCh);
-$healthCode = curl_getinfo($healthCh, CURLINFO_HTTP_CODE);
+$healthCode = (int) curl_getinfo($healthCh, CURLINFO_HTTP_CODE);
+$healthErrno = curl_errno($healthCh);
+$healthErrMsg = curl_error($healthCh);
 curl_close($healthCh);
 
-if ($healthResponse !== false) {
+if ($healthResponse === false) {
+    $healthError = 'cURL error ' . $healthErrno . ': ' . $healthErrMsg;
+    error_log('[e-BAL] Bridge health check failed: ' . $healthError . ' (url: ' . $bridgeUrl . '/health)');
+} elseif ($healthCode < 200 || $healthCode >= 300) {
+    $healthError = 'HTTP ' . $healthCode . ' from bridge';
+    error_log('[e-BAL] Bridge health check returned HTTP ' . $healthCode . ' (url: ' . $bridgeUrl . '/health)');
+} else {
     $healthData = json_decode($healthResponse, true);
-    $healthOk = is_array($healthData) && !empty($healthData['ok']);
+    if (!is_array($healthData)) {
+        $healthError = 'Invalid JSON: ' . substr($healthResponse, 0, 200);
+        error_log('[e-BAL] Bridge health check returned non-JSON: ' . substr($healthResponse, 0, 200));
+    } elseif (empty($healthData['ok'])) {
+        $healthError = 'Bridge reports not ok';
+        error_log('[e-BAL] Bridge health check returned ok=false');
+    } else {
+        $healthOk = true;
+    }
 }
 
 if (!$healthOk) {
+    $diagMsg = 'e-BAL Smart Bridge is not connected. Start the Smart Bridge application on your computer.';
+    if ($healthError !== '') {
+        $diagMsg .= ' (Debug: ' . $healthError . ')';
+        error_log('[e-BAL] Bridge status=offline | ' . $healthError);
+    }
     echo json_encode([
         'ok' => false,
         'bridge_status' => 'offline',
         'tally_status' => 'unknown',
-        'message' => 'e-BAL Smart Bridge is not connected. Start the Smart Bridge application on your computer.',
+        'message' => $diagMsg,
+        'debug' => [
+            'url' => $bridgeUrl . '/health',
+            'curl_errno' => $healthErrno ?? 0,
+            'curl_error' => $healthErrMsg ?? '',
+            'http_code' => $healthCode ?? 0,
+            'response_preview' => is_string($healthResponse) ? substr($healthResponse, 0, 200) : '(no response)',
+        ],
     ]);
     exit;
 }
@@ -98,6 +129,8 @@ curl_setopt_array($fetchCh, [
     CURLOPT_POSTFIELDS => $fetchPayload,
     CURLOPT_TIMEOUT => 15,
     CURLOPT_CONNECTTIMEOUT => 5,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
     CURLOPT_HTTPHEADER => array_filter([
         'Content-Type: application/json',
         'Accept: application/json',
@@ -105,10 +138,23 @@ curl_setopt_array($fetchCh, [
     ]),
 ]);
 $fetchResponse = curl_exec($fetchCh);
-$fetchCode = curl_getinfo($fetchCh, CURLINFO_HTTP_CODE);
+$fetchCode = (int) curl_getinfo($fetchCh, CURLINFO_HTTP_CODE);
+$fetchErrno = curl_errno($fetchCh);
+$fetchErrMsg = curl_error($fetchCh);
 curl_close($fetchCh);
 
-if ($fetchResponse === false || $fetchCode >= 400) {
+if ($fetchResponse === false) {
+    error_log('[e-BAL] Bridge fetch failed: cURL error ' . $fetchErrno . ': ' . $fetchErrMsg);
+    echo json_encode([
+        'ok' => false,
+        'bridge_status' => 'online',
+        'tally_status' => 'disconnected',
+        'message' => 'Smart Bridge is running but Tally is not connected. Open Tally and try again.',
+    ]);
+    exit;
+}
+if ($fetchCode >= 400) {
+    error_log('[e-BAL] Bridge fetch returned HTTP ' . $fetchCode);
     echo json_encode([
         'ok' => false,
         'bridge_status' => 'online',
@@ -120,11 +166,13 @@ if ($fetchResponse === false || $fetchCode >= 400) {
 
 $fetchData = json_decode($fetchResponse, true);
 if (!is_array($fetchData) || empty($fetchData['ok']) || !isset($fetchData['xml'])) {
+    $fetchDetail = is_array($fetchData) ? ($fetchData['error'] ?? 'Unknown error') : 'Invalid JSON response';
+    error_log('[e-BAL] Bridge fetch returned error: ' . $fetchDetail);
     echo json_encode([
         'ok' => false,
         'bridge_status' => 'online',
         'tally_status' => 'error',
-        'message' => 'Smart Bridge returned an error: ' . ($fetchData['error'] ?? 'Unknown error'),
+        'message' => 'Smart Bridge returned an error: ' . $fetchDetail,
     ]);
     exit;
 }

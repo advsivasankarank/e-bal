@@ -71,6 +71,8 @@ curl_setopt_array($ch, [
     CURLOPT_POSTFIELDS => $fetchPayload,
     CURLOPT_TIMEOUT => 15,
     CURLOPT_CONNECTTIMEOUT => 5,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
     CURLOPT_HTTPHEADER => array_filter([
         'Content-Type: application/json',
         'Accept: application/json',
@@ -78,17 +80,28 @@ curl_setopt_array($ch, [
     ]),
 ]);
 $response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlErrno = curl_errno($ch);
+$curlError = curl_error($ch);
 curl_close($ch);
 
-if ($response === false || $httpCode >= 400) {
-    echo json_encode(['ok' => false, 'message' => 'Smart Bridge is not reachable.']);
+if ($response === false) {
+    $errMsg = 'cURL error ' . $curlErrno . ': ' . $curlError;
+    error_log('[e-BAL] Bridge fetch failed: ' . $errMsg . ' (url: ' . $bridgeUrl . '/fetch)');
+    echo json_encode(['ok' => false, 'message' => 'Smart Bridge is not reachable. (' . $errMsg . ')']);
+    exit;
+}
+if ($httpCode >= 400) {
+    error_log('[e-BAL] Bridge fetch returned HTTP ' . $httpCode . ' (url: ' . $bridgeUrl . '/fetch)');
+    echo json_encode(['ok' => false, 'message' => 'Smart Bridge returned HTTP ' . $httpCode . '.']);
     exit;
 }
 
 $data = json_decode($response, true);
 if (!is_array($data) || empty($data['ok']) || !isset($data['xml'])) {
-    echo json_encode(['ok' => false, 'message' => 'Smart Bridge returned an error.']);
+    $detail = is_array($data) ? ($data['error'] ?? ($data['message'] ?? 'Unknown error')) : 'Invalid JSON response';
+    error_log('[e-BAL] Bridge fetch returned error: ' . $detail);
+    echo json_encode(['ok' => false, 'message' => 'Smart Bridge returned an error: ' . $detail]);
     exit;
 }
 
