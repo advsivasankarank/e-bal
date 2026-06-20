@@ -9,9 +9,9 @@ require_once __DIR__ . '/../app/helpers/company_reporting_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 
 $page_title = 'Review Workspace';
-require_once __DIR__ . '/../layouts/header_v2.php';
-
 requireAssignmentAccess();
+
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
@@ -120,10 +120,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             addTimelineEntry($pdo, $company_id, $fy_id, 'signoff_' . $role . '|' . $userId . '|' . $now);
 
-            // Set workflow.verified if staff or manager signs
-            if (in_array($role, ['staff', 'manager'])) {
-                updateWorkflow($company_id, $fy_id, 'verified');
-            }
+            /* HARDENED: Derive verified from signoff data + review policy. Never set manually. */
+            require_once __DIR__ . '/../../app/helpers/approval_policy_helper.php';
+            deriveAndPersistVerified($pdo, $company_id, $fy_id);
         }
 
         header("Location: " . BASE_URL . "review/index.php");
@@ -143,6 +142,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             addTimelineEntry($pdo, $company_id, $fy_id, 'signoff_revoke|' . $userId . '|' . $now . '|' . $role);
+
+            /* HARDENED: Derive verified from signoff data + review policy after revoke. */
+            require_once __DIR__ . '/../../app/helpers/approval_policy_helper.php';
+            deriveAndPersistVerified($pdo, $company_id, $fy_id);
         }
 
         header("Location: " . BASE_URL . "review/index.php");

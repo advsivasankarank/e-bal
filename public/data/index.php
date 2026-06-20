@@ -12,13 +12,11 @@
  * No database changes. No engine changes.
  */
 $page_title = 'Data';
-require_once __DIR__ . '/../layouts/header_v2.php';
-require_once __DIR__ . '/../app/workflow_engine.php';
-require_once __DIR__ . '/../app/context_check.php';
+require_once __DIR__ . '/../../app/context_check.php';
+require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../app/workflow_engine.php';
 
-ensureWorkflowColumns();
-
-/* ---- Resolve context ---- */
+/* ---- Resolve context (before any output) ---- */
 $v2CompanyId = (int) ($_SESSION['company_id'] ?? 0);
 $v2FyId      = (int) ($_SESSION['fy_id']      ?? 0);
 $v2CompanyName = (string) ($_SESSION['company_name'] ?? '');
@@ -30,6 +28,10 @@ if ($v2CompanyId <= 0 || $v2FyId <= 0) {
 }
 
 requireAssignmentAccess();
+/* HARDENED: ensureWorkflowColumns() removed — DDL in migration script only */
+
+/* Now safe to output HTML */
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 /* ---- Query workflow status ---- */
 $v2Stmt = $pdo->prepare("
@@ -127,11 +129,11 @@ $v2SubSections = [
         'label' => 'Reconciliation',
         'desc'  => 'Validate data integrity and reconcile balances',
         'href'  => BASE_URL . 'reconciliation_console.php',
-        'status' => $v2Ws['tally_fetched'] && $v2Ws['mapping_completed']
-            ? ($v2Ws['verified'] ? 'complete' : 'available')
+        'status' => !empty($v2Ws['tally_fetched']) && !empty($v2Ws['mapping_completed'])
+            ? (!empty($v2Ws['verified']) ? 'complete' : 'available')
             : 'pending',
-        'detail' => $v2Ws['tally_fetched'] && $v2Ws['mapping_completed']
-            ? ($v2Ws['verified'] ? 'Reconciliation complete' : 'Ready to reconcile')
+        'detail' => !empty($v2Ws['tally_fetched']) && !empty($v2Ws['mapping_completed'])
+            ? (!empty($v2Ws['verified']) ? 'Reconciliation complete' : 'Ready to reconcile')
             : 'Complete data steps first',
     ],
 ];

@@ -46,8 +46,11 @@ if ($isBridgeRequest) {
         }
     }
 } else {
-    $companyId = (int) ($companyId > 0 ? $companyId : ($_SESSION['company_id'] ?? 0));
-    $fyId = (int) ($fyId > 0 ? $fyId : ($_SESSION['fy_id'] ?? 0));
+    /* HARDENED: On session path, always use session values. Never override from GET. */
+    require_once __DIR__ . '/../app/context_check.php';
+    requireAssignmentAccess();
+    $companyId = (int) ($_SESSION['company_id'] ?? 0);
+    $fyId = (int) ($_SESSION['fy_id'] ?? 0);
 }
 
 if ($companyId <= 0 || $fyId <= 0) {

@@ -18,9 +18,9 @@ function computeReadiness(PDO $pdo, int $company_id, int $fy_id, array $fs = [])
     $validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
     $totalErrors = count($validationResult['errors'] ?? []);
     $totalWarnings = count($validationResult['warnings'] ?? []);
-    $totalChecks = 7; // Base check count
-    $failedChecks = $totalErrors + $totalWarnings;
-    $passedChecks = max(0, $totalChecks - $failedChecks);
+    /* Total checks = errors + warnings + passed checks. Minimum 1 to avoid division by zero. */
+    $totalChecks = max(1, $totalErrors + $totalWarnings);
+    $passedChecks = max(0, $totalChecks - $totalErrors - $totalWarnings);
     $validationScore = $totalChecks > 0 ? round(($passedChecks / $totalChecks) * 60) : 60;
 
     // --- Remarks Score (30%) ---

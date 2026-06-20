@@ -9,9 +9,9 @@ require_once __DIR__ . '/../app/helpers/company_reporting_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 
 $page_title = 'Deliverables';
-require_once __DIR__ . '/../layouts/header_v2.php';
-
 requireAssignmentAccess();
+
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
@@ -69,12 +69,8 @@ if ($blockingMissing) {
 }
 
 // Count ready docs
-$clientReady = $hasReportData ? 5 : 0;
-if ($entityCategory === 'corporate') $clientReady = $hasReportData ? 5 : 0;
-elseif ($entitySubcategory === 'llp') $clientReady = $hasReportData ? 5 : 0;
-elseif (in_array($entitySubcategory, ['trust', 'society'], true)) $clientReady = $hasReportData ? 4 : 0;
-else $clientReady = $hasReportData ? 5 : 0;
-$clientTotal = $clientReady;
+$clientTotal = in_array($entitySubcategory, ['trust', 'society'], true) ? 4 : 5;
+$clientReady = $hasReportData ? $clientTotal : 0;
 $internalReady = 4;
 
 $baseUrl = BASE_URL . 'report_download.php';
@@ -105,7 +101,7 @@ $baseUrl = BASE_URL . 'report_download.php';
             <span>Readiness: <strong><?= $readinessScore ?>%</strong></span>
             <?php if ($deliveryStatus === 'blocked'): ?>
             <span style="color:#dc2626;">
-                <?php if ($blockingErrors): ?><?= count($validationResult['errors']) ?> validation error(s)<?php endif; ?>
+                <?php if ($blockingErrors): ?><?= $readiness['validation']['errors'] ?> validation error(s)<?php endif; ?>
                 <?php if ($blockingDR): ?><?php if ($blockingErrors): ?>, <?php endif; ?>Directors Report missing<?php endif; ?>
             </span>
             <?php endif; ?>
@@ -118,7 +114,7 @@ $baseUrl = BASE_URL . 'report_download.php';
 <div class="dw-section">
     <div class="dw-section-body">
         <div class="dw-blocked-list">
-            <?php foreach ($validationResult['errors'] ?? [] as $err): ?>
+            <?php foreach ($readiness['validation']['error_messages'] ?? [] as $err): ?>
             <div class="dw-blocked-item">
                 <span>&#10007;</span>
                 <span><?= htmlspecialchars($err['message'] ?? $err['check'] ?? 'Unknown error') ?></span>

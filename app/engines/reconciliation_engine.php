@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/../helpers/parent_group_validation_helper.php';
 
-function getCompanyLedgers(PDO $pdo, int $companyId, int $fyId = 0): array
+function getCompanyLedgers(PDO $pdo, int $companyId, int $fyId): array
 {
     $sql = "
         SELECT
@@ -16,14 +16,10 @@ function getCompanyLedgers(PDO $pdo, int $companyId, int $fyId = 0): array
             c.name AS company_name
         FROM tally_ledgers tl
         INNER JOIN companies c ON c.id = tl.company_id
-        WHERE tl.company_id = ?
+        WHERE tl.company_id = ? AND tl.fy_id = ?
     ";
 
-    $params = [$companyId];
-    if ($fyId > 0) {
-        $sql .= " AND tl.fy_id = ? ";
-        $params[] = $fyId;
-    }
+    $params = [$companyId, $fyId];
 
     $sql .= " ORDER BY tl.ledger_name ";
 
@@ -33,7 +29,7 @@ function getCompanyLedgers(PDO $pdo, int $companyId, int $fyId = 0): array
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-function getLedgerMappings(PDO $pdo, int $companyId, int $fyId = 0): array
+function getLedgerMappings(PDO $pdo, int $companyId, int $fyId): array
 {
     ensureLedgerMappingOverrideColumn($pdo);
     $stmt = $pdo->prepare("
@@ -45,12 +41,11 @@ function getLedgerMappings(PDO $pdo, int $companyId, int $fyId = 0): array
         LEFT JOIN ledger_mapping lm
             ON lm.company_id = tl.company_id
             AND lm.ledger_name = tl.ledger_name
-        WHERE tl.company_id = ?
-        " . ($fyId > 0 ? " AND tl.fy_id = ? " : "") . "
+        WHERE tl.company_id = ? AND tl.fy_id = ?
         GROUP BY tl.ledger_name, lm.schedule_code
         ORDER BY tl.ledger_name
     ");
-    $stmt->execute($fyId > 0 ? [$companyId, $fyId] : [$companyId]);
+    $stmt->execute([$companyId, $fyId]);
 
     $map = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {

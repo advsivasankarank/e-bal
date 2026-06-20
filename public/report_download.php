@@ -13,6 +13,10 @@ use Dompdf\Options;
 
 requireFullContext();
 
+/* HARDENED: Timeout and memory protection for large report generation */
+set_time_limit(120);
+ini_set('memory_limit', '256M');
+
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
 $companyName = $_SESSION['company_name'] ?? 'Not Selected';

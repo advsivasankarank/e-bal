@@ -168,7 +168,10 @@ function ensureDefaultSuperAdmin(PDO $pdo): void
 
     $name = ($nameEnv !== false && $nameEnv !== '') ? $nameEnv : 'e-BAL Super Admin';
     $email = ($emailEnv !== false && $emailEnv !== '') ? $emailEnv : 'superadmin@ebal.local';
-    $password = ($passwordEnv !== false && $passwordEnv !== '') ? $passwordEnv : 'SuperAdmin@123';
+    $password = ($passwordEnv !== false && $passwordEnv !== '') ? $passwordEnv : null;
+    if ($password === null) {
+        return; /* HARDENED: No default password. Require env vars. */
+    }
     $hash = password_hash($password, PASSWORD_DEFAULT);
 
     $stmt = $pdo->prepare("
@@ -1019,5 +1022,158 @@ function clearGracePeriod(PDO $pdo, int $licenseId): bool
     } catch (Throwable $e) {
         appLog('ERROR', 'Failed to clear grace period', ['license_id' => $licenseId, 'error' => $e->getMessage()]);
         return false;
+    }
+}
+
+/* ============================================================
+   PLATFORM CONTROL CENTRE — Helper Functions
+   ============================================================ */
+
+function getBusinessPipeline(): array {
+    $file = __DIR__ . '/../../../storage/business_pipeline.json';
+    if (!file_exists($file)) {
+        return ['enquiries' => 0, 'followups' => 0, 'demos' => 0, 'proposals' => 0, 'converted' => 0, 'lost' => 0, 'updated_at' => null];
+    }
+    $data = json_decode(file_get_contents($file), true);
+    return is_array($data) ? $data : ['enquiries' => 0, 'followups' => 0, 'demos' => 0, 'proposals' => 0, 'converted' => 0, 'lost' => 0, 'updated_at' => null];
+}
+
+function saveBusinessPipeline(array $pipeline): bool {
+    $file = __DIR__ . '/../../../storage/business_pipeline.json';
+    $pipeline['updated_at'] = date('Y-m-d H:i:s');
+    $result = file_put_contents($file, json_encode($pipeline, JSON_PRETTY_PRINT));
+    return $result !== false;
+}
+
+function getRenewalForecast(PDO $pdo): array {
+    $result = [];
+    foreach ([30, 60, 90] as $days) {
+        $stmt = $pdo->prepare("
+            SELECT COALESCE(SUM(p.price_inr), 0) as expected_revenue, COUNT(*) as license_count
+            FROM licenses l
+            JOIN plans p ON p.code = l.plan
+            WHERE l.status = 'active'
+              AND l.expires_at BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)
+        ");
+        $stmt->execute([$days]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result[$days] = [
+            'revenue' => (int)($row['expected_revenue'] ?? 0),
+            'count' => (int)($row['license_count'] ?? 0),
+        ];
+    }
+    return $result;
+}
+
+function getClientActivityStats(PDO $pdo): array {
+    $stats = [
+        'active_week' => 0,
+        'active_month' => 0,
+        'inactive_30' => 0,
+        'inactive_60' => 0,
+        'never_logged' => 0,
+    ];
+    try {
+        $columns = $pdo->query("SHOW COLUMNS FROM users")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('last_login_at', $columns, true)) {
+            return $stats;
+        }
+        $stmt = $pdo->query("
+            SELECT
+                SUM(CASE WHEN last_login_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) as active_week,
+                SUM(CASE WHEN last_login_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as active_month,
+                SUM(CASE WHEN last_login_at < DATE_SUB(NOW(), INTERVAL 30 DAY) AND last_login_at IS NOT NULL THEN 1 ELSE 0 END) as inactive_30,
+                SUM(CASE WHEN last_login_at < DATE_SUB(NOW(), INTERVAL 60 DAY) AND last_login_at IS NOT NULL THEN 1 ELSE 0 END) as inactive_60,
+                SUM(CASE WHEN last_login_at IS NULL THEN 1 ELSE 0 END) as never_logged
+            FROM users
+            WHERE role IN ('admin', 'staff')
+        ");
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $stats['active_week'] = (int)($row['active_week'] ?? 0);
+            $stats['active_month'] = (int)($row['active_month'] ?? 0);
+            $stats['inactive_30'] = (int)($row['inactive_30'] ?? 0);
+            $stats['inactive_60'] = (int)($row['inactive_60'] ?? 0);
+            $stats['never_logged'] = (int)($row['never_logged'] ?? 0);
+        }
+    } catch (Throwable $e) {
+        appLog('ERROR', 'Failed to get client activity stats', ['error' => $e->getMessage()]);
+    }
+    return $stats;
+}
+
+function getLicenseAttentionCounts(PDO $pdo): array {
+    $counts = [
+        'expiring_30' => 0,
+        'expiring_15' => 0,
+        'expired' => 0,
+        'trial_ending' => 0,
+        'suspended' => 0,
+        'pending' => 0,
+    ];
+    try {
+        $stmt = $pdo->query("
+            SELECT
+                SUM(CASE WHEN status = 'active' AND expires_at BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as expiring_30,
+                SUM(CASE WHEN status = 'active' AND expires_at BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 15 DAY) THEN 1 ELSE 0 END) as expiring_15,
+                SUM(CASE WHEN status = 'expired' OR (status = 'active' AND expires_at < CURDATE()) THEN 1 ELSE 0 END) as expired,
+                SUM(CASE WHEN status = 'active' AND plan LIKE '%trial%' AND expires_at BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) as trial_ending,
+                SUM(CASE WHEN status = 'suspended' THEN 1 ELSE 0 END) as suspended,
+                SUM(CASE WHEN status = 'active' AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND expires_at IS NULL THEN 1 ELSE 0 END) as pending
+            FROM licenses
+        ");
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            foreach ($counts as $k => $v) {
+                $counts[$k] = (int)($row[$k] ?? 0);
+            }
+        }
+    } catch (Throwable $e) {
+        appLog('ERROR', 'Failed to get license attention counts', ['error' => $e->getMessage()]);
+    }
+    return $counts;
+}
+
+function getRecentBusinessActivity(PDO $pdo, int $limit = 10): array {
+    $activities = [];
+    try {
+        $stmt = $pdo->prepare("
+            SELECT 'license_event' as type, lt.transaction_type as subtype, lt.billed_at as event_date,
+                   u.name as user_name, lt.plan_code, lt.payment_status, lt.amount_inr
+            FROM license_transactions lt
+            JOIN users u ON u.id = lt.user_id
+            ORDER BY lt.billed_at DESC, lt.created_at DESC
+            LIMIT ?
+        ");
+        $stmt->execute([$limit]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $eventLabel = match($row['subtype']) {
+                'new_sale' => 'Client converted',
+                'renewal' => 'License renewed',
+                'upgrade' => 'Plan upgraded',
+                'downgrade' => 'Plan downgraded',
+                default => 'Billing event',
+            };
+            $activities[] = [
+                'type' => $row['type'],
+                'label' => $eventLabel . ': ' . $row['user_name'],
+                'detail' => $row['plan_code'] . ' - Rs. ' . number_format($row['amount_inr']),
+                'date' => $row['event_date'],
+            ];
+        }
+    } catch (Throwable $e) {
+        appLog('ERROR', 'Failed to get recent business activity', ['error' => $e->getMessage()]);
+    }
+    return $activities;
+}
+
+function ensureUserActivityColumns(PDO $pdo): void {
+    try {
+        $columns = $pdo->query("SHOW COLUMNS FROM users")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('last_login_at', $columns, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL AFTER updated_at");
+        }
+    } catch (Throwable $e) {
+        appLog('ERROR', 'Failed to ensure user activity columns', ['error' => $e->getMessage()]);
     }
 }

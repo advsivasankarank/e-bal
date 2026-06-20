@@ -2,10 +2,8 @@
 require_once __DIR__ . '/../app/session_bootstrap.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
-require_once __DIR__ . '/../app/helpers/fy_closure_helper.php';
-
-ensurePlanTables($pdo);
-ensureFYClosureSchema($pdo);
+/* HARDENED: Removed ensurePlanTables() and ensureFYClosureSchema() from login page.
+   DDL is now in migration script only. */
 
 if (!empty($_SESSION['user_id'])) {
     header('Location: ' . BASE_URL . 'index.php');
@@ -31,8 +29,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_name'] = (string) $user['name'];
             $_SESSION['user_role'] = (string) $user['role'];
 
+            // Record last login time for client activity tracking
+            try {
+                $loginStmt = $pdo->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
+                $loginStmt->execute([(int) $user['id']]);
+            } catch (Throwable $e) {
+                // Silently fail - column may not exist yet
+            }
+
             if (($user['role'] ?? '') === 'superadmin') {
-                header('Location: ' . BASE_URL . 'superadmin_dashboard.php');
+                header('Location: ' . BASE_URL . 'superadmin/index.php');
             } else {
                 header('Location: ' . BASE_URL . 'index.php');
             }

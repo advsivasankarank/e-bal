@@ -14,7 +14,7 @@ $page_title = 'My Assignments';
 require_once __DIR__ . '/layouts/header_v2.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 
-ensureWorkflowColumns();
+/* HARDENED: ensureWorkflowColumns() removed — DDL in migration script only */
 
 /* ---- Query assignments ---- */
 $v2UserId  = (int) ($_SESSION['user_id'] ?? 0);
@@ -22,8 +22,16 @@ $v2OwnerId = $v2UserId > 0 ? getOwnerUserId($pdo, $v2UserId) : 0;
 
 $v2Assignments = [];
 
+/* ---- Query user's companies for assignment selector ---- */
+$v2UserCompanies = [];
 if ($v2OwnerId > 0 || $v2UserId > 0) {
-    $ownerClause = $v2OwnerId > 0 ? " AND c.owner_user_id = {$v2OwnerId}" : "";
+    $companyStmt = $pdo->prepare("SELECT id, name FROM companies WHERE owner_user_id = ? OR owner_user_id IS NULL ORDER BY name ASC");
+    $companyStmt->execute([$v2OwnerId > 0 ? $v2OwnerId : $v2UserId]);
+    $v2UserCompanies = $companyStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+if ($v2OwnerId > 0 || $v2UserId > 0) {
+    /* HARDENED: Removed dead $ownerClause — using parameterized query instead */
 
     /* TODO: Remove NULL fallback after migrating legacy companies with NULL owner_user_id.
        See migration plan: UPDATE companies SET owner_user_id = <id> WHERE owner_user_id IS NULL */
@@ -127,7 +135,19 @@ if ($v2OwnerId > 0 || $v2UserId > 0) {
         }
 
         /* Entity label */
-        $entityLabel = ucfirst(str_replace(['_', '-'], ' ', strtolower($row['category'])));
+        $entityLabelMap = [
+            'corporate' => 'Company',
+            'llp' => 'LLP',
+            'non_corporate' => 'Company',
+            'partnership' => 'Partnership',
+            'proprietorship' => 'Proprietorship',
+            'trust' => 'Trust',
+            'society' => 'Society',
+            'individual' => 'Individual',
+            'huf' => 'HUF',
+        ];
+        $catKey = strtolower(str_replace(['-', ' '], '_', $row['category']));
+        $entityLabel = $entityLabelMap[$catKey] ?? ucfirst(str_replace('_', ' ', $catKey));
 
         /* Next action */
         $nextAction = '';
@@ -162,11 +182,105 @@ if ($v2OwnerId > 0 || $v2UserId > 0) {
 }
 ?>
 
-<div class="v2-section-tag">🏠 My Assignments</div>
+<div class="v2-section-tag">My Assignments</div>
 <div class="v2-page-title">
     <h1>My Assignments</h1>
     <p>Companies and financial years assigned to you</p>
 </div>
+
+<!-- Assignment Selector Panel -->
+<div class="v2-assign-selector" id="assignment-selector">
+    <div class="v2-assign-selector-header">
+        <span class="v2-assign-selector-title">Quick Open</span>
+        <span class="v2-assign-selector-sub">Select a company and financial year to start working</span>
+    </div>
+    <form method="get" action="<?= BASE_URL ?>assignment_home.php" class="v2-assign-selector-form" id="selector-form">
+        <div class="v2-assign-selector-fields">
+            <div class="v2-assign-selector-field">
+                <label for="sel-company">Company</label>
+                <select name="company_id" id="sel-company" required>
+                    <option value="">Select Company</option>
+                    <?php foreach ($v2UserCompanies as $co): ?>
+                    <option value="<?= (int) $co['id'] ?>" <?= ((int) $co['id'] === (int) ($_SESSION['company_id'] ?? 0)) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($co['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="v2-assign-selector-field">
+                <label for="sel-fy">Financial Year</label>
+                <select name="fy_id" id="sel-fy" required>
+                    <option value="">Select Financial Year</option>
+                </select>
+            </div>
+            <div class="v2-assign-selector-field v2-assign-selector-action">
+                <button type="submit" class="v2-btn v2-btn-primary" id="sel-open-btn" disabled>Open Assignment</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+(function() {
+    var companySelect = document.getElementById('sel-company');
+    var fySelect = document.getElementById('sel-fy');
+    var openBtn = document.getElementById('sel-open-btn');
+    var form = document.getElementById('selector-form');
+
+    if (!companySelect || !fySelect) return;
+
+    function loadFYs(companyId) {
+        fySelect.innerHTML = '<option value="">Loading...</option>';
+        openBtn.disabled = true;
+        if (!companyId) {
+            fySelect.innerHTML = '<option value="">Select Financial Year</option>';
+            return;
+        }
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '<?= BASE_URL ?>company_dashboard/financial_year_ajax.php?company_id=' + companyId);
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    fySelect.innerHTML = '<option value="">Select Financial Year</option>';
+                    if (!Array.isArray(data) || data.length === 0) {
+                        fySelect.innerHTML += '<option value="" disabled>No financial years found</option>';
+                    } else {
+                        data.forEach(function(fy) {
+                            var opt = document.createElement('option');
+                            opt.value = fy.id;
+                            opt.textContent = fy.fy_label;
+                            fySelect.appendChild(opt);
+                        });
+                    }
+                    openBtn.disabled = fySelect.value === '';
+                } catch(e) {
+                    fySelect.innerHTML = '<option value="">Error loading data</option>';
+                }
+            } else {
+                fySelect.innerHTML = '<option value="">Error loading data</option>';
+            }
+        };
+        xhr.onerror = function() {
+            fySelect.innerHTML = '<option value="">Network error</option>';
+        };
+        xhr.send();
+    }
+
+    companySelect.addEventListener('change', function() {
+        loadFYs(this.value);
+    });
+
+    fySelect.addEventListener('change', function() {
+        openBtn.disabled = this.value === '';
+    });
+
+    // Load FYs on page load if company is pre-selected
+    if (companySelect.value) {
+        loadFYs(companySelect.value);
+    }
+})();
+</script>
 
 <!-- Metrics -->
 <div class="v2-assign-metrics" id="metrics">
@@ -214,7 +328,7 @@ if ($v2OwnerId > 0 || $v2UserId > 0) {
         }
         $entityTypes = [
             'all'          => 'All',
-            'corporate'    => 'Corporate',
+            'corporate'    => 'Company',
             'llp'          => 'LLP',
             'partnership'  => 'Partnership',
             'proprietorship' => 'Proprietorship',

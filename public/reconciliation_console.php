@@ -60,8 +60,7 @@ function buildReconciliationNoteMap(string $companyCategory, AIMappingEngine $ma
     return $noteMap;
 }
 
-$companyId = isset($_GET['company_id']) ? (int) $_GET['company_id'] : (int) ($_SESSION['company_id'] ?? 0);
-$fyId = isset($_GET['fy_id']) ? (int) $_GET['fy_id'] : (int) ($_SESSION['fy_id'] ?? 0);
+/* HARDENED: Always use session context. GET params removed to prevent IDOR. */
 $detailView = trim((string) ($_GET['detail'] ?? ''));
 $response = null;
 $companyCategory = '';
@@ -70,6 +69,10 @@ $mappingEngine = new AIMappingEngine('corporate');
 $nextProcessLabel = 'Go to Report Dashboard';
 $nextProcessUrl = BASE_URL . 'dashboard_report.php';
 $nextProcessHelp = 'Open the reporting dashboard to continue the report preparation workflow.';
+
+requireAssignmentAccess();
+$companyId = (int) ($_SESSION['company_id'] ?? 0);
+$fyId = (int) ($_SESSION['fy_id'] ?? 0);
 
 if ($companyId > 0) {
     try {
@@ -144,7 +147,7 @@ if (isset($_GET['format']) && strtolower((string) $_GET['format']) === 'json') {
 }
 
 $companies = $pdo->query("SELECT id, name FROM companies ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
-requireFullContext();
+/* requireAssignmentAccess() already called above — requireFullContext() redundant */
 
 $page_title = 'Balance Sheet Reconciliation Console';
 $showSidebar = true;

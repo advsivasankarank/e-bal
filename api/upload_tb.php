@@ -1,4 +1,10 @@
 <?php
+/**
+ * API endpoint: Upload trial balance XML from Tally bridge
+ *
+ * HARDENED: Token must be set in env. Bridge client ownership validated.
+ * DDL moved to migration script.
+ */
 
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../app/helpers/xml_sanitizer.php';
@@ -13,24 +19,21 @@ $companyId = (int) ($_GET['company_id'] ?? 0);
 $fyId = (int) ($_GET['fy_id'] ?? 0);
 $xmlRaw = file_get_contents('php://input');
 
-$expected = getenv('EBAL_BRIDGE_TOKEN') ?: '';
-if ($expected !== '' && $token !== $expected) {
+/* HARDEN: Token must be configured. Empty token = reject. */
+$expected = defined('EBAL_BRIDGE_TOKEN') ? trim((string) EBAL_BRIDGE_TOKEN) : '';
+if ($expected === '' || $token !== $expected) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'message' => 'Unauthorized']);
     exit;
 }
 
+/* Resolve company/fy from bridge client registration */
 if ($companyId <= 0 || $fyId <= 0) {
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS bridge_clients (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            client_id VARCHAR(50) NOT NULL UNIQUE,
-            company_id INT NOT NULL,
-            fy_id INT NOT NULL,
-            active TINYINT(1) NOT NULL DEFAULT 1,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-    ");
+    if ($clientId === '') {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'message' => 'company_id and fy_id are required']);
+        exit;
+    }
     $stmt = $pdo->prepare("
         SELECT company_id, fy_id
         FROM bridge_clients
@@ -48,6 +51,23 @@ if ($companyId <= 0 || $fyId <= 0) {
 if ($companyId <= 0 || $fyId <= 0) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'message' => 'company_id and fy_id are required']);
+    exit;
+}
+
+/* Validate company and FY exist */
+$validateStmt = $pdo->prepare("SELECT COUNT(*) FROM companies WHERE id = ?");
+$validateStmt->execute([$companyId]);
+if ((int) $validateStmt->fetchColumn() === 0) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'message' => 'Invalid company_id']);
+    exit;
+}
+
+$validateFyStmt = $pdo->prepare("SELECT COUNT(*) FROM financial_years WHERE id = ? AND company_id = ?");
+$validateFyStmt->execute([$fyId, $companyId]);
+if ((int) $validateFyStmt->fetchColumn() === 0) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'message' => 'Invalid fy_id for this company']);
     exit;
 }
 

@@ -10,13 +10,11 @@
  * No database changes. No engine changes.
  */
 $page_title = 'Assignment Home';
-require_once __DIR__ . '/layouts/header_v2.php';
-require_once __DIR__ . '/../app/workflow_engine.php';
 require_once __DIR__ . '/../app/context_check.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../app/workflow_engine.php';
 
-ensureWorkflowColumns();
-
-/* ---- Resolve assignment context ---- */
+/* ---- Resolve assignment context (before any output) ---- */
 $v2CompanyId = (int) ($_GET['company_id'] ?? $_SESSION['company_id'] ?? 0);
 $v2FyId      = (int) ($_GET['fy_id']      ?? $_SESSION['fy_id']      ?? 0);
 
@@ -25,10 +23,20 @@ if ($v2CompanyId <= 0 || $v2FyId <= 0) {
     exit;
 }
 
-/* Set session context from GET params, then validate ownership */
+/* HARDENED: Set company_id and fy_id from GET (validated below). Never store unsanitized GET values in session. */
 $_SESSION['company_id'] = $v2CompanyId;
 $_SESSION['fy_id'] = $v2FyId;
 requireAssignmentAccess();
+
+/* HARDENED: Regenerate session ID on assignment switch to prevent session fixation */
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_regenerate_id(true);
+}
+
+/* HARDENED: ensureWorkflowColumns() removed — DDL in migration script only */
+
+/* Now safe to output HTML */
+require_once __DIR__ . '/layouts/header_v2.php';
 
 /* ---- Query assignment data ---- */
 $v2Stmt = $pdo->prepare("
@@ -66,11 +74,11 @@ if (!$v2Row) {
     exit;
 }
 
-/* ---- Set session context ---- */
-$_SESSION['company_id']   = $v2Row['company_id'];
-$_SESSION['company_name'] = $v2Row['company_name'];
-$_SESSION['fy_id']        = $v2Row['fy_id'];
-$_SESSION['fy_name']      = $v2Row['fy_label'];
+/* ---- Set session context from DB row (never from GET) ---- */
+$_SESSION['company_id']   = (int) $v2Row['company_id'];
+$_SESSION['company_name'] = (string) $v2Row['company_name'];
+$_SESSION['fy_id']        = (int) $v2Row['fy_id'];
+$_SESSION['fy_name']      = (string) $v2Row['fy_label'];
 
 /* ---- Compute entity flags ---- */
 $v2NormCat = strtolower(str_replace(['-', ' '], '_', $v2Row['category']));

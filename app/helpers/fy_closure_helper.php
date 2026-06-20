@@ -10,14 +10,26 @@ require_once __DIR__ . '/mapping_ai_helper.php';
 
 function ensureFYClosureSchema(PDO $pdo): void
 {
-    if (!fyColumnExists($pdo, 'financial_years', 'status')) {
-        $pdo->exec("ALTER TABLE financial_years
-            ADD COLUMN status ENUM('draft','finalized','closed') NOT NULL DEFAULT 'draft' AFTER fy_label,
-            ADD COLUMN closed_by INT NULL AFTER status,
-            ADD COLUMN closed_at DATETIME NULL AFTER closed_by,
-            ADD COLUMN reopened_by INT NULL AFTER closed_at,
-            ADD COLUMN reopened_at DATETIME NULL AFTER reopened_by,
-            ADD COLUMN closure_notes TEXT NULL AFTER reopened_at");
+    /* HARDENED: Cache result in static var to avoid repeated DDL per request. */
+    static $schemaEnsured = false;
+    if ($schemaEnsured) {
+        return;
+    }
+    $schemaEnsured = true;
+
+    /* Only run DDL if column doesn't exist — fail silently if table missing. */
+    try {
+        if (!fyColumnExists($pdo, 'financial_years', 'status')) {
+            $pdo->exec("ALTER TABLE financial_years
+                ADD COLUMN status ENUM('draft','finalized','closed') NOT NULL DEFAULT 'draft' AFTER fy_label,
+                ADD COLUMN closed_by INT NULL AFTER status,
+                ADD COLUMN closed_at DATETIME NULL AFTER closed_by,
+                ADD COLUMN reopened_by INT NULL AFTER closed_at,
+                ADD COLUMN reopened_at DATETIME NULL AFTER reopened_by,
+                ADD COLUMN closure_notes TEXT NULL AFTER reopened_at");
+        }
+    } catch (Throwable $e) {
+        /* Column may already exist or table missing — safe to ignore in runtime. */
     }
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS fy_closing_snapshots (

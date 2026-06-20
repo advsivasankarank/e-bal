@@ -8,9 +8,9 @@ require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 
 $page_title = 'Financial Statements';
-require_once __DIR__ . '/../layouts/header_v2.php';
-
 requireAssignmentAccess();
+
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
@@ -73,9 +73,21 @@ $parentGroupConflicts = $fs['validation']['parent_group_conflicts'] ?? [];
 $noteCompleteness = $fs['validation']['note_completeness'] ?? ['missing' => [], 'is_complete' => true];
 
 if ($hasReportData) {
-    updateWorkflow($company_id, $fy_id, 'notes_prepared');
-    updateWorkflow($company_id, $fy_id, 'profit_loss_prepared');
-    updateWorkflow($company_id, $fy_id, 'balance_sheet_prepared');
+    /* HARDENED: Only mark workflow stages complete if validation passes.
+       No blocking errors, BS must be balanced, notes must be complete. */
+    $hasBlockingErrors = !empty($validationResult['errors']);
+    $bsBalanced = abs($currentDiff) <= 0.01;
+    $notesComplete = $noteCompleteness['is_complete'] ?? true;
+
+    if (!$hasBlockingErrors && $bsBalanced && $notesComplete) {
+        updateWorkflow($company_id, $fy_id, 'notes_prepared');
+        updateWorkflow($company_id, $fy_id, 'profit_loss_prepared');
+        updateWorkflow($company_id, $fy_id, 'balance_sheet_prepared');
+    } else {
+        /* CLEAR workflow stages if conditions no longer met */
+        $pdo->prepare("UPDATE workflow_status SET notes_prepared=0, profit_loss_prepared=0, balance_sheet_prepared=0, updated_at=NOW() WHERE company_id=? AND fy_id=?")
+            ->execute([$company_id, $fy_id]);
+    }
 }
 
 $entityCategory = $fs['entity_category'] ?? '';
@@ -129,7 +141,7 @@ if (!empty($validationResult['warnings'])) {
     $validationIssues[] = ['type' => 'warning', 'text' => count($validationResult['warnings']) . ' validation warning(s)'];
 }
 
-$isAdmin = (($_SESSION['role'] ?? '') === 'admin');
+$isAdmin = (($_SESSION['user_role'] ?? '') === 'admin');
 $debugMode = (defined('DEBUG_MODE') && DEBUG_MODE === true);
 ?>
 

@@ -1,28 +1,17 @@
 <?php
+/**
+ * Workflow Engine — HARDENED
+ *
+ * H3 FIX: ensureWorkflowColumns() removed from runtime.
+ *         DDL is now in migration script only.
+ * H4 FIX: Fallback return uses correct current schema keys.
+ * H5 FIX: verified field is NEVER set by updateWorkflow() directly.
+ *         verified is derived by approval_policy_helper.php.
+ */
 require_once __DIR__ . '/../config/database.php';
-
-function ensureWorkflowColumns(): void
-{
-    global $pdo;
-
-    $columns = $pdo->query("SHOW COLUMNS FROM workflow_status")->fetchAll(PDO::FETCH_COLUMN);
-    $required = [
-        'notes_prepared' => "ALTER TABLE workflow_status ADD COLUMN notes_prepared TINYINT(1) NOT NULL DEFAULT 0 AFTER tally_fetched",
-        'profit_loss_prepared' => "ALTER TABLE workflow_status ADD COLUMN profit_loss_prepared TINYINT(1) NOT NULL DEFAULT 0 AFTER notes_prepared",
-        'balance_sheet_prepared' => "ALTER TABLE workflow_status ADD COLUMN balance_sheet_prepared TINYINT(1) NOT NULL DEFAULT 0 AFTER profit_loss_prepared",
-        'directors_report_prepared' => "ALTER TABLE workflow_status ADD COLUMN directors_report_prepared TINYINT(1) NOT NULL DEFAULT 0 AFTER balance_sheet_prepared",
-    ];
-
-    foreach ($required as $column => $sql) {
-        if (!in_array($column, $columns, true)) {
-            $pdo->exec($sql);
-        }
-    }
-}
 
 function getWorkflow($company_id, $fy_id) {
     global $pdo;
-    ensureWorkflowColumns();
 
     $stmt = $pdo->prepare("
         SELECT * FROM workflow_status 
@@ -30,16 +19,24 @@ function getWorkflow($company_id, $fy_id) {
     ");
     $stmt->execute([$company_id, $fy_id]);
 
-    return $stmt->fetch() ?: [
-        'data_imported' => 0,
-        'mapping_done' => 0,
-        'reports_generated' => 0
-    ];
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return [
+            'ledger_fetched' => 0,
+            'mapping_completed' => 0,
+            'tally_fetched' => 0,
+            'notes_prepared' => 0,
+            'profit_loss_prepared' => 0,
+            'balance_sheet_prepared' => 0,
+            'directors_report_prepared' => 0,
+            'verified' => 0,
+        ];
+    }
+    return $row;
 }
 
 function updateWorkflow($company_id, $fy_id, $field) {
     global $pdo;
-    ensureWorkflowColumns();
 
     $fieldMap = [
         'data_imported' => 'tally_fetched',
@@ -51,8 +48,6 @@ function updateWorkflow($company_id, $fy_id, $field) {
         'profit_loss_prepared' => 'profit_loss_prepared',
         'balance_sheet_prepared' => 'balance_sheet_prepared',
         'directors_report_prepared' => 'directors_report_prepared',
-        'verified' => 'verified',
-        'reports_generated' => 'reports_generated',
     ];
 
     $column = $fieldMap[$field] ?? null;
@@ -65,4 +60,17 @@ function updateWorkflow($company_id, $fy_id, $field) {
         VALUES (?, ?, 1, NOW())
         ON DUPLICATE KEY UPDATE {$column}=1, updated_at=NOW()
     ")->execute([$company_id, $fy_id]);
+}
+
+/**
+ * Set verified status. Called only by approval_policy_helper.php.
+ * NEVER call updateWorkflow() with 'verified' directly.
+ */
+function setWorkflowVerified($company_id, $fy_id, bool $verified): void {
+    global $pdo;
+    $pdo->prepare("
+        INSERT INTO workflow_status (company_id, fy_id, verified, updated_at)
+        VALUES (?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE verified=?, updated_at=NOW()
+    ")->execute([$company_id, $fy_id, $verified ? 1 : 0, $verified ? 1 : 0]);
 }
