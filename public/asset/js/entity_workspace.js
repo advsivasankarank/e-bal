@@ -230,13 +230,11 @@
 
     /* ---- Tally Company Import ---- */
     /*
-     * Architecture: Browser calls Tally Bridge DIRECTLY (both on user's machine).
-     * PHP server is only used for duplicate validation after import.
-     * This avoids the HTTPS→localhost mixed-content and server→bridge reachability issues.
+     * Architecture: Browser → PHP Server → Tally XML API (port 9000)
+     * PHP uses existing fetchFromTally() function.
      */
     var tallySelectedCompany = null;
     var tallyMappedData = null;
-    var TALLY_BRIDGE = 'http://127.0.0.1:9123';
 
     window.openTallyImportModal = function() {
         document.getElementById('tally-modal').classList.add('open');
@@ -263,47 +261,40 @@
     };
 
     function loadTallyCompanies() {
-        /* Step 1: Health check — call bridge directly from browser */
-        fetch(TALLY_BRIDGE + '/health', { mode: 'no-cors' })
-        .then(function() {
-            /* no-cORS returns opaque response, but if we get here the bridge is reachable.
-               Now try the actual companies endpoint. */
-            return fetch(TALLY_BRIDGE + '/companies');
-        })
+        fetch(ebalBaseUrl + 'company_dashboard/ajax_tally_companies.php')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             document.getElementById('tally-loading').style.display = 'none';
-            var companies = data.companies || data || [];
-            if (!Array.isArray(companies) || companies.length === 0) {
+            if (!data.ok) {
+                document.getElementById('tally-error').style.display = '';
+                document.getElementById('tally-error-msg').innerHTML =
+                    '<div style="color:#dc2626;font-weight:600;margin-bottom:6px;">' + esc(data.message || 'Connection failed.') + '</div>' +
+                    '<div style="font-size:.78rem;">Ensure Tally is running on this machine and listening on port 9000.</div>';
+                return;
+            }
+            var companies = data.companies || [];
+            if (companies.length === 0) {
                 document.getElementById('tally-error').style.display = '';
                 document.getElementById('tally-error-msg').textContent = 'No companies found in Tally.';
                 return;
             }
             var listEl = document.getElementById('tally-companies');
             var html = '';
-            companies.forEach(function(c) {
-                var name = typeof c === 'string' ? c : (c.name || c.company_name || '');
-                if (!name) return;
+            companies.forEach(function(name) {
                 html += '<div class="emw-tally-company" onclick="selectTallyCompany(this, \'' + esc(name) + '\')">';
                 html += '<div class="emw-tally-radio"></div>';
                 html += '<div><div class="emw-tally-company-name">' + esc(name) + '</div></div>';
                 html += '</div>';
             });
-            if (!html) {
-                document.getElementById('tally-error').style.display = '';
-                document.getElementById('tally-error-msg').textContent = 'No companies found in Tally.';
-                return;
-            }
             listEl.innerHTML = html;
             document.getElementById('tally-company-list').style.display = '';
         })
-        .catch(function() {
-            /* Bridge unreachable — show helpful error */
+        .catch(function(e) {
             document.getElementById('tally-loading').style.display = 'none';
             document.getElementById('tally-error').style.display = '';
             document.getElementById('tally-error-msg').innerHTML =
-                'Tally Bridge is not reachable at <code>' + TALLY_BRIDGE + '</code>.<br>' +
-                '<span style="font-size:.78rem;">Ensure the e-BAL Smart Bridge is running on this computer and listening on port 9123.</span>';
+                '<div style="color:#dc2626;font-weight:600;margin-bottom:6px;">Network error</div>' +
+                '<div style="font-size:.78rem;">' + esc(e.message) + '</div>';
         });
     }
 
@@ -325,80 +316,22 @@
         document.getElementById('tally-preview-rows').innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:#64748b;">Fetching data...</td></tr>';
         document.getElementById('tally-duplicate-warning').style.display = 'none';
 
-        /* Step 2: Fetch company detail — call bridge directly from browser */
-        fetch(TALLY_BRIDGE + '/company', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ company_name: name })
-        })
+        fetch(ebalBaseUrl + 'company_dashboard/ajax_tally_company_detail.php?company_name=' + encodeURIComponent(name))
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            if (!data.ok || !data.company) {
-                document.getElementById('tally-preview-rows').innerHTML = '<tr><td colspan="3" style="color:#dc2626;padding:12px;">Failed to fetch company details from Tally.</td></tr>';
+            if (!data.ok) {
+                document.getElementById('tally-preview-rows').innerHTML = '<tr><td colspan="3" style="color:#dc2626;padding:12px;">' + esc(data.message || 'Failed to fetch details.') + '</td></tr>';
                 document.getElementById('tally-import-btn').style.display = 'none';
                 return;
             }
-            /* Map Tally fields to e-BAL fields (client-side) */
-            var c = data.company;
-            var mapped = mapTallyToEntity(c);
-            tallyMappedData = mapped;
+            tallyMappedData = data.mapped;
             document.getElementById('tally-preview-subtitle').textContent = 'Review the data below before importing.';
-
-            /* Step 3: Validate duplicates via PHP server */
-            validateDuplicates(mapped, function(duplicates) {
-                renderPreviewTable(mapped, duplicates);
-            });
+            renderPreviewTable(data.mapped, data.duplicates || []);
         })
-        .catch(function() {
-            document.getElementById('tally-preview-rows').innerHTML = '<tr><td colspan="3" style="color:#dc2626;">Error connecting to Tally Bridge.</td></tr>';
+        .catch(function(e) {
+            document.getElementById('tally-preview-rows').innerHTML = '<tr><td colspan="3" style="color:#dc2626;">Error: ' + esc(e.message) + '</td></tr>';
             document.getElementById('tally-import-btn').style.display = 'none';
         });
-    }
-
-    function mapTallyToEntity(c) {
-        var name = c.name || c.mailing_name || '';
-        var cin = (c.cin || '').toUpperCase().trim();
-        var llpCode = (c.llpin || c.llp_code || '').toUpperCase().trim();
-        var pan = (c.pan || '').toUpperCase().trim();
-        var gstin = (c.gstin || '').toUpperCase().trim();
-        var category = 'non_corporate';
-        if (cin && /^U\d{5}[A-Z]{2}\d{4}/.test(cin)) category = 'corporate';
-        else if (llpCode) category = 'llp';
-
-        var addrParts = [];
-        if (Array.isArray(c.address_lines)) addrParts = c.address_lines;
-        else if (c.address) addrParts = c.address.split('\n').map(function(s){return s.trim();}).filter(Boolean);
-        var pin = (c.pin_code || c.pincode || '').trim();
-        if (pin) addrParts.push(pin);
-
-        var stateName = (c.state_name || c.state || '').trim();
-        var stateCode = resolveStateCode(stateName);
-
-        return {
-            name: name, category: category, cin: cin, llp_code: llpCode,
-            pan: pan, gstin: gstin, registered_address: addrParts.join('\n'),
-            state_code: stateCode, state_name: stateName,
-            email: (c.email || c.official_email || '').trim(),
-            mobile: (c.mobile || c.mobile_no || '').trim(),
-            phone: (c.phone || c.telephone || '').trim(),
-            company_type: (c.company_type || '').trim()
-        };
-    }
-
-    function resolveStateCode(name) {
-        var map = {'ANDHRA PRADESH':'37','ARUNACHAL PRADESH':'12','ASSAM':'18','BIHAR':'10','CHHATTISGARH':'22','GOA':'30','GUJARAT':'24','HARYANA':'06','HIMACHAL PRADESH':'02','JHARKHAND':'20','KARNATAKA':'29','KERALA':'32','MADHYA PRADESH':'23','MAHARASHTRA':'27','MANIPUR':'14','MEGHALAYA':'17','MIZORAM':'15','NAGALAND':'13','ODISHA':'21','PUNJAB':'03','RAJASTHAN':'08','SIKKIM':'11','TAMIL NADU':'33','TELANGANA':'36','TRIPURA':'16','UTTAR PRADESH':'09','UTTARAKHAND':'05','WEST BENGAL':'19','DELHI':'07','JAMMU AND KASHMIR':'01','LADAKH':'38','CHANDIGARH':'04','PUDUCHERRY':'34','ANDAMAN AND NICOBAR ISLANDS':'35'};
-        return map[name.toUpperCase().trim()] || '';
-    }
-
-    function validateDuplicates(mapped, callback) {
-        fetch(ebalBaseUrl + 'company_dashboard/ajax_validate_tally_import.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': ebalCsrfToken },
-            body: JSON.stringify(mapped)
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) { callback(data.duplicates || []); })
-        .catch(function() { callback([]); });
     }
 
     function renderPreviewTable(mapped, duplicates) {
