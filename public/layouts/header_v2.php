@@ -54,14 +54,19 @@ if ($v2CompanyId > 0) {
 
 /* Map category to display label */
 $v2EntityMap = [
-    'corporate'     => 'Corporate',
-    'llp'           => 'LLP',
-    'non_corporate' => 'Non-Corporate',
-    'noncorporate'  => 'Non-Corporate',
-    'partnership'   => 'Partnership',
-    'proprietorship'=> 'Proprietorship',
-    'trust'         => 'Trust',
-    'society'       => 'Society',
+    'corporate'        => 'Company',
+    'llp'              => 'LLP',
+    'non_corporate'    => 'Company',
+    'noncorporate'     => 'Company',
+    'partnership'      => 'Partnership',
+    'proprietorship'   => 'Proprietorship',
+    'trust'            => 'Trust',
+    'society'          => 'Society',
+    'individual'       => 'Individual',
+    'huf'              => 'HUF',
+    'public_limited'   => 'Company',
+    'private_limited'  => 'Company',
+    'opc'              => 'Company',
 ];
 $v2EntityLabel = $v2EntityMap[strtolower($v2CompanyCategory)] ?? ucfirst(str_replace('_', ' ', $v2CompanyCategory));
 
@@ -96,16 +101,16 @@ if (strlen($v2Initials) < 2 && strlen($v2UserName) > 1) {
 
 /* ---- Sidebar nav definition ---- */
 $v2NavItems = [
-    ['section' => 'assignments', 'icon' => '🏠', 'label' => 'My Assignments', 'href' => BASE_URL . 'my_assignments.php'],
-    ['section' => 'data',        'icon' => '📥', 'label' => 'Data',          'href' => BASE_URL . 'data/'],
-    ['section' => 'statements',  'icon' => '📊', 'label' => 'Financials',    'href' => BASE_URL . 'statements/'],
-    ['section' => 'review',      'icon' => '✅', 'label' => 'Review',        'href' => BASE_URL . 'review/'],
-    ['section' => 'deliverables','icon' => '📤', 'label' => 'Deliverables',  'href' => BASE_URL . 'deliverables/'],
+    ['section' => 'assignments', 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>', 'label' => 'My Assignments', 'href' => BASE_URL . 'my_assignments.php'],
+    ['section' => 'data',        'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>', 'label' => 'Data',          'href' => BASE_URL . 'data/'],
+    ['section' => 'statements',  'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>', 'label' => 'Financials',    'href' => BASE_URL . 'statements/'],
+    ['section' => 'review',      'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>', 'label' => 'Review',        'href' => BASE_URL . 'review/'],
+    ['section' => 'deliverables','icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>', 'label' => 'Deliverables',  'href' => BASE_URL . 'deliverables/'],
 ];
 
 $v2FooterItems = [
-    ['section' => 'settings', 'icon' => '⚙️', 'label' => 'Settings', 'href' => BASE_URL . 'settings.php'],
-    ['section' => '',         'icon' => '↩',  'label' => 'Back to V1', 'href' => BASE_URL . 'index.php', 'isFooter' => true],
+    ['section' => 'settings', 'icon' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>', 'label' => 'Settings', 'href' => BASE_URL . 'settings.php'],
+    ['section' => '',         'icon' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>', 'label' => 'Logout', 'href' => BASE_URL . 'logout.php', 'isFooter' => true],
 ];
 ?>
 <!DOCTYPE html>
@@ -115,6 +120,9 @@ $v2FooterItems = [
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= htmlspecialchars($page_title) ?> | e-BAL</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/app_v2.css?v=<?= htmlspecialchars($v2CssVersion) ?>">
+    <?php if ($v2ActiveSection === 'assignments'): ?>
+    <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/workspace_launcher.css?v=<?= filemtime(__DIR__ . '/../asset/css/workspace_launcher.css') ?>">
+    <?php endif; ?>
 </head>
 <body>
 
@@ -126,7 +134,7 @@ $v2FooterItems = [
         <div class="v2-logo">eB</div>
         <span class="v2-brand-name">e-BAL</span>
     </div>
-    <button class="v2-sidebar-toggle" type="button" title="Toggle sidebar" aria-label="Toggle sidebar">☰</button>
+    <button class="v2-sidebar-toggle" type="button" title="Toggle sidebar" aria-label="Toggle sidebar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
 
     <!-- Center: Company Context -->
     <div class="v2-context">
@@ -150,7 +158,7 @@ $v2FooterItems = [
         <?php else: ?>
             <div class="v2-context-company">
                 <span class="v2-context-company-name" style="color: var(--muted); font-weight: 400;">
-                    No company selected
+                    Select an Assignment
                 </span>
             </div>
         <?php endif; ?>
@@ -192,7 +200,7 @@ $v2FooterItems = [
 
             <div class="v2-nav-divider"></div>
 
-            <div class="v2-nav-label">Account</div>
+            <div class="v2-nav-label">User</div>
 
             <?php foreach ($v2FooterItems as $item): ?>
                 <a class="v2-nav-item <?= $item['isFooter'] ?? false ? 'v2-nav-footer' : '' ?> <?= $v2ActiveSection === ($item['section'] ?? '') ? 'active' : '' ?>"
