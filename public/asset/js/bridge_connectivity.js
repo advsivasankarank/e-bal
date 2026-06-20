@@ -11,6 +11,7 @@
 
     /* ---- Configuration ---- */
     var BRIDGE_URL = (window.ebalBridgeUrl || 'http://127.0.0.1:9123').replace(/\/+$/, '');
+    var HTTPS_BRIDGE_URL = BRIDGE_URL.replace(/^http:/, 'https:');
     var POLL_INTERVAL = 60000;        /* 60 seconds */
     var RETRY_INTERVAL = 3000;        /* 3 seconds during auto-retry */
     var RETRY_MAX = 20;               /* max retries after launch */
@@ -34,14 +35,31 @@
     function $$(sel, ctx) { return (ctx || document).querySelectorAll(sel); }
 
     /* ---- Health Check ---- */
-    function checkHealth() {
-        return fetch(BRIDGE_URL + '/health', { mode: 'cors', cache: 'no-store' })
+    function tryFetch(url) {
+        return fetch(url, { mode: 'cors', cache: 'no-store' })
             .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
                 var ct = r.headers.get('content-type') || '';
                 if (ct.indexOf('application/json') === -1) {
-                    throw new Error('Non-JSON response');
+                    return r.text().then(function (t) {
+                        throw new Error('Non-JSON (Content-Type: ' + (ct || 'none') + ')');
+                    });
                 }
                 return r.json();
+            });
+    }
+
+    function checkHealth() {
+        var httpsUrl = HTTPS_BRIDGE_URL + '/health';
+        var httpUrl = BRIDGE_URL + '/health';
+        console.log('[Bridge] Health check → HTTPS:', httpsUrl, '| HTTP:', httpUrl);
+
+        /* Try HTTPS first (no mixed content issues), then HTTP fallback */
+        return tryFetch(httpsUrl)
+            .catch(function (httpsErr) {
+                console.log('[Bridge] HTTPS failed:', httpsErr && httpsErr.message ? httpsErr.message : httpsErr);
+                console.log('[Bridge] Falling back to HTTP:', httpUrl);
+                return tryFetch(httpUrl);
             })
             .then(function (data) {
                 var wasOffline = state.bridge === 'offline';
@@ -52,9 +70,11 @@
                 if (wasOffline && state.bridge === 'online') {
                     onBridgeReconnected();
                 }
+                console.log('[Bridge] Final state:', state.bridge);
                 return state.bridge === 'online';
             })
-            .catch(function () {
+            .catch(function (e) {
+                console.error('[Bridge] All attempts failed:', e && e.message ? e.message : e);
                 state.bridge = 'offline';
                 state.tally = 'unknown';
                 updateIndicators();
@@ -377,6 +397,7 @@
         });
 
         /* Initial health check + start polling */
+        console.log('[Bridge] Init — HTTPS:', HTTPS_BRIDGE_URL, '| HTTP:', BRIDGE_URL, '| Page:', location.href);
         checkHealth();
         startPolling();
     }
