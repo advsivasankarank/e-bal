@@ -230,11 +230,41 @@
 
     /* ---- Tally Company Import ---- */
     /*
-     * Architecture: Browser → PHP Server → Smart Bridge (port 9123) → Tally (port 9000)
-     * PHP uses bridge /fetch endpoint to forward XML requests.
+     * Architecture: Browser → Smart Bridge (localhost:9123) → Tally (port 9000)
+     * Browser calls bridge directly for health check, company list, and company details.
+     * PHP server is only used for duplicate check and import.
      */
     var tallySelectedCompany = null;
     var tallyMappedData = null;
+
+    /* Helper: fetch JSON from bridge with defensive Content-Type check */
+    function bridgeFetch(url) {
+        return fetch(url, { mode: 'cors' })
+        .then(function(resp) {
+            var ct = resp.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') === -1) {
+                return resp.text().then(function(text) {
+                    var preview = text.substring(0, 300);
+                    throw new Error(
+                        'Bridge returned non-JSON (HTTP ' + resp.status + '). ' +
+                        'Content-Type: ' + (ct || 'not set') + '. ' +
+                        'Response starts with: ' + preview
+                    );
+                });
+            }
+            return resp.json();
+        });
+    }
+
+    /* Validate bridge URL is set and reachable */
+    function assertBridgeConfig() {
+        if (!tallyBridgeUrl || tallyBridgeUrl === 'undefined' || tallyBridgeUrl === 'null') {
+            throw new Error('Bridge URL is not configured. Please reload the page.');
+        }
+        if (!tallyBridgeToken) {
+            throw new Error('Bridge token is not configured. Please reload the page.');
+        }
+    }
 
     window.openTallyImportModal = function() {
         document.getElementById('tally-modal').classList.add('open');
@@ -263,30 +293,53 @@
     };
 
     function loadTallyCompanies() {
-        fetch(ebalBaseUrl + 'company_dashboard/ajax_tally_companies.php')
-        .then(function(r) { return r.json(); })
+        var diagEl = document.getElementById('tally-diagnostics');
+        var bridgeOnline = false;
+
+        try {
+            assertBridgeConfig();
+        } catch (e) {
+            document.getElementById('tally-loading').style.display = 'none';
+            document.getElementById('tally-error').style.display = '';
+            document.getElementById('tally-error-msg').innerHTML =
+                '<div style="color:#dc2626;font-weight:600;margin-bottom:6px;">' + esc(e.message) + '</div>';
+            return;
+        }
+
+        /* Step 1: Health check — browser → bridge directly */
+        bridgeFetch(tallyBridgeUrl + '/health')
+        .then(function(health) {
+            bridgeOnline = !!(health && health.ok);
+            if (diagEl) {
+                var statusColor = bridgeOnline ? '#047857' : '#dc2626';
+                diagEl.innerHTML =
+                    '<div style="display:flex;gap:16px;font-size:.78rem;margin-bottom:12px;">' +
+                    '<span>Bridge: <strong style="color:' + statusColor + ';">' + esc(bridgeOnline ? 'online' : 'offline') + '</strong></span>' +
+                    '<span>Tally: <strong style="color:#94a3b8;">checking...</strong></span>' +
+                    '</div>';
+                diagEl.style.display = '';
+            }
+            if (!bridgeOnline) {
+                throw new Error('Bridge is not healthy');
+            }
+            /* Step 2: List companies — browser → bridge directly */
+            var sep = tallyBridgeUrl.indexOf('?') === -1 ? '?' : '&';
+            return bridgeFetch(tallyBridgeUrl + '/companies' + sep + 'token=' + encodeURIComponent(tallyBridgeToken));
+        })
         .then(function(data) {
             document.getElementById('tally-loading').style.display = 'none';
 
-            /* Show diagnostics */
-            var diagEl = document.getElementById('tally-diagnostics');
             if (diagEl) {
-                var bridgeStatus = data.bridge_status || 'unknown';
-                var tallyStatus = data.tally_status || 'unknown';
                 diagEl.innerHTML =
                     '<div style="display:flex;gap:16px;font-size:.78rem;margin-bottom:12px;">' +
-                    '<span>Bridge: <strong style="color:' + (bridgeStatus === 'online' ? '#047857' : '#dc2626') + ';">' + esc(bridgeStatus) + '</strong></span>' +
-                    '<span>Tally: <strong style="color:' + (tallyStatus === 'connected' ? '#047857' : '#dc2626') + ';">' + esc(tallyStatus) + '</strong></span>' +
+                    '<span>Bridge: <strong style="color:#047857;">online</strong></span>' +
+                    '<span>Tally: <strong style="color:#047857;">connected</strong></span>' +
                     '</div>';
                 diagEl.style.display = '';
             }
 
             if (!data.ok) {
-                document.getElementById('tally-error').style.display = '';
-                document.getElementById('tally-error-msg').innerHTML =
-                    '<div style="color:#dc2626;font-weight:600;margin-bottom:6px;">' + esc(data.message || 'Connection failed.') + '</div>' +
-                    '<div style="font-size:.78rem;">Ensure the e-BAL Smart Bridge is running and Tally is open.</div>';
-                return;
+                throw new Error(data.message || 'Failed to list companies');
             }
             var companies = data.companies || [];
             if (companies.length === 0) {
@@ -308,9 +361,23 @@
         .catch(function(e) {
             document.getElementById('tally-loading').style.display = 'none';
             document.getElementById('tally-error').style.display = '';
+
+            var bridgeHint = '';
+            if (!bridgeOnline) {
+                bridgeHint = '<div style="font-size:.78rem;margin-top:4px;color:#64748b;">Ensure the e-BAL Smart Bridge is running on this computer (port 9123).</div>';
+            }
             document.getElementById('tally-error-msg').innerHTML =
-                '<div style="color:#dc2626;font-weight:600;margin-bottom:6px;">Network error</div>' +
-                '<div style="font-size:.78rem;">' + esc(e.message) + '</div>';
+                '<div style="color:#dc2626;font-weight:600;margin-bottom:6px;">' + esc(e.message || 'Connection failed.') + '</div>' +
+                bridgeHint;
+
+            if (diagEl) {
+                diagEl.innerHTML =
+                    '<div style="display:flex;gap:16px;font-size:.78rem;margin-bottom:12px;">' +
+                    '<span>Bridge: <strong style="color:#dc2626;">offline</strong></span>' +
+                    '<span>Tally: <strong style="color:#dc2626;">unknown</strong></span>' +
+                    '</div>';
+                diagEl.style.display = '';
+            }
         });
     }
 
@@ -332,7 +399,23 @@
         document.getElementById('tally-preview-rows').innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:#64748b;">Fetching data...</td></tr>';
         document.getElementById('tally-duplicate-warning').style.display = 'none';
 
-        fetch(ebalBaseUrl + 'company_dashboard/ajax_tally_company_detail.php?company_name=' + encodeURIComponent(name))
+        /* Step 1: Browser → bridge directly for company details */
+        var sep = tallyBridgeUrl.indexOf('?') === -1 ? '?' : '&';
+        var detailUrl = tallyBridgeUrl + '/company_detail' + sep + 'token=' + encodeURIComponent(tallyBridgeToken) + '&name=' + encodeURIComponent(name);
+
+        bridgeFetch(detailUrl)
+        .then(function(bridgeData) {
+            if (!bridgeData.ok || !bridgeData.company) {
+                throw new Error(bridgeData.message || 'Failed to fetch company details from Tally');
+            }
+            var company = bridgeData.company;
+            /* Step 2: Browser → PHP server for duplicate check and field mapping */
+            return fetch(ebalBaseUrl + 'company_dashboard/ajax_tally_company_detail.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': ebalCsrfToken },
+                body: JSON.stringify({ company: company })
+            });
+        })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data.ok) {

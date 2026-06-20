@@ -1,8 +1,10 @@
 <?php
 /**
- * AJAX: Fetch Tally company detail via Smart Bridge
+ * AJAX: Prepare Tally company import — map fields and check duplicates.
  *
- * Architecture: PHP Server → Smart Bridge (port 9123) → Tally (port 9000)
+ * Architecture (v2): Browser → Smart Bridge → Tally (direct, no PHP cURL)
+ * Browser sends company details retrieved from bridge. This endpoint
+ * maps fields and checks for duplicates in the database.
  */
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../app/session_bootstrap.php';
@@ -18,123 +20,28 @@ if ($userId <= 0) {
     exit;
 }
 
-$companyName = trim((string) ($_GET['company_name'] ?? ''));
-if ($companyName === '') {
+/* Accept company details as JSON POST body */
+$input = json_decode(file_get_contents('php://input'), true);
+$company = $input['company'] ?? null;
+if (!is_array($company) || empty($company['name'])) {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'message' => 'company_name is required']);
+    echo json_encode(['ok' => false, 'message' => 'Missing company data from bridge.']);
     exit;
 }
 
-/* Determine bridge URL */
-$bridgeUrl = defined('TALLY_BRIDGE_URL') ? trim((string) TALLY_BRIDGE_URL) : '';
-if ($bridgeUrl === '') {
-    $bridgeUrl = 'http://127.0.0.1:9123';
-}
-$bridgeUrl = rtrim($bridgeUrl, '/');
-$bridgeToken = defined('TALLY_BRIDGE_TOKEN') ? trim((string) TALLY_BRIDGE_TOKEN) : '';
+$name = trim((string) ($company['name'] ?? ''));
+$address = trim((string) ($company['address'] ?? ''));
+$state = trim((string) ($company['state'] ?? ''));
+$pincode = trim((string) ($company['pincode'] ?? ''));
+$email = trim((string) ($company['email'] ?? ''));
+$mobile = trim((string) ($company['mobile'] ?? ''));
+$phone = trim((string) ($company['phone'] ?? ''));
+$pan = strtoupper(trim((string) ($company['pan'] ?? '')));
+$gstin = strtoupper(trim((string) ($company['gstin'] ?? '')));
+$cin = strtoupper(trim((string) ($company['cin'] ?? '')));
+$companyType = trim((string) ($company['company_type'] ?? ''));
 
-/* Build Tally XML request for company details */
-$xmlRequest = '<ENVELOPE>
- <HEADER>
-  <VERSION>1</VERSION>
-  <TALLYREQUEST>Export</TALLYREQUEST>
-  <TYPE>Collection</TYPE>
-  <ID>Company Details</ID>
- </HEADER>
- <BODY>
-  <DESC>
-   <STATICVARIABLES>
-    <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-   </STATICVARIABLES>
-   <TDL>
-    <TDLMESSAGE>
-     <COLLECTION NAME="Company Details">
-      <TYPE>Company</TYPE>
-      <FETCH>NAME,MAILINGNAME,ADDRESS,STATE,PINCODE,EMAIL,MOBILE,PHONENUMBER,INCOMETAXNO,GSTIN,CIN,COMPANYTYPE,BOOKSFROM,STARTINGFROM,ENDINGAT</FETCH>
-     </COLLECTION>
-    </TDLMESSAGE>
-   </TDL>
-  </DESC>
- </BODY>
-</ENVELOPE>';
-
-/* Forward via bridge /fetch */
-$fetchPayload = json_encode([
-    'xml' => $xmlRequest,
-    'token' => $bridgeToken,
-]);
-
-$ch = curl_init($bridgeUrl . '/fetch');
-curl_setopt_array($ch, [
-    CURLOPT_POST => true,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_POSTFIELDS => $fetchPayload,
-    CURLOPT_TIMEOUT => 15,
-    CURLOPT_CONNECTTIMEOUT => 5,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-    CURLOPT_HTTPHEADER => array_filter([
-        'Content-Type: application/json',
-        'Accept: application/json',
-        $bridgeToken !== '' ? 'X-Bridge-Token: ' . $bridgeToken : null,
-    ]),
-]);
-$response = curl_exec($ch);
-$httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$curlErrno = curl_errno($ch);
-$curlError = curl_error($ch);
-curl_close($ch);
-
-if ($response === false) {
-    $errMsg = 'cURL error ' . $curlErrno . ': ' . $curlError;
-    error_log('[e-BAL] Bridge fetch failed: ' . $errMsg . ' (url: ' . $bridgeUrl . '/fetch)');
-    echo json_encode(['ok' => false, 'message' => 'Smart Bridge is not reachable. (' . $errMsg . ')']);
-    exit;
-}
-if ($httpCode >= 400) {
-    error_log('[e-BAL] Bridge fetch returned HTTP ' . $httpCode . ' (url: ' . $bridgeUrl . '/fetch)');
-    echo json_encode(['ok' => false, 'message' => 'Smart Bridge returned HTTP ' . $httpCode . '.']);
-    exit;
-}
-
-$data = json_decode($response, true);
-if (!is_array($data) || empty($data['ok']) || !isset($data['xml'])) {
-    $detail = is_array($data) ? ($data['error'] ?? ($data['message'] ?? 'Unknown error')) : 'Invalid JSON response';
-    error_log('[e-BAL] Bridge fetch returned error: ' . $detail);
-    echo json_encode(['ok' => false, 'message' => 'Smart Bridge returned an error: ' . $detail]);
-    exit;
-}
-
-/* Parse company detail from Tally XML */
-$tallyXml = sanitizeTallyXML($data['xml']);
-libxml_use_internal_errors(true);
-$xmlObj = simplexml_load_string($tallyXml);
-if (!$xmlObj) {
-    libxml_clear_errors();
-    echo json_encode(['ok' => false, 'message' => 'Invalid response from Tally.']);
-    exit;
-}
-
-$companyNodes = $xmlObj->xpath("//*[local-name()='DATA']/*[local-name()='COMPANY']");
-if (empty($companyNodes[0])) {
-    echo json_encode(['ok' => false, 'message' => 'Company data not found in Tally response.']);
-    exit;
-}
-
-$c = $companyNodes[0];
-$name = trim((string) ($c->NAME ?? ''));
-$address = trim((string) ($c->ADDRESS ?? ''));
-$state = trim((string) ($c->STATE ?? ''));
-$pincode = trim((string) ($c->PINCODE ?? ''));
-$email = trim((string) ($c->EMAIL ?? ''));
-$mobile = trim((string) ($c->MOBILE ?? ''));
-$phone = trim((string) ($c->PHONENUMBER ?? ''));
-$pan = strtoupper(trim((string) ($c->INCOMETAXNO ?? '')));
-$gstin = strtoupper(trim((string) ($c->GSTIN ?? '')));
-$cin = strtoupper(trim((string) ($c->CIN ?? '')));
-$companyType = trim((string) ($c->COMPANYTYPE ?? ''));
-
-/* Build address */
+/* Build registered address */
 $addressParts = array_filter(array_map('trim', explode("\n", $address)));
 if ($pincode !== '') $addressParts[] = $pincode;
 $registeredAddress = implode("\n", $addressParts);

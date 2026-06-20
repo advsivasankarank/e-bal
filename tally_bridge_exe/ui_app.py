@@ -101,6 +101,56 @@ COMPANY_XML = """<ENVELOPE>
 </ENVELOPE>
 """
 
+COMPANIES_LIST_XML = """<ENVELOPE>
+ <HEADER>
+  <VERSION>1</VERSION>
+  <TALLYREQUEST>Export</TALLYREQUEST>
+  <TYPE>Collection</TYPE>
+  <ID>List of Companies</ID>
+ </HEADER>
+ <BODY>
+  <DESC>
+   <STATICVARIABLES>
+    <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+   </STATICVARIABLES>
+   <TDL>
+    <TDLMESSAGE>
+     <COLLECTION NAME="List of Companies">
+      <TYPE>Company</TYPE>
+      <FETCH>NAME</FETCH>
+     </COLLECTION>
+    </TDLMESSAGE>
+   </TDL>
+  </DESC>
+ </BODY>
+</ENVELOPE>
+"""
+
+COMPANY_DETAIL_XML = """<ENVELOPE>
+ <HEADER>
+  <VERSION>1</VERSION>
+  <TALLYREQUEST>Export</TALLYREQUEST>
+  <TYPE>Collection</TYPE>
+  <ID>Company Details</ID>
+ </HEADER>
+ <BODY>
+  <DESC>
+   <STATICVARIABLES>
+    <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+   </STATICVARIABLES>
+   <TDL>
+    <TDLMESSAGE>
+     <COLLECTION NAME="Company Details">
+      <TYPE>Company</TYPE>
+      <FETCH>NAME,MAILINGNAME,ADDRESS,STATE,PINCODE,EMAIL,MOBILE,PHONENUMBER,INCOMETAXNO,GSTIN,CIN,COMPANYTYPE,BOOKSFROM,STARTINGFROM,ENDINGAT</FETCH>
+     </COLLECTION>
+    </TDLMESSAGE>
+   </TDL>
+  </DESC>
+ </BODY>
+</ENVELOPE>
+"""
+
 
 VOUCHER_XML_TEMPLATE = """<ENVELOPE>
     <HEADER>
@@ -445,6 +495,103 @@ def parse_company_info(xml_text):
         "state_name": state,
         "pin_code": pin,
         "country_name": country,
+    }
+
+
+def parse_company_list(xml_text):
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+
+    companies = []
+    for elem in root.iter():
+        if not elem.tag.upper().endswith("COMPANY"):
+            continue
+        child_tags = [child.tag.upper() for child in list(elem)]
+        if any(tag.endswith("NAME") for tag in child_tags):
+            name = ""
+            for child in elem.iter():
+                if child.tag.upper().endswith("NAME"):
+                    if child.text:
+                        name = child.text.strip()
+                        break
+            if not name:
+                name = elem.attrib.get("NAME", "").strip()
+            if name:
+                companies.append(name)
+    return companies
+
+
+def parse_company_detail(xml_text, target_name=""):
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return {}
+
+    company = None
+    for elem in root.iter():
+        if not elem.tag.upper().endswith("COMPANY"):
+            continue
+        child_tags = [child.tag.upper() for child in list(elem)]
+        if any(tag.endswith("NAME") for tag in child_tags):
+            if target_name:
+                name_node = None
+                for child in elem.iter():
+                    if child.tag.upper().endswith("NAME"):
+                        name_node = child
+                        break
+                elem_name = ""
+                if name_node is not None and name_node.text:
+                    elem_name = name_node.text.strip()
+                if not elem_name:
+                    elem_name = elem.attrib.get("NAME", "").strip()
+                if elem_name.lower() != target_name.lower():
+                    continue
+            company = elem
+            break
+
+    if company is None:
+        return {}
+
+    def text(tag):
+        for node in company.iter():
+            if node.tag.upper().endswith(tag.upper()):
+                if node.text:
+                    return node.text.strip()
+        return ""
+
+    name = text("NAME") or company.attrib.get("NAME", "").strip()
+    mailing = text("MAILINGNAME")
+    state = text("STATE")
+    pin = text("PINCODE")
+    email = text("EMAIL")
+    mobile = text("MOBILE")
+    phone = text("PHONENUMBER")
+    pan = text("INCOMETAXNO")
+    gstin = text("GSTIN")
+    cin = text("CIN")
+    company_type = text("COMPANYTYPE")
+
+    address_lines = []
+    for node in company.iter():
+        if node.tag.upper().endswith("ADDRESS"):
+            if node.text:
+                address_lines.append(node.text.strip())
+
+    return {
+        "name": name or mailing,
+        "mailing_name": mailing if mailing and mailing != "INR" else "",
+        "address": "\n".join([line for line in address_lines if line]),
+        "state": state,
+        "pincode": pin,
+        "email": email,
+        "mobile": mobile,
+        "phone": phone,
+        "pan": pan.upper() if pan else "",
+        "gstin": gstin.upper() if gstin else "",
+        "cin": cin.upper() if cin else "",
+        "company_type": company_type,
     }
 
 
@@ -821,14 +968,29 @@ class SmartBridgeUI:
 
         class SyncHandler(BaseHTTPRequestHandler):
             def do_OPTIONS(self):
-                self.send_response(204)
-                self.apply_cors_headers()
-                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
-                self.send_header("Access-Control-Allow-Private-Network", "true")
-                self.end_headers()
+                try:
+                    self.send_response(204)
+                    self.apply_cors_headers()
+                    self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                    self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
+                    self.send_header("Access-Control-Allow-Private-Network", "true")
+                    self.end_headers()
+                except Exception:
+                    try:
+                        self.send_response(500)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"ok": False, "message": "Internal error"}).encode("utf-8"))
+                    except Exception:
+                        pass
 
             def do_GET(self):
+                try:
+                    self._handle_get()
+                except Exception as exc:
+                    self._send_error_json(500, f"Internal bridge error: {exc}")
+
+            def _handle_get(self):
                 parsed = urllib.parse.urlparse(self.path)
                 if parsed.path == "/health":
                     self.send_json(200, {"ok": True, "status": ui.status_var.get()})
@@ -843,6 +1005,38 @@ class SmartBridgeUI:
                         data = parse_company_info(xml_text)
                         if not data:
                             self.send_json(404, {"ok": False, "message": "Company data not found"})
+                            return
+                        self.send_json(200, {"ok": True, "company": data})
+                    except Exception as exc:
+                        self.send_json(502, {"ok": False, "message": f"Bridge error: {exc}"})
+                    return
+                if parsed.path == "/companies":
+                    token = self.get_token(parsed)
+                    if not ui.is_authorized(token, "company"):
+                        self.send_json(401, {"ok": False, "message": "Unauthorized"})
+                        return
+                    try:
+                        xml_text = fetch_from_tally(COMPANIES_LIST_XML)
+                        companies = parse_company_list(xml_text)
+                        self.send_json(200, {"ok": True, "companies": companies})
+                    except Exception as exc:
+                        self.send_json(502, {"ok": False, "message": f"Bridge error: {exc}"})
+                    return
+                if parsed.path == "/company_detail":
+                    token = self.get_token(parsed)
+                    if not ui.is_authorized(token, "company"):
+                        self.send_json(401, {"ok": False, "message": "Unauthorized"})
+                        return
+                    query = urllib.parse.parse_qs(parsed.query)
+                    company_name = query.get("name", [""])[0]
+                    if not company_name:
+                        self.send_json(400, {"ok": False, "message": "Missing company name"})
+                        return
+                    try:
+                        xml_text = fetch_from_tally(COMPANY_DETAIL_XML)
+                        data = parse_company_detail(xml_text, company_name)
+                        if not data:
+                            self.send_json(404, {"ok": False, "message": "Company not found"})
                             return
                         self.send_json(200, {"ok": True, "company": data})
                     except Exception as exc:
@@ -882,6 +1076,12 @@ class SmartBridgeUI:
                 self.send_json(404, {"ok": False, "message": "Not found"})
 
             def do_POST(self):
+                try:
+                    self._handle_post()
+                except Exception as exc:
+                    self._send_error_json(500, f"Internal bridge error: {exc}")
+
+            def _handle_post(self):
                 parsed = urllib.parse.urlparse(self.path)
                 if parsed.path == "/company":
                     token = self.get_token(parsed)
@@ -979,17 +1179,32 @@ class SmartBridgeUI:
                 return ""
 
             def send_json(self, code, payload):
-                self.send_response(code)
-                self.send_header("Content-Type", "application/json")
-                self.apply_cors_headers()
-                self.end_headers()
-                self.wfile.write(json.dumps(payload).encode("utf-8"))
+                try:
+                    self.send_response(code)
+                    self.send_header("Content-Type", "application/json")
+                    self.apply_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps(payload).encode("utf-8"))
+                except Exception:
+                    pass
+
+            def _send_error_json(self, code, message):
+                try:
+                    self.send_response(code)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "message": message}).encode("utf-8"))
+                except Exception:
+                    pass
 
             def apply_cors_headers(self):
-                origin = self.headers.get("Origin", "").strip()
-                if origin in allowed_browser_origins():
-                    self.send_header("Access-Control-Allow-Origin", origin)
-                    self.send_header("Vary", "Origin")
+                try:
+                    origin = self.headers.get("Origin", "").strip()
+                    if origin in allowed_browser_origins():
+                        self.send_header("Access-Control-Allow-Origin", origin)
+                        self.send_header("Vary", "Origin")
+                except Exception:
+                    pass
 
             def log_message(self, format, *args):
                 return

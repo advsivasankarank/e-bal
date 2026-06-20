@@ -30,6 +30,11 @@ if ($userId <= 0) { header('Location: ' . BASE_URL . 'login.php'); exit; }
 if (!isWorkspaceAdmin($pdo, $userId)) { $errors[] = 'Only workspace admin users can create entities.'; }
 $ownerId = getOwnerUserId($pdo, $userId);
 $bridgeToken = buildBridgeBrowserToken('company');
+$bridgeUrl = defined('TALLY_BRIDGE_URL') ? trim((string) TALLY_BRIDGE_URL) : '';
+if ($bridgeUrl === '') {
+    $bridgeUrl = 'http://127.0.0.1:9123';
+}
+$bridgeUrl = rtrim($bridgeUrl, '/');
 
 /* Handle POST */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -577,6 +582,7 @@ include __DIR__ . '/../layouts/header.php';
 var ebalBaseUrl = '<?= BASE_URL ?>';
 var ebalCsrfToken = '<?= csrfToken() ?>';
 var stateFromCinMap = <?= json_encode($stateOptions) ?>;
+var tallyBridgeUrl = <?= json_encode($bridgeUrl) ?>;
 var tallyBridgeToken = <?= json_encode($bridgeToken) ?>;
 </script>
 
