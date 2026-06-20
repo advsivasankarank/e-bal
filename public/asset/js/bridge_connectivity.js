@@ -16,6 +16,9 @@
     var RETRY_MAX = 20;               /* max retries after launch */
     var LAUNCH_WAIT_INITIAL = 2000;   /* wait before first retry after launch */
 
+    function log() { try { console.log.apply(console, ['[Bridge]'].concat(Array.prototype.slice.call(arguments))); } catch(e){} }
+    function logErr() { try { console.error.apply(console, ['[Bridge]'].concat(Array.prototype.slice.call(arguments))); } catch(e){} }
+
     /* ---- State ---- */
     var state = {
         bridge: 'unknown',   /* 'online' | 'offline' | 'unknown' */
@@ -35,15 +38,34 @@
 
     /* ---- Health Check ---- */
     function checkHealth() {
-        return fetch(BRIDGE_URL + '/health', { mode: 'cors', cache: 'no-store' })
+        var url = BRIDGE_URL + '/health';
+        log('--- Health Check ---');
+        log('URL:', url);
+        log('Page:', location.href);
+        log('Protocol:', location.protocol);
+
+        return fetch(url, { mode: 'cors', cache: 'no-store' })
             .then(function (r) {
+                log('Response received');
+                log('  Status:', r.status, r.statusText);
+                log('  Content-Type:', r.headers.get('content-type'));
+                log('  ACAO:', r.headers.get('access-control-allow-origin'));
+                log('  ACAPN:', r.headers.get('access-control-allow-private-network'));
+
+                if (!r.ok) {
+                    throw new Error('HTTP ' + r.status + ' ' + r.statusText);
+                }
                 var ct = r.headers.get('content-type') || '';
                 if (ct.indexOf('application/json') === -1) {
-                    throw new Error('Non-JSON response');
+                    return r.text().then(function (t) {
+                        logErr('Non-JSON body (first 300 chars):', t.substring(0, 300));
+                        throw new Error('Non-JSON response (Content-Type: ' + (ct || 'none') + ')');
+                    });
                 }
                 return r.json();
             })
             .then(function (data) {
+                log('Parsed JSON:', JSON.stringify(data).substring(0, 200));
                 var wasOffline = state.bridge === 'offline';
                 state.bridge = (data && data.ok) ? 'online' : 'offline';
                 state.version = (data && data.version) || state.version || '';
@@ -52,9 +74,14 @@
                 if (wasOffline && state.bridge === 'online') {
                     onBridgeReconnected();
                 }
+                log('Result: bridge =', state.bridge);
                 return state.bridge === 'online';
             })
-            .catch(function () {
+            .catch(function (e) {
+                logErr('FETCH FAILED');
+                logErr('  Error type:', e && e.constructor ? e.constructor.name : typeof e);
+                logErr('  Error message:', e && e.message ? e.message : String(e));
+                if (e && e.stack) logErr('  Stack:', e.stack.substring(0, 500));
                 state.bridge = 'offline';
                 state.tally = 'unknown';
                 updateIndicators();
@@ -377,6 +404,7 @@
         });
 
         /* Initial health check + start polling */
+        log('Init — BRIDGE_URL:', BRIDGE_URL, '| Page:', location.href, '| Protocol:', location.protocol);
         checkHealth();
         startPolling();
     }

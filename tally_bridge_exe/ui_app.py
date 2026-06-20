@@ -798,10 +798,17 @@ class SmartBridgeUI:
 
     def start_bridge(self):
         if self.server:
+            logging.info("Bridge already running, ignoring start request")
             return
+        logging.info("Start Bridge requested")
         self.stop_event.clear()
-        self.start_command_server()
-        self.set_status("Running")
+        ok = self.start_command_server()
+        if ok:
+            self.set_status("Running")
+            logging.info("Bridge started successfully")
+        else:
+            self.set_status("Stopped")
+            logging.warning("Bridge failed to start")
 
     def stop_bridge(self):
         self.stop_event.set()
@@ -938,20 +945,24 @@ class SmartBridgeUI:
     def start_command_server(self):
         host = self.config.get("listen_host") or LISTEN_HOST_DEFAULT
         port = int(self.config.get("listen_port") or LISTEN_PORT_DEFAULT)
+        logging.info("Starting HTTP server on %s:%d", host, port)
         try:
             server = HTTPServer((host, port), self.make_handler())
         except OSError as exc:
-            messagebox.showerror(APP_TITLE, f"Cannot start bridge server: {exc}")
-            self.set_status("Stopped")
-            return
+            logging.error("HTTP server bind failed: %s", exc)
+            self.listen_var.set(f"FAILED: {exc}")
+            return False
         self.server = server
         self.listen_var.set(f"http://{host}:{port}/sync")
+        logging.info("HTTP server bound to %s:%d", host, port)
 
         def run():
             server.serve_forever()
 
         self.server_thread = threading.Thread(target=run, daemon=True)
         self.server_thread.start()
+        logging.info("HTTP server thread started, serving on %s:%d", host, port)
+        return True
 
     def stop_command_server(self):
         if not self.server:
@@ -969,13 +980,15 @@ class SmartBridgeUI:
         class SyncHandler(BaseHTTPRequestHandler):
             def do_OPTIONS(self):
                 try:
+                    logging.info("OPTIONS %s", self.path)
                     self.send_response(204)
                     self.apply_cors_headers()
                     self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                     self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
                     self.send_header("Access-Control-Allow-Private-Network", "true")
                     self.end_headers()
-                except Exception:
+                except Exception as exc:
+                    logging.error("OPTIONS %s failed: %s", self.path, exc)
                     try:
                         self.send_response(500)
                         self.send_header("Content-Type", "application/json")
@@ -988,11 +1001,13 @@ class SmartBridgeUI:
                 try:
                     self._handle_get()
                 except Exception as exc:
+                    logging.error("GET %s failed: %s", self.path, exc)
                     self._send_error_json(500, f"Internal bridge error: {exc}")
 
             def _handle_get(self):
                 parsed = urllib.parse.urlparse(self.path)
                 if parsed.path == "/health":
+                    logging.info("GET /health -> 200")
                     self.send_json(200, {"ok": True, "status": ui.status_var.get()})
                     return
                 if parsed.path == "/company":
@@ -1079,6 +1094,7 @@ class SmartBridgeUI:
                 try:
                     self._handle_post()
                 except Exception as exc:
+                    logging.error("POST %s failed: %s", self.path, exc)
                     self._send_error_json(500, f"Internal bridge error: {exc}")
 
             def _handle_post(self):
