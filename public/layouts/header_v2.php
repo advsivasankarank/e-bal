@@ -99,6 +99,27 @@ if (strlen($v2Initials) < 2 && strlen($v2UserName) > 1) {
     $v2Initials = strtoupper(substr($v2UserName, 0, 2));
 }
 
+/* ---- Role label mapping ---- */
+$v2RoleLabels = [
+    'admin' => 'Administrator',
+    'superadmin' => 'Super Admin',
+    'staff' => 'Staff',
+    'manager' => 'Manager',
+    'partner' => 'Partner',
+    'viewer' => 'Viewer',
+];
+$v2RoleLabel = $v2RoleLabels[strtolower($v2UserRole)] ?? ucfirst($v2UserRole);
+
+/* ---- Last login ---- */
+$v2LastLogin = '';
+try {
+    $llStmt = $pdo->prepare("SELECT last_login_at FROM users WHERE id = ?");
+    $llStmt->execute([$v2UserId]);
+    $v2LastLogin = (string) ($llStmt->fetchColumn() ?: '');
+} catch (Throwable $e) {
+    $v2LastLogin = '';
+}
+
 /* ---- Sidebar nav definition ---- */
 $v2NavItems = [
     ['section' => 'assignments', 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>', 'label' => 'My Assignments', 'href' => BASE_URL . 'my_assignments.php'],
@@ -164,15 +185,94 @@ $v2FooterItems = [
         <?php endif; ?>
     </div>
 
-    <!-- Right: User -->
-    <div class="v2-user">
-        <div class="v2-user-info">
-            <span class="v2-user-name"><?= htmlspecialchars($v2UserName) ?></span>
-            <?php if ($v2UserRole !== ''): ?>
-                <span class="v2-user-role"><?= htmlspecialchars($v2UserRole) ?></span>
-            <?php endif; ?>
+    <!-- Right: User Profile Dropdown -->
+    <div class="v2-user" id="v2-user-menu">
+        <!-- Notification Bell -->
+        <button class="v2-notif-bell" type="button" id="v2-notif-btn" title="Notifications" aria-label="Notifications">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span class="v2-notif-badge" id="v2-notif-count" style="display:none;">0</span>
+        </button>
+
+        <!-- Profile Trigger -->
+        <button class="v2-profile-trigger" type="button" id="v2-profile-trigger" aria-expanded="false" aria-haspopup="true">
+            <div class="v2-avatar" title="<?= htmlspecialchars($v2UserName) ?>"><?= $v2Initials ?></div>
+            <div class="v2-user-info">
+                <span class="v2-user-name"><?= htmlspecialchars($v2UserName) ?></span>
+                <span class="v2-user-role"><?= htmlspecialchars($v2RoleLabel) ?></span>
+            </div>
+            <svg class="v2-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+
+        <!-- Dropdown Menu -->
+        <div class="v2-dropdown" id="v2-dropdown" role="menu">
+            <!-- Profile Card -->
+            <div class="v2-dropdown-profile">
+                <div class="v2-dropdown-avatar"><?= $v2Initials ?></div>
+                <div class="v2-dropdown-profile-info">
+                    <div class="v2-dropdown-name"><?= htmlspecialchars($v2UserName) ?></div>
+                    <div class="v2-dropdown-role"><?= htmlspecialchars($v2RoleLabel) ?></div>
+                    <?php if ($v2LastLogin): ?>
+                    <div class="v2-dropdown-login">Last login: <?= htmlspecialchars(date('d-M-Y g:i A', strtotime($v2LastLogin))) ?></div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="v2-dropdown-divider"></div>
+
+            <!-- Section: Account -->
+            <div class="v2-dropdown-section">
+                <a class="v2-dropdown-item" href="<?= BASE_URL ?>settings.php" role="menuitem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    My Profile
+                </a>
+                <a class="v2-dropdown-item" href="<?= BASE_URL ?>settings.php?tab=preferences" role="menuitem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    Settings
+                </a>
+                <a class="v2-dropdown-item" href="<?= BASE_URL ?>forgot_password.php" role="menuitem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Change Password
+                </a>
+            </div>
+
+            <div class="v2-dropdown-divider"></div>
+
+            <!-- Section: Workspace -->
+            <div class="v2-dropdown-section">
+                <a class="v2-dropdown-item" href="<?= BASE_URL ?>my_assignments.php" role="menuitem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    My Entities
+                </a>
+                <?php if ($v2CompanyId > 0): ?>
+                <a class="v2-dropdown-item" href="<?= BASE_URL ?>company_dashboard/financial_year.php" role="menuitem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Switch Financial Year
+                </a>
+                <?php endif; ?>
+            </div>
+
+            <div class="v2-dropdown-divider"></div>
+
+            <!-- Section: Help -->
+            <div class="v2-dropdown-section">
+                <a class="v2-dropdown-item" href="<?= BASE_URL ?>support.php" role="menuitem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Help & Support
+                </a>
+                <a class="v2-dropdown-item" href="<?= BASE_URL ?>landing.php" target="_blank" role="menuitem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    About e-BAL
+                </a>
+            </div>
+
+            <div class="v2-dropdown-divider"></div>
+
+            <!-- Logout -->
+            <a class="v2-dropdown-item v2-dropdown-logout" href="<?= BASE_URL ?>logout.php" role="menuitem">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Sign Out
+            </a>
         </div>
-        <div class="v2-avatar" title="<?= htmlspecialchars($v2UserName) ?>"><?= $v2Initials ?></div>
     </div>
 
 </header>

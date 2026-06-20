@@ -182,4 +182,64 @@
   restoreState();
   setActiveNav();
 
+  /* ---- USER PROFILE DROPDOWN ---- */
+
+  var profileTrigger = document.getElementById('v2-profile-trigger');
+  var userMenu = document.getElementById('v2-user-menu');
+  var dropdown = document.getElementById('v2-dropdown');
+
+  if (profileTrigger && dropdown) {
+    profileTrigger.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var isOpen = userMenu.classList.contains('open');
+      userMenu.classList.toggle('open');
+      profileTrigger.setAttribute('aria-expanded', !isOpen);
+    });
+
+    /* Close on click outside */
+    document.addEventListener('click', function (e) {
+      if (userMenu && !userMenu.contains(e.target)) {
+        userMenu.classList.remove('open');
+        profileTrigger.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    /* Close on Escape */
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && userMenu.classList.contains('open')) {
+        userMenu.classList.remove('open');
+        profileTrigger.setAttribute('aria-expanded', 'false');
+        profileTrigger.focus();
+      }
+    });
+
+    /* Keyboard navigation within dropdown */
+    var dropdownItems = dropdown.querySelectorAll('.v2-dropdown-item');
+    for (var d = 0; d < dropdownItems.length; d++) {
+      dropdownItems[d].addEventListener('keydown', function (e) {
+        var items = Array.prototype.slice.call(dropdown.querySelectorAll('.v2-dropdown-item'));
+        var idx = items.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          var next = idx < items.length - 1 ? idx + 1 : 0;
+          items[next].focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          var prev = idx > 0 ? idx - 1 : items.length - 1;
+          items[prev].focus();
+        }
+      });
+    }
+  }
+
+  /* ---- NOTIFICATION BELL ---- */
+
+  var notifBtn = document.getElementById('v2-notif-btn');
+  if (notifBtn) {
+    notifBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      /* Placeholder: toggle notification panel */
+    });
+  }
+
 })();
