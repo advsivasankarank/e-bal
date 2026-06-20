@@ -248,6 +248,7 @@ $hasLivePeriod = $tallyContext && !empty($tallyContext['period_from']) && !empty
 
 <form method="post" action="<?= BASE_URL ?>data_console/fetch_process.php">
 
+    <?= csrfInput() ?>
     <input type="hidden" name="confirmed" value="1">
     <input type="hidden" name="live_company_name" value="<?= htmlspecialchars($tallyContext['company_name'] ?? '', ENT_QUOTES) ?>">
     <input type="hidden" name="live_period_from" value="<?= htmlspecialchars($tallyContext['period_from'] ?? '', ENT_QUOTES) ?>">

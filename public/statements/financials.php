@@ -72,6 +72,8 @@ $previousDiff = (float) ($fs['validation']['previous_balance_difference'] ?? 0);
 $parentGroupConflicts = $fs['validation']['parent_group_conflicts'] ?? [];
 $noteCompleteness = $fs['validation']['note_completeness'] ?? ['missing' => [], 'is_complete' => true];
 
+$validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
+
 if ($hasReportData) {
     /* HARDENED: Only mark workflow stages complete if validation passes.
        No blocking errors, BS must be balanced, notes must be complete. */
@@ -133,7 +135,6 @@ if (!empty($parentGroupConflicts)) {
 if (!($noteCompleteness['is_complete'] ?? true)) {
     $validationIssues[] = ['type' => 'warning', 'text' => count($noteCompleteness['missing'] ?? []) . ' expected note heading(s) missing'];
 }
-$validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
 if (!empty($validationResult['errors'])) {
     $validationIssues[] = ['type' => 'error', 'text' => count($validationResult['errors']) . ' validation error(s)'];
 }

@@ -19,7 +19,7 @@ $fyId = (int) ($allHeaders['X-Fy-Id'] ?? $_SERVER['HTTP_X_FY_ID'] ?? 0);
 $xmlRaw = file_get_contents('php://input');
 
 $expected = defined('TALLY_BRIDGE_TOKEN') ? trim((string) TALLY_BRIDGE_TOKEN) : '';
-if ($expected !== '' && $token !== $expected) {
+if ($expected === '' || $token !== $expected) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'message' => 'Unauthorized']);
     exit;
@@ -47,17 +47,19 @@ if ($companyId <= 0 || $fyId <= 0) {
         echo json_encode(['ok' => false, 'message' => 'Bridge configuration unavailable']);
         exit;
     }
-    $stmt = $pdo->prepare("
-        SELECT company_id, fy_id
-        FROM bridge_clients
-        WHERE client_id = ? AND active = 1
-        LIMIT 1
-    ");
-    $stmt->execute([$clientId]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($row) {
-        $companyId = (int) $row['company_id'];
-        $fyId = (int) $row['fy_id'];
+    if ($clientId !== '') {
+        $stmt = $pdo->prepare("
+            SELECT company_id, fy_id
+            FROM bridge_clients
+            WHERE client_id = ? AND active = 1
+            LIMIT 1
+        ");
+        $stmt->execute([$clientId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $companyId = (int) $row['company_id'];
+            $fyId = (int) $row['fy_id'];
+        }
     }
 }
 
@@ -65,6 +67,21 @@ if ($companyId <= 0 || $fyId <= 0) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'message' => 'company_id and fy_id are required']);
     exit;
+}
+
+if ($clientId !== '' && $companyId > 0) {
+    try {
+        $stmt = $pdo->prepare("SELECT company_id FROM bridge_clients WHERE client_id = ? AND active = 1 LIMIT 1");
+        $stmt->execute([$clientId]);
+        $registered = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($registered && (int) $registered['company_id'] !== $companyId) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'message' => 'company_id does not match registered client']);
+            exit;
+        }
+    } catch (Throwable $e) {
+        // bridge_clients table may not exist yet; skip binding check
+    }
 }
 
 if (trim($xmlRaw) === '') {

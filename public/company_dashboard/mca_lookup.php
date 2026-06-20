@@ -1,9 +1,17 @@
 <?php
 
 require_once '../../config/app.php';
+require_once '../../app/session_bootstrap.php';
 require_once '../../app/helpers/mca_lookup_helper.php';
 
 header('Content-Type: application/json');
+
+$userId = (int) ($_SESSION['user_id'] ?? 0);
+if ($userId <= 0) {
+    http_response_code(401);
+    echo json_encode(['ok' => false, 'message' => 'Authentication required']);
+    exit;
+}
 
 $type = strtolower(trim((string) ($_GET['type'] ?? '')));
 $identifier = trim((string) ($_GET['identifier'] ?? ''));

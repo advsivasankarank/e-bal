@@ -85,10 +85,18 @@ $previousDiff = (float) ($fs['validation']['previous_balance_difference'] ?? 0);
 $parentGroupConflicts = $fs['validation']['parent_group_conflicts'] ?? [];
 $noteCompleteness = $fs['validation']['note_completeness'] ?? ['missing' => [], 'is_complete' => true];
 
+$validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
+
 if ($hasReportData) {
-    updateWorkflow($company_id, $fy_id, 'notes_prepared');
-    updateWorkflow($company_id, $fy_id, 'profit_loss_prepared');
-    updateWorkflow($company_id, $fy_id, 'balance_sheet_prepared');
+    $hasBlockingErrors = !empty($validationResult['errors']);
+    $bsBalanced = abs($currentDiff) <= 0.01;
+    $notesComplete = $noteCompleteness['is_complete'] ?? true;
+
+    if (!$hasBlockingErrors && $bsBalanced && $notesComplete) {
+        updateWorkflow($company_id, $fy_id, 'notes_prepared');
+        updateWorkflow($company_id, $fy_id, 'profit_loss_prepared');
+        updateWorkflow($company_id, $fy_id, 'balance_sheet_prepared');
+    }
 }
 ?>
 
@@ -133,7 +141,6 @@ if (!empty($parentGroupConflicts)) {
 if (!($noteCompleteness['is_complete'] ?? true)) {
     $validationIssues[] = ['type' => 'warning', 'text' => count($noteCompleteness['missing'] ?? []) . ' expected note heading(s) missing'];
 }
-$validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
 $validationSummary = [];
 if (!empty($validationResult['errors'])) {
     $validationSummary['errors'] = count($validationResult['errors']);

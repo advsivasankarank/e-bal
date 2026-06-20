@@ -6,14 +6,18 @@ $token = trim((string) (
     $allH['X-Bridge-Token'] ?? $allH['x-bridge-token']
     ?? $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? $_GET['token'] ?? ''
 ));
-if ($token !== '' || !empty($_GET['client_id'])) {
+
+require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../config/database.php';
+
+$expected = defined('TALLY_BRIDGE_TOKEN') ? trim((string) TALLY_BRIDGE_TOKEN) : '';
+
+if ($token !== '' && $expected !== '' && $token === $expected) {
     $isBridgeRequest = true;
-    require_once __DIR__ . '/../config/app.php';
-    require_once __DIR__ . '/../config/database.php';
     require_once __DIR__ . '/../app/helpers/runtime_helper.php';
 } else {
     require_once __DIR__ . '/../app/session_bootstrap.php';
-    require_once __DIR__ . '/../config/database.php';
+    require_once __DIR__ . '/../app/helpers/runtime_helper.php';
 }
 
 require_once __DIR__ . '/../app/helpers/voucher_sync.php';
@@ -26,13 +30,6 @@ $companyId = (int) ($_GET['company_id'] ?? 0);
 $fyId = (int) ($_GET['fy_id'] ?? 0);
 
 if ($isBridgeRequest) {
-    $expected = defined('TALLY_BRIDGE_TOKEN') ? trim((string) TALLY_BRIDGE_TOKEN) : '';
-    if ($expected !== '' && $token !== $expected) {
-        http_response_code(401);
-        echo json_encode(['ok' => false, 'message' => 'Unauthorized']);
-        exit;
-    }
-
     if ($companyId <= 0 || $fyId <= 0) {
         $clientId = trim((string) ($_GET['client_id'] ?? ''));
         if ($clientId !== '') {

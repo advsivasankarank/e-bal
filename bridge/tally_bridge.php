@@ -19,7 +19,7 @@ $payload = json_decode($raw, true);
 $payloadToken = is_array($payload) ? ($payload['token'] ?? '') : '';
 $finalToken = $payloadToken !== '' ? $payloadToken : $headerToken;
 
-if ($token !== '' && $finalToken !== $token) {
+if ($token === '' || $finalToken !== $token) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'Unauthorized']);
     exit;

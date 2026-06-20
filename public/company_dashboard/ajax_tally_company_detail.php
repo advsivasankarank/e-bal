@@ -20,6 +20,8 @@ if ($userId <= 0) {
     exit;
 }
 
+requireCsrfToken(true);
+
 /* Accept company details as JSON POST body */
 $input = json_decode(file_get_contents('php://input'), true);
 $company = $input['company'] ?? null;
