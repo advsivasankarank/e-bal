@@ -708,7 +708,11 @@ class SmartBridgeUI:
         self.root.geometry("560x360")
         self.root.resizable(False, False)
 
+        logging.info("Loading config...")
         self.config = load_config()
+        logging.info("Config loaded: listen_host=%s listen_port=%s",
+                     self.config.get("listen_host", "N/A"),
+                     self.config.get("listen_port", "N/A"))
         self.stop_event = threading.Event()
         self.worker = None
         self.server = None
@@ -767,6 +771,11 @@ class SmartBridgeUI:
         self._row(card_inner, "Last Sync", self.last_sync_var)
         self._row(card_inner, "Last Upload", self.last_upload_var)
         self._row(card_inner, "Upload Target", self.target_var)
+
+        import sys
+        exe_path = sys.executable if getattr(sys, 'frozen', False) else sys.argv[0]
+        exe_var = tk.StringVar(value=exe_path)
+        self._row(card_inner, "Executable", exe_var)
 
         btn_row = tk.Frame(frame, bg="#f6f7fb")
         btn_row.pack(fill="x", pady=(6, 6))
@@ -952,12 +961,19 @@ class SmartBridgeUI:
             logging.error("HTTP server bind failed: %s", exc)
             self.listen_var.set(f"FAILED: {exc}")
             return False
+        except Exception as exc:
+            logging.exception("HTTP server unexpected error")
+            self.listen_var.set(f"ERROR: {exc}")
+            return False
         self.server = server
         self.listen_var.set(f"http://{host}:{port}/sync")
         logging.info("HTTP server bound to %s:%d", host, port)
 
         def run():
-            server.serve_forever()
+            try:
+                server.serve_forever()
+            except Exception:
+                logging.exception("HTTP server crashed")
 
         self.server_thread = threading.Thread(target=run, daemon=True)
         self.server_thread.start()
@@ -985,7 +1001,6 @@ class SmartBridgeUI:
                     self.apply_cors_headers()
                     self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                     self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
-                    self.send_header("Access-Control-Allow-Private-Network", "true")
                     self.end_headers()
                 except Exception as exc:
                     logging.error("OPTIONS %s failed: %s", self.path, exc)
@@ -1208,6 +1223,7 @@ class SmartBridgeUI:
                 try:
                     self.send_response(code)
                     self.send_header("Content-Type", "application/json")
+                    self.apply_cors_headers()
                     self.end_headers()
                     self.wfile.write(json.dumps({"ok": False, "message": message}).encode("utf-8"))
                 except Exception:
@@ -1219,6 +1235,7 @@ class SmartBridgeUI:
                     if origin in allowed_browser_origins():
                         self.send_header("Access-Control-Allow-Origin", origin)
                         self.send_header("Vary", "Origin")
+                        self.send_header("Access-Control-Allow-Private-Network", "true")
                 except Exception:
                     pass
 
@@ -1269,9 +1286,20 @@ class SmartBridgeUI:
 
 def main():
     setup_logging()
-    root = tk.Tk()
-    SmartBridgeUI(root)
-    root.mainloop()
+    import sys
+    logging.info("=" * 60)
+    logging.info("Application Started")
+    logging.info("Python: %s", sys.version)
+    logging.info("Executable: %s", getattr(sys, 'frozen', 'N/A') and sys.executable or sys.argv[0])
+    logging.info("PID: %d", os.getpid())
+    logging.info("=" * 60)
+    try:
+        root = tk.Tk()
+        SmartBridgeUI(root)
+        root.mainloop()
+    except Exception:
+        logging.exception("Fatal application error")
+        raise
 
 
 if __name__ == "__main__":
