@@ -1,0 +1,376 @@
+/* ============================================================
+   e-BAL Smart Bridge — Connectivity Manager Styles
+   ============================================================ */
+
+/* ---- Status Widget (header bar) ---- */
+.bc-status-widget {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    padding: 4px 0;
+    user-select: none;
+    position: relative;
+}
+
+.bc-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.bc-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background-color .3s;
+}
+
+.bc-dot--green  { background: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,.18); }
+.bc-dot--yellow { background: #d97706; box-shadow: 0 0 0 2px rgba(217,119,6,.18); animation: bc-pulse 2s infinite; }
+.bc-dot--red    { background: #dc2626; box-shadow: 0 0 0 2px rgba(220,38,38,.18); }
+
+.bc-label { color: rgba(255,255,255,.7); }
+.v2-topbar .bc-label { color: var(--muted, #64748b); }
+
+@keyframes bc-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .45; }
+}
+
+/* ---- Connectivity Panel (dropdown) ---- */
+.bc-panel-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+}
+.bc-panel-overlay.open { display: block; }
+
+.bc-panel {
+    position: fixed;
+    top: 56px;
+    right: 24px;
+    width: 340px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.06);
+    z-index: 1000;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow: hidden;
+    animation: bc-panel-in .18s ease-out;
+}
+
+@keyframes bc-panel-in {
+    from { opacity: 0; transform: translateY(-8px) scale(.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.bc-panel-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.bc-panel-header h3 {
+    margin: 0;
+    font-size: .92rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.bc-panel-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #94a3b8;
+    padding: 4px;
+    border-radius: 4px;
+    line-height: 0;
+}
+.bc-panel-close:hover { background: #f1f5f9; color: #475569; }
+
+.bc-panel-body { padding: 16px 20px 20px; }
+
+.bc-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #f8fafc;
+}
+.bc-status-row:last-child { border-bottom: none; }
+
+.bc-status-label {
+    font-size: .78rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.bc-status-value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .78rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.bc-status-value .bc-dot { width: 7px; height: 7px; }
+
+.bc-version-text {
+    font-size: .72rem;
+    color: #94a3b8;
+    font-weight: 400;
+    font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+.bc-panel-actions {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+}
+
+.bc-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: .78rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #475569;
+    transition: all .15s;
+    text-align: center;
+}
+.bc-btn:hover { background: #f8fafc; border-color: #cbd5e1; }
+
+.bc-btn--primary {
+    background: #0f766e;
+    color: #fff;
+    border-color: #0f766e;
+}
+.bc-btn--primary:hover { background: #0d6e65; }
+
+.bc-btn--launch {
+    background: linear-gradient(135deg, #0f766e, #134e4a);
+    color: #fff;
+    border: none;
+    font-size: .82rem;
+    padding: 10px 16px;
+}
+.bc-btn--launch:hover { background: linear-gradient(135deg, #0d6e65, #113d3a); }
+
+.bc-btn--launch:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
+/* ---- Workspace Launch Panel (full overlay) ---- */
+.bc-launch-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(15,23,42,.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    justify-content: center;
+    align-items: center;
+}
+.bc-launch-overlay.open { display: flex; }
+
+.bc-launch-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 24px 80px rgba(0,0,0,.2);
+    width: min(460px, 92vw);
+    overflow: hidden;
+    animation: bc-card-in .22s ease-out;
+}
+
+@keyframes bc-card-in {
+    from { opacity: 0; transform: translateY(16px) scale(.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.bc-launch-header {
+    padding: 28px 32px 0;
+    text-align: center;
+}
+
+.bc-launch-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0f766e, #134e4a);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+}
+
+.bc-launch-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 8px;
+}
+
+.bc-launch-subtitle {
+    font-size: .82rem;
+    color: #64748b;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.bc-launch-body { padding: 24px 32px 32px; }
+
+.bc-launch-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.bc-launch-status-label {
+    font-size: .78rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.bc-launch-status-value {
+    font-size: .78rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.bc-launch-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bc-launch-btn {
+    width: 100%;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all .15s;
+    text-align: center;
+}
+
+.bc-launch-btn--start {
+    background: linear-gradient(135deg, #0f766e, #134e4a);
+    color: #fff;
+    font-size: .9rem;
+}
+.bc-launch-btn--start:hover { background: linear-gradient(135deg, #0d6e65, #113d3a); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15,118,110,.3); }
+.bc-launch-btn--start:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.bc-launch-btn--retry {
+    background: #fff;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+.bc-launch-btn--retry:hover { background: #f8fafc; }
+
+.bc-launch-progress {
+    display: none;
+    text-align: center;
+    padding: 8px 0 0;
+}
+
+.bc-launch-progress.active { display: block; }
+
+.bc-launch-progress-text {
+    font-size: .75rem;
+    color: #0f766e;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.bc-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #e2e8f0;
+    border-top-color: #0f766e;
+    border-radius: 50%;
+    animation: bc-spin .6s linear infinite;
+}
+
+@keyframes bc-spin { to { transform: rotate(360deg); } }
+
+.bc-launch-success {
+    display: none;
+    text-align: center;
+    padding: 16px 0 0;
+    font-size: .85rem;
+    font-weight: 600;
+    color: #16a34a;
+}
+
+.bc-launch-success.active { display: block; }
+
+/* ---- Action Lock Overlay ---- */
+.bc-locked {
+    position: relative;
+    pointer-events: none;
+    opacity: .45;
+}
+
+.bc-locked-tooltip {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    cursor: not-allowed;
+}
+
+.bc-locked:hover .bc-locked-tooltip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,.85);
+    border-radius: inherit;
+}
+
+.bc-locked-tooltip-text {
+    background: #1e293b;
+    color: #fff;
+    font-size: .72rem;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+    .bc-panel { right: 12px; left: 12px; width: auto; }
+    .bc-status-widget { gap: 8px; }
+    .bc-indicator .bc-label { display: none; }
+}

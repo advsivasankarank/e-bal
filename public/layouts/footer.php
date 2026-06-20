@@ -11,6 +11,8 @@ if (!empty($_SESSION['v2_mode'])) {
     &copy; <?= date('Y') ?> e-BAL | Structured Balance Sheet Tool by E Tax Advisors Private Limited
 </div>
 
+<script>var ebalBridgeUrl = <?= json_encode($bridgeUrl ?? 'http://127.0.0.1:9123') ?>;</script>
 <script src="<?= BASE_URL ?>asset/js/app.js"></script>
+<script src="<?= BASE_URL ?>asset/js/bridge_connectivity.js?v=<?= htmlspecialchars($bridgeJsVersion ?? (string) time()) ?>"></script>
 </body>
 </html>
