@@ -36,4 +36,16 @@ if (!is_array($data)) {
 $ownerId = getOwnerUserId($pdo, $userId);
 $auditorId = createAuditor($pdo, $ownerId, $data);
 
-echo json_encode(['ok' => true, 'auditor_id' => $auditorId]);
+/* Return full auditor data for auto-selection */
+$auditor = getAuditor($pdo, $auditorId);
+
+echo json_encode([
+    'ok' => true,
+    'auditor_id' => $auditorId,
+    'firm_name' => $auditor['firm_name'] ?? ($data['firm_name'] ?? ''),
+    'partner_name' => $auditor['partner_name'] ?? ($data['partner_name'] ?? ''),
+    'frn' => $auditor['frn'] ?? ($data['frn'] ?? ''),
+    'membership_no' => $auditor['membership_no'] ?? ($data['membership_no'] ?? ''),
+    'email' => $auditor['email'] ?? ($data['email'] ?? ''),
+    'mobile' => $auditor['mobile'] ?? ($data['mobile'] ?? ''),
+]);
