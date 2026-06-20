@@ -228,10 +228,173 @@
         });
     };
 
-    /* ---- Tally Bridge ---- */
-    window.fetchFromTallyBridge = function() {
-        fetch('http://127.0.0.1:9123/company',{method:'POST',headers:tallyBridgeToken?{'X-Bridge-Token':tallyBridgeToken}:{}})
-        .then(function(r){return r.json();}).then(function(data){if(!data.ok)return;var c=data.company||{};var f=document.getElementById('name');if(f&&c.name)f.value=c.name||c.mailing_name||'';}).catch(function(){});
+    /* ---- Tally Company Import ---- */
+    var tallySelectedCompany = null;
+    var tallyMappedData = null;
+
+    window.openTallyImportModal = function() {
+        document.getElementById('tally-modal').classList.add('open');
+        document.getElementById('tally-step-list').style.display = '';
+        document.getElementById('tally-step-preview').style.display = 'none';
+        document.getElementById('tally-loading').style.display = '';
+        document.getElementById('tally-error').style.display = 'none';
+        document.getElementById('tally-company-list').style.display = 'none';
+        document.getElementById('tally-import-btn').style.display = 'none';
+        document.getElementById('tally-modal-title').textContent = 'Fetch from Tally';
+        tallySelectedCompany = null;
+        tallyMappedData = null;
+        loadTallyCompanies();
+    };
+
+    window.closeTallyModal = function() {
+        document.getElementById('tally-modal').classList.remove('open');
+    };
+
+    window.retryTallyConnection = function() {
+        document.getElementById('tally-loading').style.display = '';
+        document.getElementById('tally-error').style.display = 'none';
+        loadTallyCompanies();
+    };
+
+    function loadTallyCompanies() {
+        fetch(ebalBaseUrl + 'company_dashboard/ajax_tally_companies.php')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            document.getElementById('tally-loading').style.display = 'none';
+            if (!data.ok) {
+                document.getElementById('tally-error').style.display = '';
+                document.getElementById('tally-error-msg').textContent = data.message || 'Connection failed.';
+                return;
+            }
+            var companies = data.companies || [];
+            if (companies.length === 0) {
+                document.getElementById('tally-error').style.display = '';
+                document.getElementById('tally-error-msg').textContent = 'No companies found in Tally.';
+                return;
+            }
+            var listEl = document.getElementById('tally-companies');
+            var html = '';
+            companies.forEach(function(c) {
+                var name = typeof c === 'string' ? c : (c.name || c.company_name || '');
+                html += '<div class="emw-tally-company" onclick="selectTallyCompany(this, \'' + esc(name) + '\')">';
+                html += '<div class="emw-tally-radio"></div>';
+                html += '<div><div class="emw-tally-company-name">' + esc(name) + '</div></div>';
+                html += '</div>';
+            });
+            listEl.innerHTML = html;
+            document.getElementById('tally-company-list').style.display = '';
+        })
+        .catch(function(e) {
+            document.getElementById('tally-loading').style.display = 'none';
+            document.getElementById('tally-error').style.display = '';
+            document.getElementById('tally-error-msg').textContent = 'Network error: ' + e.message;
+        });
+    }
+
+    window.selectTallyCompany = function(el, name) {
+        var items = document.querySelectorAll('.emw-tally-company');
+        for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
+        el.classList.add('selected');
+        tallySelectedCompany = name;
+        fetchTallyCompanyDetail(name);
+    };
+
+    function fetchTallyCompanyDetail(name) {
+        document.getElementById('tally-step-list').style.display = 'none';
+        document.getElementById('tally-step-preview').style.display = '';
+        document.getElementById('tally-modal-title').textContent = 'Import Preview';
+        document.getElementById('tally-import-btn').style.display = '';
+        document.getElementById('tally-preview-name').textContent = name;
+        document.getElementById('tally-preview-subtitle').textContent = 'Loading company details from Tally...';
+        document.getElementById('tally-preview-rows').innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:#64748b;">Fetching data...</td></tr>';
+        document.getElementById('tally-duplicate-warning').style.display = 'none';
+
+        fetch(ebalBaseUrl + 'company_dashboard/ajax_tally_company_detail.php?company_name=' + encodeURIComponent(name))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.ok) {
+                document.getElementById('tally-preview-rows').innerHTML = '<tr><td colspan="3" style="color:#dc2626;padding:12px;">' + esc(data.message || 'Failed to fetch details.') + '</td></tr>';
+                document.getElementById('tally-import-btn').style.display = 'none';
+                return;
+            }
+            tallyMappedData = data.mapped;
+            document.getElementById('tally-preview-subtitle').textContent = 'Review the data below before importing.';
+            renderPreviewTable(data.mapped, data.duplicates || []);
+        })
+        .catch(function(e) {
+            document.getElementById('tally-preview-rows').innerHTML = '<tr><td colspan="3" style="color:#dc2626;">Error: ' + esc(e.message) + '</td></tr>';
+            document.getElementById('tally-import-btn').style.display = 'none';
+        });
+    }
+
+    function renderPreviewTable(mapped, duplicates) {
+        var rows = [
+            { label: 'Entity Name', value: mapped.name },
+            { label: 'Category', value: mapped.category === 'corporate' ? 'Corporate' : mapped.category === 'llp' ? 'LLP' : 'Non-Corporate' },
+            { label: 'PAN', value: mapped.pan },
+            { label: 'CIN', value: mapped.cin },
+            { label: 'LLPIN', value: mapped.llp_code },
+            { label: 'GSTIN', value: mapped.gstin },
+            { label: 'Registered Address', value: mapped.registered_address },
+            { label: 'State', value: mapped.state_name || mapped.state_code },
+            { label: 'Email', value: mapped.email },
+            { label: 'Mobile', value: mapped.mobile },
+        ];
+        var html = '';
+        rows.forEach(function(r) {
+            var hasValue = r.value && r.value.trim() !== '';
+            html += '<tr><td style="font-weight:600;">' + esc(r.label) + '</td>';
+            html += '<td>' + (hasValue ? esc(r.value) : '<span class="emw-preview-empty">—</span>') + '</td>';
+            html += '<td>' + (hasValue ? '<span class="emw-preview-ok">✓ Available</span>' : '<span class="emw-preview-empty">Not found</span>') + '</td></tr>';
+        });
+        document.getElementById('tally-preview-rows').innerHTML = html;
+
+        if (duplicates.length > 0) {
+            var msg = duplicates.map(function(d) {
+                return d.field + ' "' + d.value + '" already exists (' + d.existing_name + ')';
+            }).join('; ');
+            document.getElementById('tally-duplicate-msg').textContent = msg;
+            document.getElementById('tally-duplicate-warning').style.display = '';
+        }
+    }
+
+    window.importTallyCompany = function() {
+        if (!tallyMappedData) return;
+        var m = tallyMappedData;
+
+        /* Populate Entity Information fields */
+        var nameField = document.getElementById('name');
+        if (nameField) nameField.value = m.name || '';
+
+        if (m.category) selectCategory(m.category);
+
+        var cinField = document.getElementById('cin');
+        if (cinField && m.cin) cinField.value = m.cin;
+
+        var llpField = document.getElementById('llp_code');
+        if (llpField && m.llp_code) llpField.value = m.llp_code;
+
+        var panField = document.getElementById('pan');
+        if (panField && m.pan) panField.value = m.pan;
+
+        var addrField = document.getElementById('registered_address');
+        if (addrField) addrField.value = m.registered_address || '';
+
+        var stateField = document.getElementById('state_code');
+        if (stateField && m.state_code) stateField.value = m.state_code;
+
+        var emailField = document.getElementById('official_email');
+        if (emailField) emailField.value = m.email || '';
+
+        var mobileField = document.getElementById('mobile_no');
+        if (mobileField) mobileField.value = m.mobile || '';
+
+        /* Trigger identification fields display */
+        toggleIdentificationFields();
+        if (m.cin) applyCinRules();
+
+        closeTallyModal();
+        showToast('Company imported from Tally. Review and save.', 'success');
     };
 
     /* ---- Toast ---- */

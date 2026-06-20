@@ -213,9 +213,21 @@ include __DIR__ . '/../layouts/header.php';
         <!-- TAB 1: Entity Information -->
         <div class="emw-panel active" data-panel="entity">
             <div class="emw-section">
-                <div class="emw-section-title">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-                    Entity Details
+                <div class="emw-section-header">
+                    <div class="emw-section-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                        Entity Details
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button type="button" class="emw-btn emw-btn-primary emw-btn-sm" onclick="openTallyImportModal()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                            Fetch from Tally
+                        </button>
+                        <button type="button" class="emw-btn emw-btn-outline emw-btn-sm" onclick="fetchEntityData('cin')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Fetch MCA
+                        </button>
+                    </div>
                 </div>
                 <div class="emw-grid">
                     <div class="emw-full">
@@ -483,6 +495,80 @@ include __DIR__ . '/../layouts/header.php';
 
 <!-- Toast -->
 <div class="emw-toast" id="emw-toast"></div>
+
+<!-- Tally Import Modal -->
+<div class="emw-modal-overlay" id="tally-modal">
+    <div class="emw-modal" style="width:min(700px,90vw);">
+        <div class="emw-modal-header">
+            <h2 id="tally-modal-title">Fetch from Tally</h2>
+            <button type="button" class="emw-modal-close" onclick="closeTallyModal()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="emw-modal-body" id="tally-modal-body">
+            <!-- Step 1: Loading / Company List -->
+            <div id="tally-step-list">
+                <div id="tally-loading" style="text-align:center;padding:30px;color:#64748b;">
+                    <div style="margin-bottom:10px;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    </div>
+                    <div>Connecting to Tally Bridge...</div>
+                    <div style="font-size:.75rem;margin-top:4px;">Ensure e-BAL Smart Bridge is running</div>
+                </div>
+                <div id="tally-error" style="display:none;text-align:center;padding:20px;">
+                    <div style="color:#dc2626;font-weight:600;margin-bottom:6px;">Connection Failed</div>
+                    <div style="font-size:.85rem;color:#64748b;" id="tally-error-msg"></div>
+                    <button type="button" class="emw-btn emw-btn-outline emw-btn-sm" style="margin-top:12px;" onclick="retryTallyConnection()">Retry</button>
+                </div>
+                <div id="tally-company-list" style="display:none;">
+                    <div style="margin-bottom:12px;font-size:.85rem;color:#475569;">Select a company from Tally to import:</div>
+                    <div id="tally-companies" style="max-height:300px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
+                </div>
+            </div>
+            <!-- Step 2: Import Preview -->
+            <div id="tally-step-preview" style="display:none;">
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:.92rem;font-weight:700;color:#1e293b;margin-bottom:4px;" id="tally-preview-name"></div>
+                    <div style="font-size:.78rem;color:#64748b;" id="tally-preview-subtitle"></div>
+                </div>
+                <!-- Duplicate Warning -->
+                <div id="tally-duplicate-warning" style="display:none;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;margin-bottom:14px;">
+                    <div style="font-weight:600;color:#92400e;font-size:.85rem;margin-bottom:4px;">Duplicate Detected</div>
+                    <div style="font-size:.82rem;color:#92400e;" id="tally-duplicate-msg"></div>
+                </div>
+                <!-- Preview Table -->
+                <div style="border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;">
+                    <table class="emw-table">
+                        <thead><tr><th style="width:40%;">Field</th><th>Value</th><th style="width:100px;">Status</th></tr></thead>
+                        <tbody id="tally-preview-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="emw-modal-footer" id="tally-modal-footer">
+            <button type="button" class="emw-btn emw-btn-outline" onclick="closeTallyModal()">Cancel</button>
+            <button type="button" class="emw-btn emw-btn-primary" id="tally-import-btn" style="display:none;" onclick="importTallyCompany()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                Import Company
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.emw-tally-company{padding:12px 16px;cursor:pointer;border-bottom:1px solid #f1f5f9;transition:background .15s;display:flex;align-items:center;gap:12px}
+.emw-tally-company:hover{background:#f0f7ff}
+.emw-tally-company.selected{background:#eef2ff;border-left:3px solid #12355b;padding-left:13px}
+.emw-tally-company:last-child{border-bottom:none}
+.emw-tally-radio{width:16px;height:16px;border:2px solid #d1d5db;border-radius:50%;flex-shrink:0;position:relative}
+.emw-tally-company.selected .emw-tally-radio{border-color:#12355b}
+.emw-tally-company.selected .emw-tally-radio::after{content:'';position:absolute;top:3px;left:3px;width:6px;height:6px;border-radius:50%;background:#12355b}
+.emw-tally-company-name{font-weight:600;font-size:.88rem;color:#1e293b}
+.emw-tally-company-meta{font-size:.72rem;color:#64748b}
+.emw-preview-ok{color:#047857;font-weight:600;font-size:.82rem}
+.emw-preview-empty{color:#94a3b8;font-size:.82rem}
+</style>
 
 <script src="<?= BASE_URL ?>asset/js/entity_workspace.js?v=<?= filemtime(__DIR__ . '/../asset/js/entity_workspace.js') ?>"></script>
 <script>
