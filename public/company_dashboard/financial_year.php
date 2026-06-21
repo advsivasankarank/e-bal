@@ -8,7 +8,7 @@ require_once '../../app/helpers/financial_year_helper.php';
 requireCompany();
 
 $page_title = "Select Financial Year";
-$financialYears = getFinancialYears($pdo);
+$financialYears = getFinancialYears($pdo, $_SESSION['company_id'] ?? null);
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -28,7 +28,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $_SESSION['fy_id'] = $financialYear['id'];
         $_SESSION['fy_name'] = $financialYear['fy_label'];
-        header("Location: " . BASE_URL . "dashboard_company.php");
+        $companyId = (int) ($_SESSION['company_id'] ?? 0);
+        if ($companyId > 0) {
+            header("Location: " . BASE_URL . "assignment_home.php?company_id=" . $companyId . "&fy_id=" . $financialYear['id']);
+        } else {
+            header("Location: " . BASE_URL . "my_assignments.php");
+        }
         exit;
     }
 }
@@ -58,6 +63,7 @@ include __DIR__ . '/../layouts/header.php';
 <?php endif; ?>
 
 <form method="post">
+    <?= csrfInput() ?>
     <div class="form-group">
         <label>Financial Year</label>
         <select name="fy_id" required>

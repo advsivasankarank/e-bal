@@ -316,10 +316,6 @@ $v2FooterItems = [
             </span>
         </div>
         <div class="bc-status-row">
-            <span class="bc-status-label">Bridge Version</span>
-            <span class="bc-status-value"><span id="bc-launch-version" class="bc-version-text">—</span></span>
-        </div>
-        <div class="bc-status-row">
             <span class="bc-status-label">Tally Status</span>
             <span class="bc-status-value bc-status-val" data-status-kind="tally">
                 <span class="bc-dot bc-dot--red" data-status-kind="tally"></span>
@@ -327,12 +323,32 @@ $v2FooterItems = [
             </span>
         </div>
         <div class="bc-status-row">
+            <span class="bc-status-label">Version</span>
+            <span class="bc-status-value"><span id="bc-panel-version" class="bc-version-text">—</span></span>
+        </div>
+        <div class="bc-status-row">
+            <span class="bc-status-label">Uptime</span>
+            <span class="bc-status-value"><span id="bc-panel-uptime" class="bc-version-text">—</span></span>
+        </div>
+        <div class="bc-status-row">
+            <span class="bc-status-label">Last Sync</span>
+            <span class="bc-status-value"><span id="bc-panel-last-sync" class="bc-version-text">Never</span></span>
+        </div>
+        <div class="bc-status-row">
+            <span class="bc-status-label">Last Upload</span>
+            <span class="bc-status-value"><span id="bc-panel-last-upload" class="bc-version-text">None</span></span>
+        </div>
+        <div class="bc-status-row">
             <span class="bc-status-label">Active Company</span>
             <span class="bc-status-value" style="font-size:.75rem;"><?= htmlspecialchars($v2CompanyName ?: '—') ?></span>
         </div>
-        <div class="bc-panel-actions">
-            <button class="bc-btn bc-btn--primary" type="button" onclick="ebalBridge.check()">Test Connection</button>
-            <button class="bc-btn" type="button" onclick="ebalBridge.openLaunch()">Launch Bridge</button>
+        <div class="bc-panel-actions" style="flex-wrap:wrap;">
+            <button class="bc-btn bc-btn--primary" type="button" id="bc-btn-refresh">Refresh</button>
+            <button class="bc-btn" type="button" id="bc-btn-companies">Fetch Companies</button>
+        </div>
+        <div class="bc-panel-actions" style="flex-wrap:wrap;margin-top:6px;">
+            <button class="bc-btn" type="button" id="bc-btn-ledgers">Fetch Ledgers</button>
+            <button class="bc-btn" type="button" id="bc-btn-tb">Fetch TB</button>
         </div>
     </div>
 </div>
