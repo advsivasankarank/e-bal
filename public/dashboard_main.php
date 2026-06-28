@@ -7,8 +7,6 @@ require_once __DIR__ . '/../app/helpers/plan_helper.php';
 $page_title = "Dashboard Main";
 require_once __DIR__ . '/layouts/header.php';
 
-ensureWorkflowColumns();
-
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 $ownerId = $userId > 0 ? getOwnerUserId($pdo, $userId) : 0;
 $companyScope = $ownerId > 0 ? " AND c.owner_user_id = {$ownerId}" : '';

@@ -3,7 +3,6 @@ require_once '../../app/session_bootstrap.php';
 require_once '../../config/database.php';
 require_once '../../app/workflow_engine.php';
 require_once '../../app/helpers/plan_helper.php';
-ensureWorkflowColumns();
 include __DIR__ . '/../layouts/header.php';
 
 $statusFilter = strtolower(trim((string) ($_GET['status'] ?? 'all')));
