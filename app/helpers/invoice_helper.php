@@ -498,7 +498,10 @@ function generateInvoicePDF(PDO $pdo, array $invoice, array $plan): ?string
     try {
         // Check if dompdf is available
         if (!class_exists('Dompdf\Dompdf')) {
-            require_once __DIR__ . '/../../vendor/autoload.php';
+            $autoload = __DIR__ . '/../../vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
         }
 
         if (!class_exists('Dompdf\Dompdf')) {

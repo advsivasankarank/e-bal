@@ -7,13 +7,8 @@
 if (!isset($pdo) || !isset($company_id) || !isset($fy_id)) return;
 
 function getSignoffData($pdo, $companyId, $fyId) {
-    $stmt = $pdo->prepare("SELECT meta_key, meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key LIKE 'signoff_%'");
-    $stmt->execute([$companyId, $fyId]);
-    $data = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $data[$row['meta_key']] = $row['meta_value'];
-    }
-    return $data;
+    require_once __DIR__ . '/../../app/helpers/report_manual_helper.php';
+    return loadManualInputsByPrefix($pdo, (int) $companyId, (int) $fyId, 'signoff_');
 }
 
 $signoffs = getSignoffData($pdo, $company_id, $fy_id);
@@ -22,6 +17,17 @@ $roles = [
     ['key' => 'manager', 'label' => 'Manager', 'description' => 'Accuracy and completeness review'],
     ['key' => 'partner', 'label' => 'Partner', 'description' => 'Authorisation for delivery'],
 ];
+
+if (!function_exists('reviewCanRenderSignoffAction')) {
+    function reviewCanRenderSignoffAction(string $role, array $signoffs): bool {
+        $currentRole = strtolower((string) ($_SESSION['user_role'] ?? ''));
+        if (in_array($currentRole, ['admin', 'superadmin'], true)) return true;
+        if ($currentRole !== $role) return false;
+        if ($role === 'manager' && empty($signoffs['signoff_staff_by'])) return false;
+        if ($role === 'partner' && (empty($signoffs['signoff_staff_by']) || empty($signoffs['signoff_manager_by']))) return false;
+        return true;
+    }
+}
 ?>
 
 <?php foreach ($roles as $role): ?>
@@ -47,10 +53,12 @@ $roles = [
     </div>
     <span class="rw-signoff-badge <?= $isSigned ? 'signed' : 'pending' ?>"><?= $isSigned ? 'Signed' : 'Pending' ?></span>
     <div class="rw-signoff-actions">
-        <?php if ($isSigned): ?>
+        <?php if ($isSigned && reviewCanRenderSignoffAction($role['key'], $signoffs)): ?>
             <button type="button" class="btn btn-sm rw-revoke-btn" data-role="<?= $role['key'] ?>">Revoke</button>
-        <?php else: ?>
+        <?php elseif (!$isSigned && reviewCanRenderSignoffAction($role['key'], $signoffs)): ?>
             <button type="button" class="btn btn-sm btn-primary rw-signoff-btn" data-role="<?= $role['key'] ?>" data-action="sign">Sign as <?= $role['label'] ?></button>
+        <?php else: ?>
+            <span style="font-size:0.78rem;color:var(--muted,#6b7280);">Restricted</span>
         <?php endif; ?>
     </div>
 </div>

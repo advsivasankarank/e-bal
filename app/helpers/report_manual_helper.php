@@ -15,6 +15,30 @@ function ensureReportManualInputsTable(PDO $pdo): void
             UNIQUE KEY uniq_report_manual_input (company_id, fy_id, input_key)
         )
     ");
+
+    try {
+        if (!manualInputColumnExists($pdo, 'input_key')) {
+            $pdo->exec("ALTER TABLE report_manual_inputs ADD COLUMN input_key VARCHAR(120) NULL AFTER fy_id");
+        }
+        if (!manualInputColumnExists($pdo, 'input_value')) {
+            $pdo->exec("ALTER TABLE report_manual_inputs ADD COLUMN input_value TEXT NULL AFTER input_key");
+        }
+        if (manualInputColumnExists($pdo, 'meta_key') && manualInputColumnExists($pdo, 'meta_value')) {
+            $pdo->exec("INSERT IGNORE INTO report_manual_inputs (company_id, fy_id, input_key, input_value)
+                SELECT company_id, fy_id, meta_key, meta_value
+                FROM report_manual_inputs
+                WHERE meta_key IS NOT NULL AND meta_key <> ''");
+        }
+    } catch (Throwable $e) {
+        // Data compatibility migration is best-effort; application uses input_key/input_value as canonical schema.
+    }
+}
+
+function manualInputColumnExists(PDO $pdo, string $columnName): bool
+{
+    $stmt = $pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'report_manual_inputs' AND column_name = ? LIMIT 1");
+    $stmt->execute([$columnName]);
+    return (bool) $stmt->fetchColumn();
 }
 
 function loadManualInputsForYear(PDO $pdo, int $company_id, int $fy_id): array
@@ -71,4 +95,27 @@ function saveManualInputs(PDO $pdo, int $company_id, int $fy_id, array $inputs):
     foreach ($inputs as $key => $value) {
         $stmt->execute([$company_id, $fy_id, $key, (string) $value]);
     }
+}
+
+function loadManualInputsByPrefix(PDO $pdo, int $company_id, int $fy_id, string $prefix): array
+{
+    ensureReportManualInputsTable($pdo);
+
+    $stmt = $pdo->prepare("SELECT input_key, input_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND input_key LIKE ?");
+    $stmt->execute([$company_id, $fy_id, $prefix . '%']);
+    $data = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $data[(string) $row['input_key']] = (string) ($row['input_value'] ?? '');
+    }
+    return $data;
+}
+
+function getManualInputValue(PDO $pdo, int $company_id, int $fy_id, string $key): string
+{
+    ensureReportManualInputsTable($pdo);
+
+    $stmt = $pdo->prepare("SELECT input_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND input_key = ? LIMIT 1");
+    $stmt->execute([$company_id, $fy_id, $key]);
+    $value = $stmt->fetchColumn();
+    return $value === false ? '' : (string) $value;
 }

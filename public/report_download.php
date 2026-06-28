@@ -4,9 +4,19 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/engines/fs_engine.php';
 require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
 require_once __DIR__ . '/../app/helpers/report_document_helper.php';
-require_once __DIR__ . '/../app/exporters/financial_statement_xlsx.php';
-require_once __DIR__ . '/../app/exporters/financial_statement_docx.php';
-require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../app/helpers/report_fallback_export_helper.php';
+require_once __DIR__ . '/../app/helpers/figure_helper.php';
+
+$autoload = __DIR__ . '/../vendor/autoload.php';
+if (file_exists($autoload)) {
+    require_once $autoload;
+}
+if (class_exists('PhpOffice\\PhpSpreadsheet\\Spreadsheet')) {
+    require_once __DIR__ . '/../app/exporters/financial_statement_xlsx.php';
+}
+if (class_exists('PhpOffice\\PhpWord\\PhpWord')) {
+    require_once __DIR__ . '/../app/exporters/financial_statement_docx.php';
+}
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -59,25 +69,37 @@ $htmlBody = renderFinancialReportDocument($fs, $companyName, $fyName);
 $htmlDocument = wrapReportHtmlDocument($title, $htmlBody);
 
 if ($format === 'html') {
+    http_response_code(200);
     echo $htmlDocument;
     exit;
 }
 
 if ($format === 'pdf') {
-    $options = new Options();
-    $options->set('isRemoteEnabled', false);
-    $options->set('defaultFont', 'DejaVu Sans');
+    if (class_exists('Dompdf\\Dompdf')) {
+        $options = new Options();
+        $options->set('isRemoteEnabled', false);
+        $options->set('defaultFont', 'DejaVu Sans');
 
-    $dompdf = new Dompdf($options);
-    $dompdf->loadHtml($htmlDocument, 'UTF-8');
-    $dompdf->setPaper('A4', 'portrait');
-    $dompdf->render();
-    $dompdf->stream(buildReportExportFilename($companyName, $fyName, 'pdf'), ['Attachment' => true]);
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($htmlDocument, 'UTF-8');
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+        $dompdf->stream(buildReportExportFilename($companyName, $fyName, 'pdf'), ['Attachment' => true]);
+    } else {
+        $pdfPath = createFallbackPdf($htmlDocument, $title);
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'pdf') . '"');
+        header('Content-Length: ' . filesize($pdfPath));
+        readfile($pdfPath);
+        unlink($pdfPath);
+    }
     exit;
 }
 
 if (in_array($format, ['word', 'docx'], true)) {
-    $docxPath = exportFinancialStatementsToDocx($fs, $companyName, $fyName);
+    $docxPath = function_exists('exportFinancialStatementsToDocx')
+        ? exportFinancialStatementsToDocx($fs, $companyName, $fyName)
+        : createFallbackDocx($htmlDocument);
     header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document; charset=UTF-8');
     header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'docx') . '"');
     header('Cache-Control: max-age=0');
@@ -88,7 +110,9 @@ if (in_array($format, ['word', 'docx'], true)) {
 }
 
 if (in_array($format, ['excel', 'xlsx'], true)) {
-    $xlsxPath = exportFinancialStatementsToXlsx($fs, $companyName, $fyName);
+    $xlsxPath = function_exists('exportFinancialStatementsToXlsx')
+        ? exportFinancialStatementsToXlsx($fs, $companyName, $fyName)
+        : createFallbackXlsx($htmlDocument);
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=UTF-8');
     header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'xlsx') . '"');
     header('Cache-Control: max-age=0');

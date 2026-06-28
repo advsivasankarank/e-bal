@@ -16,7 +16,7 @@ $checks[] = [
     'passed' => $tbDiff <= 0.01,
     'message' => 'Trial Balance is not balanced',
     'detail' => $tbDiff > 0.01 ? 'Difference: ' . number_format($tbDiff, 2) : '',
-    'action_url' => BASE_URL . 'data/trial_balance.php', 'action_label' => 'Go to Data'
+    'action_url' => BASE_URL . 'data_console/trial_balance_preview.php', 'action_label' => 'Go to Data'
 ];
 $conflicts = $fs['validation']['parent_group_conflicts'] ?? [];
 $checks[] = [
@@ -24,7 +24,7 @@ $checks[] = [
     'impact' => 'disclosure', 'impact_value' => 0,
     'passed' => ($fs['data']['mapping_completed'] ?? false),
     'message' => 'Some ledgers are not mapped to Schedule codes',
-    'detail' => '', 'action_url' => BASE_URL . 'data/mapping.php', 'action_label' => 'Go to Mapping'
+    'detail' => '', 'action_url' => BASE_URL . 'data_console/mapping_workbench.php', 'action_label' => 'Go to Mapping'
 ];
 $checks[] = [
     'key' => 'parent_group_conflicts', 'category' => 'Data Integrity', 'severity' => 'error',
@@ -32,7 +32,7 @@ $checks[] = [
     'passed' => empty($conflicts),
     'message' => 'Schedule code conflicts found in mapping',
     'detail' => count($conflicts) . ' conflict(s)',
-    'action_url' => BASE_URL . 'data/mapping.php', 'action_label' => 'Go to Mapping'
+    'action_url' => BASE_URL . 'data_console/mapping_workbench.php', 'action_label' => 'Go to Mapping'
 ];
 
 // --- Category 2: Financial Statements ---
@@ -73,10 +73,10 @@ $checks[] = [
 ];
 $prevFYClosed = true;
 if (!($fs['is_first_year'] ?? true)) {
-    require_once __DIR__ . '/../../app/helpers/financial_year_helper.php';
-    $prevFyId = getPreviousFYId($pdo, $fy_id);
+    require_once __DIR__ . '/../../app/helpers/fy_closure_helper.php';
+    $prevFyId = getPreviousFYId($pdo, (int) $company_id, (int) $fy_id);
     if ($prevFyId) {
-        $prevStatus = getFYStatus($pdo, $prevFyId);
+        $prevStatus = getFYStatus($pdo, (int) $company_id, (int) $prevFyId);
         $prevFYClosed = ($prevStatus === 'closed');
     }
 }

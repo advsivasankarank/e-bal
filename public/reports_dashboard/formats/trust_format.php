@@ -5,8 +5,8 @@ $prevHNote = $isFirstYear ? '' : '<th class="figure" data-prev>Previous</th>';
 $prevColspan = $isFirstYear ? 2 : 3;
 $prevColspan4 = $isFirstYear ? 3 : 4;
 $reportSubtitle = $isFirstYear ? ' (First Year Financial Statements)' : '';
-function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . \format_inr($val) . '</td>'; }
-function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . $val . '</td>'; }
+if (!function_exists('pv')) { function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . \format_inr($val) . '</td>'; } }
+if (!function_exists('pvRaw')) { function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . $val . '</td>'; } }
 
 $trustIncome = (float) ($data['revenue'] ?? 0) + (float) ($data['donations'] ?? 0) + (float) ($data['grants'] ?? 0) + (float) ($data['membership_fees'] ?? 0) + (float) ($data['other_income'] ?? 0);
 $prevTrustIncome = (float) ($data['prev_revenue'] ?? 0) + (float) ($data['prev_donations'] ?? 0) + (float) ($data['prev_grants'] ?? 0) + (float) ($data['prev_membership_fees'] ?? 0) + (float) ($data['prev_other_income'] ?? 0);

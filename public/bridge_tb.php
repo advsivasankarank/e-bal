@@ -11,7 +11,7 @@ header('Content-Type: application/json; charset=utf-8');
 $allHeaders = function_exists('getallheaders') ? getallheaders() : [];
 $token = trim((string) (
     $allHeaders['X-Bridge-Token'] ?? $allHeaders['x-bridge-token']
-    ?? $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? $_GET['token'] ?? ''
+    ?? $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? ''
 ));
 $clientId = trim((string) ($_GET['client_id'] ?? $allHeaders['X-Client-Id'] ?? $_SERVER['HTTP_X_CLIENT_ID'] ?? ''));
 $companyId = (int) ($allHeaders['X-Company-Id'] ?? $_SERVER['HTTP_X_COMPANY_ID'] ?? 0);

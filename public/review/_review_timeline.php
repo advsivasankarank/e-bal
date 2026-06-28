@@ -7,12 +7,13 @@
 if (!isset($pdo) || !isset($company_id) || !isset($fy_id)) return;
 
 function getTimelineEntries($pdo, $companyId, $fyId) {
-    $stmt = $pdo->prepare("SELECT meta_key, meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key LIKE 'review_timeline_%' ORDER BY meta_key ASC");
-    $stmt->execute([$companyId, $fyId]);
+    require_once __DIR__ . '/../../app/helpers/report_manual_helper.php';
+    $rows = loadManualInputsByPrefix($pdo, (int) $companyId, (int) $fyId, 'review_timeline_');
+    ksort($rows, SORT_NATURAL);
     $entries = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        if ($row['meta_key'] === 'review_timeline_count') continue;
-        $entries[] = $row['meta_value'];
+    foreach ($rows as $key => $value) {
+        if ($key === 'review_timeline_count') continue;
+        $entries[] = $value;
     }
     return $entries;
 }

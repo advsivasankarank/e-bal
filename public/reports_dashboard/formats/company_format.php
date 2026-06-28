@@ -4,8 +4,8 @@
 $isFirstYear = (bool) ($isFirstYear ?? false);
 $prevHNote = $isFirstYear ? '' : '<th class="figure" data-prev>Previous</th>';
 $reportSubtitle = $isFirstYear ? ' (First Year Financial Statements)' : '';
-function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . \format_inr($val) . '</td>'; }
-function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . $val . '</td>'; }
+if (!function_exists('pv')) { function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . \format_inr($val) . '</td>'; } }
+if (!function_exists('pvRaw')) { function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . $val . '</td>'; } }
 ?>
 
 <section class="report-page" id="balance-sheet">

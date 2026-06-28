@@ -1,12 +1,12 @@
 <?php
-require_once __DIR__ . '/../app/context_check.php';
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../app/engines/fs_engine.php';
-require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
-require_once __DIR__ . '/../app/helpers/figure_helper.php';
-require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
-require_once __DIR__ . '/../app/helpers/company_reporting_helper.php';
-require_once __DIR__ . '/../app/workflow_engine.php';
+require_once __DIR__ . '/../../app/context_check.php';
+require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../app/engines/fs_engine.php';
+require_once __DIR__ . '/../../app/helpers/report_manual_helper.php';
+require_once __DIR__ . '/../../app/helpers/figure_helper.php';
+require_once __DIR__ . '/../../app/helpers/report_validation_helper.php';
+require_once __DIR__ . '/../../app/helpers/company_reporting_helper.php';
+require_once __DIR__ . '/../../app/workflow_engine.php';
 
 $page_title = 'Deliverables';
 requireAssignmentAccess();
@@ -40,17 +40,9 @@ $readinessScore = $readiness['score'];
 
 // Get remark/signoff data for sub-components
 $remarkData = [];
-$remarkStmt = $pdo->prepare("SELECT meta_key, meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key LIKE 'review_remark_%'");
-$remarkStmt->execute([$company_id, $fy_id]);
-foreach ($remarkStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $remarkData[$row['meta_key']] = $row['meta_value'];
-}
+$remarkData = loadManualInputsByPrefix($pdo, $company_id, $fy_id, 'review_remark_');
 $signoffData = [];
-$signoffStmt = $pdo->prepare("SELECT meta_key, meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key LIKE 'signoff_%'");
-$signoffStmt->execute([$company_id, $fy_id]);
-foreach ($signoffStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $signoffData[$row['meta_key']] = $row['meta_value'];
-}
+$signoffData = loadManualInputsByPrefix($pdo, $company_id, $fy_id, 'signoff_');
 
 // Determine delivery status
 $blockingErrors = $readiness['validation']['blocking'];

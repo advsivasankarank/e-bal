@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS bridge_clients (
 SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'report_manual_inputs' AND INDEX_NAME = 'idx_rmi_lookup');
 SET @sql = IF(@idx_exists = 0,
-    'CREATE INDEX idx_rmi_lookup ON report_manual_inputs (company_id, fy_id, meta_key)',
+    'CREATE INDEX idx_rmi_lookup ON report_manual_inputs (company_id, fy_id, input_key)',
     'SELECT 1');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -135,6 +135,22 @@ WHERE f1.company_id = f2.company_id
   AND f1.id > f2.id;
 
 -- 9. Add last_login_at column to users if missing
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    email VARCHAR(190) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    reset_token VARCHAR(255) NULL,
+    reset_token_expires_at TIMESTAMP NULL,
+    role ENUM('superadmin','admin','staff','manager','partner','viewer') NOT NULL DEFAULT 'admin',
+    company_owner_id INT NULL,
+    last_login_at DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+ALTER TABLE users MODIFY role ENUM('superadmin','admin','staff','manager','partner','viewer') NOT NULL DEFAULT 'admin';
+
 SET @login_col = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'last_login_at');
 SET @sql = IF(@login_col = 0,

@@ -68,6 +68,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $stmt->execute($params);
 
+        /* Compute and store profile completeness */
+        $hasFy = false;
+        try {
+            $fyCheck = $pdo->prepare("SELECT COUNT(*) FROM financial_years WHERE company_id = ?");
+            $fyCheck->execute([$id]);
+            $hasFy = (int) $fyCheck->fetchColumn() > 0;
+        } catch (Throwable $e) { /* ignore */ }
+
+        $completeness = calculateProfileCompleteness($company, $hasFy);
+        $updStmt = $pdo->prepare("UPDATE companies SET profile_completeness = ? WHERE id = ?");
+        $updStmt->execute([$completeness, $id]);
+
         header("Location: company_list.php?updated=1");
         exit;
     }
@@ -78,6 +90,16 @@ $stateOptions = getIndianStateOptions();
 $companyTypeOptions = getCorporateCompanyTypeOptions();
 $nonCorpOptions = getNonCorporateSubcategoryOptions();
 $nonCorpDesignationOptions = getNonCorporateDesignationOptions();
+
+/* Compute profile completeness for display */
+$hasFy = false;
+try {
+    $fyCheck = $pdo->prepare("SELECT COUNT(*) FROM financial_years WHERE company_id = ?");
+    $fyCheck->execute([$id]);
+    $hasFy = (int) $fyCheck->fetchColumn() > 0;
+} catch (Throwable $e) { /* ignore */ }
+$profilePct = calculateProfileCompleteness($company, $hasFy);
+$company['profile_completeness'] = $profilePct;
 ?>
 
 <div class="page-title">Edit Company</div>
@@ -89,6 +111,26 @@ $nonCorpDesignationOptions = getNonCorporateDesignationOptions();
         <?php endforeach; ?>
     </div>
 <?php endif; ?>
+
+<?php if (isset($_GET['created'])): ?>
+    <div class="success-box"><p>Entity created successfully. Please complete the profile details below.</p></div>
+<?php endif; ?>
+
+<!-- Profile Completeness Bar -->
+<div class="wizard-card" style="padding:16px 20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:.85rem;font-weight:600;color:#1e293b;">Profile Completeness</span>
+        <span style="font-size:.85rem;font-weight:700;color:<?= $profilePct >= 80 ? '#047857' : ($profilePct >= 40 ? '#92400e' : '#dc2626') ?>;"><?= $profilePct ?>%</span>
+    </div>
+    <div style="width:100%;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+        <div style="width:<?= $profilePct ?>%;height:100%;background:<?= $profilePct >= 80 ? '#047857' : ($profilePct >= 40 ? '#f59e0b' : '#dc2626') ?>;border-radius:4px;transition:width .3s;"></div>
+    </div>
+    <?php if ($profilePct < 100): ?>
+        <p style="font-size:.75rem;color:#64748b;margin:6px 0 0;">Complete the sections below to reach 100%.</p>
+    <?php else: ?>
+        <p style="font-size:.75rem;color:#047857;margin:6px 0 0;">Profile is complete.</p>
+    <?php endif; ?>
+</div>
 
 <style>
 .wizard-card { background:#fff; border:1px solid #d8e2ef; border-radius:14px; padding:20px; margin-bottom:18px; }

@@ -4,7 +4,7 @@ $isBridgeRequest = false;
 $allH = function_exists('getallheaders') ? getallheaders() : [];
 $token = trim((string) (
     $allH['X-Bridge-Token'] ?? $allH['x-bridge-token']
-    ?? $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? $_GET['token'] ?? ''
+    ?? $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? ''
 ));
 
 require_once __DIR__ . '/../config/app.php';

@@ -6,13 +6,14 @@
  * DDL moved to migration script.
  */
 
-require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../app/helpers/xml_sanitizer.php';
-require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../app/helpers/xml_sanitizer.php';
+require_once __DIR__ . '/../config/app.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-$token = trim((string) ($_GET['token'] ?? ''));
+$headers = function_exists('getallheaders') ? getallheaders() : [];
+$token = trim((string) ($headers['X-Bridge-Token'] ?? $headers['x-bridge-token'] ?? $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? ''));
 $clientId = trim((string) ($_GET['client_id'] ?? ''));
 $companyId = (int) ($_GET['company_id'] ?? 0);
 $fyId = (int) ($_GET['fy_id'] ?? 0);

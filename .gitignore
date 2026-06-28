@@ -1,3 +1,47 @@
+# ===== Build artifacts =====
 /_build/
 /public/asset.zip
+
+# ===== Environment & secrets =====
 /config/env.php
+/config/bridge_settings.php
+/runtime-validation-*.ini
+
+# ===== IDE & editor =====
+/.vscode/
+/.idea/
+.replit
+replit.md
+
+# ===== OS files =====
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*.swo
+*~
+
+# ===== Node / Composer =====
+/node_modules/
+/vendor/
+composer.phar
+
+# ===== Logs & cache =====
+*.log
+/storage/logs/
+/storage/cache/
+
+# ===== Temp files =====
+nul
+*.tmp
+*.temp
+C*Users*AppData*Local*Temp*
+
+# ===== Python artifacts =====
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== Bridge desktop app =====
+/tally_bridge_exe/__pycache__/
+/tally_bridge_exe/bridge.log

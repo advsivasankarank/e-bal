@@ -47,9 +47,9 @@ $selectedFy = $_SESSION['fy_name'] ?? 'Not Selected';
 
 <div class="tile-container">
     <div class="tile is-clickable" tabindex="0" role="link" data-nav="<?= BASE_URL ?>company_dashboard/company_create.php">
-        <h3>Create Company</h3>
-        <p>Add a new client company with category, CIN or LLP code, and basic profile details.</p>
-        <div class="status">New Company</div>
+        <h3>Create Entity</h3>
+        <p>Quickly create a new entity with just a name. Complete details later from the Edit page.</p>
+        <div class="status">New Entity</div>
     </div>
 
     <div class="tile is-clickable" tabindex="0" role="link" data-nav="<?= BASE_URL ?>company_dashboard/company_select.php">

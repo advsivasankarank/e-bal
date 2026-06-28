@@ -87,5 +87,6 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
         'can_generate' => empty($errors),
         'errors' => $errors,
         'warnings' => $warnings,
+        'total_checks' => 8,
     ];
 }

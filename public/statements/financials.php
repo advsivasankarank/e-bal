@@ -1,16 +1,14 @@
 <?php
-require_once __DIR__ . '/../app/context_check.php';
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../app/engines/fs_engine.php';
-require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
-require_once __DIR__ . '/../app/helpers/figure_helper.php';
-require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
-require_once __DIR__ . '/../app/workflow_engine.php';
+require_once __DIR__ . '/../../app/context_check.php';
+require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../app/engines/fs_engine.php';
+require_once __DIR__ . '/../../app/helpers/report_manual_helper.php';
+require_once __DIR__ . '/../../app/helpers/figure_helper.php';
+require_once __DIR__ . '/../../app/helpers/report_validation_helper.php';
+require_once __DIR__ . '/../../app/workflow_engine.php';
 
 $page_title = 'Financial Statements';
 requireAssignmentAccess();
-
-require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
@@ -144,6 +142,8 @@ if (!empty($validationResult['warnings'])) {
 
 $isAdmin = (($_SESSION['user_role'] ?? '') === 'admin');
 $debugMode = (defined('DEBUG_MODE') && DEBUG_MODE === true);
+
+require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
 <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/financials_workspace.css?v=<?= filemtime(__DIR__ . '/../asset/css/financials_workspace.css') ?>">

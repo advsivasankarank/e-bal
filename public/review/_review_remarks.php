@@ -19,12 +19,14 @@ if (!empty($isCorporate)) {
 }
 
 function getRemarkData($pdo, $companyId, $fyId, $sectionKey) {
-    $stmt = $pdo->prepare("SELECT meta_key, meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key LIKE ?");
-    $likeKey = 'review_remark_%_' . $sectionKey;
-    $stmt->execute([$companyId, $fyId, $likeKey]);
+    require_once __DIR__ . '/../../app/helpers/report_manual_helper.php';
+    $all = loadManualInputsByPrefix($pdo, (int) $companyId, (int) $fyId, 'review_remark_');
     $data = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_KEY_PAIR) as $k => $v) {
-        $data[$k] = $v;
+    foreach ($all as $key => $value) {
+        $suffix = '_' . $sectionKey;
+        if (substr((string) $key, -strlen($suffix)) === $suffix) {
+            $data[$key] = $value;
+        }
     }
     return $data;
 }

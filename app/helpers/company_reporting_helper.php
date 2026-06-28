@@ -41,6 +41,7 @@ function ensureCompanyReportingColumns(PDO $pdo): void
         'signatory_2_id_no' => "ALTER TABLE companies ADD COLUMN signatory_2_id_no VARCHAR(120) NULL AFTER signatory_2_custom_designation",
         'signatory_2_signing_authority' => "ALTER TABLE companies ADD COLUMN signatory_2_signing_authority VARCHAR(255) NULL AFTER signatory_2_id_no",
         'signatory_2_is_signing' => "ALTER TABLE companies ADD COLUMN signatory_2_is_signing TINYINT(1) NOT NULL DEFAULT 1 AFTER signatory_2_signing_authority",
+        'profile_completeness' => "ALTER TABLE companies ADD COLUMN profile_completeness TINYINT(3) NOT NULL DEFAULT 0 AFTER signatory_2_is_signing",
     ];
 
     foreach ($required as $column => $sql) {
@@ -374,6 +375,107 @@ function getConstitutionType(string $entitySubcategory): string
         return 'LLP';
     }
     return 'Non-Corporate';
+}
+
+/**
+ * Calculate profile completeness percentage for an entity.
+ * Weights:
+ *   Entity Name   = 20%
+ *   PAN           = 10%
+ *   GSTIN         = 10%
+ *   Address       = 10%
+ *   Contact       = 10%  (email or mobile)
+ *   Registrations = 20%  (CIN or LLPIN or subcategory)
+ *   FY Setup      = 20%  (checked externally, passed as flag)
+ */
+function calculateProfileCompleteness(array $row, bool $hasFinancialYear = false): int
+{
+    $score = 0;
+
+    // Entity Name (20%)
+    if (!empty(trim((string) ($row['name'] ?? '')))) {
+        $score += 20;
+    }
+
+    // PAN (10%)
+    if (!empty(trim((string) ($row['pan'] ?? '')))) {
+        $score += 10;
+    }
+
+    // GSTIN (10%) — stored in gstin column if present
+    if (!empty(trim((string) ($row['gstin'] ?? '')))) {
+        $score += 10;
+    }
+
+    // Address (10%)
+    if (!empty(trim((string) ($row['registered_address'] ?? '')))) {
+        $score += 10;
+    }
+
+    // Contact Details (10%) — email or mobile
+    if (!empty(trim((string) ($row['official_email'] ?? ''))) || !empty(trim((string) ($row['mobile_no'] ?? '')))) {
+        $score += 10;
+    }
+
+    // Registration Details (20%) — CIN, LLPIN, or non-corp subcategory
+    $category = strtolower(str_replace(['-', ' '], '_', (string) ($row['category'] ?? '')));
+    if ($category === 'corporate' && !empty(trim((string) ($row['cin'] ?? '')))) {
+        $score += 20;
+    } elseif ($category === 'llp' && !empty(trim((string) ($row['llp_code'] ?? '')))) {
+        $score += 20;
+    } elseif ($category === 'non_corporate' && !empty(trim((string) ($row['noncorp_subcategory'] ?? '')))) {
+        $score += 20;
+    }
+
+    // Financial Year Setup (20%)
+    if ($hasFinancialYear) {
+        $score += 20;
+    }
+
+    return min(100, max(0, $score));
+}
+
+/**
+ * Lightweight validation for Quick Entity Creation.
+ * Only Entity Name is mandatory. Category defaults to 'corporate'.
+ */
+function quickCreateValidate(array $input): array
+{
+    $errors = [];
+    $name = trim((string) ($input['name'] ?? ''));
+
+    if ($name === '') {
+        $errors[] = 'Entity name is required.';
+    }
+
+    return $errors;
+}
+
+/**
+ * Check for duplicate entity name (case-insensitive).
+ * Returns error message if duplicate found, empty string otherwise.
+ */
+function checkDuplicateEntityName(PDO $pdo, string $name, int $excludeId = 0): string
+{
+    $name = trim($name);
+    if ($name === '') return '';
+
+    $sql = "SELECT id, name FROM companies WHERE LOWER(name) = LOWER(?)";
+    $params = [$name];
+    if ($excludeId > 0) {
+        $sql .= " AND id != ?";
+        $params[] = $excludeId;
+    }
+    $sql .= " LIMIT 1";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($row) {
+        return 'An entity with the name "' . htmlspecialchars($row['name']) . '" already exists. Please choose a different name.';
+    }
+    return '';
 }
 
 function getCompanyReportingMeta(PDO $pdo, int $companyId): array

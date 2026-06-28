@@ -335,7 +335,7 @@ $v2SectionStatus = [
     </a>
 
     <!-- FINANCIALS -->
-    <a href="<?= BASE_URL ?>statements/" class="v2-ah-section-card">
+    <a href="<?= BASE_URL ?>statements/financials.php" class="v2-ah-section-card">
         <div class="v2-ah-section-icon">📊</div>
         <div class="v2-ah-section-body">
             <h3>Financials</h3>

@@ -1,17 +1,15 @@
 <?php
-require_once __DIR__ . '/../app/context_check.php';
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../app/engines/fs_engine.php';
-require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
-require_once __DIR__ . '/../app/helpers/figure_helper.php';
-require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
-require_once __DIR__ . '/../app/helpers/company_reporting_helper.php';
-require_once __DIR__ . '/../app/workflow_engine.php';
+require_once __DIR__ . '/../../app/context_check.php';
+require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../app/engines/fs_engine.php';
+require_once __DIR__ . '/../../app/helpers/report_manual_helper.php';
+require_once __DIR__ . '/../../app/helpers/figure_helper.php';
+require_once __DIR__ . '/../../app/helpers/report_validation_helper.php';
+require_once __DIR__ . '/../../app/helpers/company_reporting_helper.php';
+require_once __DIR__ . '/../../app/workflow_engine.php';
 
 $page_title = 'Review Workspace';
 requireAssignmentAccess();
-
-require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
@@ -73,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($severity, $validSeverities)) $severity = 'observation';
 
         $now = date('Y-m-d H:i:s');
-        $userId = $_SESSION['user_id'] ?? 0;
+        $userId = (int) ($_SESSION['user_id'] ?? 0);
 
         saveManualInputs($pdo, $company_id, $fy_id, [
             'review_remark_text_' . $section => $text,
@@ -110,6 +108,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $role = $_POST['signoff_role'] ?? '';
         $validRoles = ['staff', 'manager', 'partner'];
         if (in_array($role, $validRoles)) {
+            $existingSignoffs = loadManualInputsByPrefix($pdo, $company_id, $fy_id, 'signoff_');
+            if (!canCurrentUserSignRole($role, $existingSignoffs)) {
+                http_response_code(403);
+                exit('You are not authorised to perform this sign-off.');
+            }
             $now = date('Y-m-d H:i:s');
             $userId = $_SESSION['user_id'] ?? 0;
 
@@ -133,6 +136,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $role = $_POST['signoff_role'] ?? '';
         $validRoles = ['staff', 'manager', 'partner'];
         if (in_array($role, $validRoles)) {
+            $existingSignoffs = loadManualInputsByPrefix($pdo, $company_id, $fy_id, 'signoff_');
+            if (!canCurrentUserSignRole($role, $existingSignoffs)) {
+                http_response_code(403);
+                exit('You are not authorised to revoke this sign-off.');
+            }
             $now = date('Y-m-d H:i:s');
             $userId = $_SESSION['user_id'] ?? 0;
 
@@ -155,14 +163,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // --- Helper to add timeline entry ---
 function addTimelineEntry($pdo, $companyId, $fyId, $entry) {
-    $countStmt = $pdo->prepare("SELECT meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key = 'review_timeline_count'");
-    $countStmt->execute([$companyId, $fyId]);
-    $count = (int)($countStmt->fetchColumn() ?: '0');
+    $count = (int) (getManualInputValue($pdo, $companyId, $fyId, 'review_timeline_count') ?: '0');
     $count++;
     saveManualInputs($pdo, $companyId, $fyId, [
         'review_timeline_count' => (string)$count,
         'review_timeline_' . $count => $entry,
     ]);
+}
+
+function canCurrentUserSignRole(string $role, array $signoffData): bool
+{
+    $currentRole = strtolower((string) ($_SESSION['user_role'] ?? ''));
+    if (in_array($currentRole, ['admin', 'superadmin'], true)) {
+        return true;
+    }
+    if ($currentRole !== $role) {
+        return false;
+    }
+    if ($role === 'manager' && empty($signoffData['signoff_staff_by'])) {
+        return false;
+    }
+    if ($role === 'partner' && (empty($signoffData['signoff_staff_by']) || empty($signoffData['signoff_manager_by']))) {
+        return false;
+    }
+    return true;
 }
 
 // --- Compute readiness using centralized engine ---
@@ -172,19 +196,13 @@ $readiness = computeReadiness($pdo, $company_id, $fy_id, $fs);
 // Pass readiness data to partials
 $validationChecks = $readiness['validation']['error_messages'];
 $remarkData = [];
-$remarkStmt2 = $pdo->prepare("SELECT meta_key, meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key LIKE 'review_remark_%'");
-$remarkStmt2->execute([$company_id, $fy_id]);
-foreach ($remarkStmt2->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $remarkData[$row['meta_key']] = $row['meta_value'];
-}
+$remarkData = loadManualInputsByPrefix($pdo, $company_id, $fy_id, 'review_remark_');
 $signoffData = [];
-$signoffStmt2 = $pdo->prepare("SELECT meta_key, meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key LIKE 'signoff_%'");
-$signoffStmt2->execute([$company_id, $fy_id]);
-foreach ($signoffStmt2->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $signoffData[$row['meta_key']] = $row['meta_value'];
-}
+$signoffData = loadManualInputsByPrefix($pdo, $company_id, $fy_id, 'signoff_');
 
 $lastValidated = date('M d, Y, g:i A');
+
+require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
 <meta name="csrf-token" content="<?= $_SESSION['_csrf_token'] ?? '' ?>">

@@ -15,6 +15,12 @@ if (!isset($_FILES['ledger_xml']) || $_FILES['ledger_xml']['error'] !== UPLOAD_E
     exit;
 }
 
+if ($_FILES['ledger_xml']['size'] > 10 * 1024 * 1024) {
+    $_SESSION['error'] = 'Upload file exceeds 10 MB limit. Please compress the XML file.';
+    header('Location: ' . BASE_URL . 'data_console/tally_offline.php');
+    exit;
+}
+
 $rawXml = file_get_contents($_FILES['ledger_xml']['tmp_name']);
 $rawXml = sanitizeTallyXML($rawXml);
 

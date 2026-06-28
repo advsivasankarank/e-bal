@@ -186,7 +186,7 @@ function companyContinueLink(array $company): array
 </style>
 
 <?php if (isset($_GET['success'])): ?>
-    <div class="success-box"><p>Company created successfully.</p></div>
+    <div class="success-box"><p>Entity created successfully. You can now complete the profile from the Edit page.</p></div>
 <?php endif; ?>
 
 <?php if (isset($_GET['updated'])): ?>
@@ -201,7 +201,7 @@ function companyContinueLink(array $company): array
     <div class="error-box"><p>Invalid company selected for deletion.</p></div>
 <?php endif; ?>
 
-<a href="company_create.php" class="btn">+ Add Company</a>
+<a href="company_create.php" class="btn">+ Create Entity</a>
 
 <div class="card" style="margin:14px 0;">
     <strong>View</strong>:
@@ -223,6 +223,7 @@ function companyContinueLink(array $company): array
         <th>Name</th>
         <th>Category</th>
         <th>CIN / LLP Code</th>
+        <th>Profile</th>
         <th>Status</th>
         <th>Actions</th>
     </tr>
@@ -245,6 +246,19 @@ function companyContinueLink(array $company): array
 	    echo '-';
 	}
 	?>
+        </td>
+        <td>
+            <?php
+            $pct = (int) ($c['profile_completeness'] ?? 0);
+            $barColor = $pct >= 80 ? '#047857' : ($pct >= 40 ? '#f59e0b' : '#dc2626');
+            $bgColor = $pct >= 80 ? '#d1fae5' : ($pct >= 40 ? '#fef3c7' : '#fee2e2');
+            ?>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <div style="width:50px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;">
+                    <div style="width:<?= $pct ?>%;height:100%;background:<?= $barColor ?>;border-radius:3px;"></div>
+                </div>
+                <span style="font-size:.75rem;font-weight:600;color:<?= $barColor ?>;"><?= $pct ?>%</span>
+            </div>
         </td>
         <td>
             <?php if ((int) ($c['tally_fetched'] ?? 0) === 1): ?>

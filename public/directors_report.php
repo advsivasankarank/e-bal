@@ -6,7 +6,6 @@ require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
 require_once __DIR__ . '/../app/helpers/directors_report_ai_helper.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
-require_once __DIR__ . '/layouts/header.php';
 
 requireFullContext();
 
@@ -30,8 +29,6 @@ if (($fs['entity_category'] ?? '') !== 'corporate') {
     require_once __DIR__ . '/layouts/footer.php';
     exit;
 }
-
-updateWorkflow($company_id, $fy_id, 'directors_report_prepared');
 
 $sectionDefinitions = getDirectorsReportSectionDefinitions();
 $draftSections = [];
@@ -77,10 +74,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $payload['directors_report_' . $key] = $value;
         }
         saveManualInputs($pdo, $company_id, $fy_id, $payload);
+        updateWorkflow($company_id, $fy_id, 'directors_report_prepared');
         $draftSource = 'Saved Draft';
         $infoMessage = 'Directors report draft saved.';
     }
 }
+
+require_once __DIR__ . '/layouts/header.php';
 ?>
 
 <div class="page-title">Directors Report</div>
@@ -101,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="draft-box">
     <div class="draft-actions">
         <form method="post">
+            <?= csrfInput() ?>
             <input type="hidden" name="directors_report_action" value="generate_ai">
             <button class="btn-primary" type="submit">Generate AI Draft</button>
         </form>
@@ -112,6 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <form method="post">
+        <?= csrfInput() ?>
         <input type="hidden" name="directors_report_action" value="save">
         <?php foreach ($sectionDefinitions as $key => $title): ?>
             <div class="form-group">

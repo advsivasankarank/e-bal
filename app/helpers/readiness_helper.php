@@ -15,18 +15,16 @@
 function computeReadiness(PDO $pdo, int $company_id, int $fy_id, array $fs = []): array {
     // --- Validation Score (60%) ---
     require_once __DIR__ . '/report_validation_helper.php';
+    require_once __DIR__ . '/report_manual_helper.php';
     $validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
     $totalErrors = count($validationResult['errors'] ?? []);
     $totalWarnings = count($validationResult['warnings'] ?? []);
-    /* Total checks = errors + warnings + passed checks. Minimum 1 to avoid division by zero. */
-    $totalChecks = max(1, $totalErrors + $totalWarnings);
+    $totalChecks = max(1, (int) ($validationResult['total_checks'] ?? 8));
     $passedChecks = max(0, $totalChecks - $totalErrors - $totalWarnings);
     $validationScore = $totalChecks > 0 ? round(($passedChecks / $totalChecks) * 60) : 60;
 
     // --- Remarks Score (30%) ---
-    $remarkStmt = $pdo->prepare("SELECT meta_key, meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key LIKE 'review_remark_%'");
-    $remarkStmt->execute([$company_id, $fy_id]);
-    $remarkRows = $remarkStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    $remarkRows = loadManualInputsByPrefix($pdo, $company_id, $fy_id, 'review_remark_');
 
     $totalRemarks = 0;
     $resolvedRemarks = 0;
@@ -43,9 +41,7 @@ function computeReadiness(PDO $pdo, int $company_id, int $fy_id, array $fs = [])
     $remarksScore = $totalRemarks > 0 ? round(($resolvedRemarks / $totalRemarks) * 30) : 30;
 
     // --- Sign-Off Score (10%) ---
-    $signoffStmt = $pdo->prepare("SELECT meta_key, meta_value FROM report_manual_inputs WHERE company_id = ? AND fy_id = ? AND meta_key LIKE 'signoff_%_by'");
-    $signoffStmt->execute([$company_id, $fy_id]);
-    $signoffRows = $signoffStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    $signoffRows = loadManualInputsByPrefix($pdo, $company_id, $fy_id, 'signoff_');
 
     $signedRoles = 0;
     $roles = ['staff', 'manager', 'partner'];

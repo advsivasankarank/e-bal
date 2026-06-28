@@ -69,7 +69,7 @@
                 form.method = 'POST';
                 form.innerHTML = '<input type="hidden" name="review_action" value="' + action + '">' +
                     '<input type="hidden" name="remark_section" value="' + section + '">' +
-                    '<input type="hidden" name="csrf_token" value="' + (document.querySelector('meta[name="csrf-token"]')?.content || '') + '">';
+                    '<input type="hidden" name="_csrf_token" value="' + (document.querySelector('meta[name="csrf-token"]')?.content || '') + '">';
                 document.body.appendChild(form);
                 form.submit();
             });
@@ -85,7 +85,7 @@
                 form.method = 'POST';
                 form.innerHTML = '<input type="hidden" name="review_action" value="signoff_' + action + '">' +
                     '<input type="hidden" name="signoff_role" value="' + role + '">' +
-                    '<input type="hidden" name="csrf_token" value="' + (document.querySelector('meta[name="csrf-token"]')?.content || '') + '">';
+                    '<input type="hidden" name="_csrf_token" value="' + (document.querySelector('meta[name="csrf-token"]')?.content || '') + '">';
                 document.body.appendChild(form);
                 form.submit();
             });
@@ -98,7 +98,7 @@
                 form.method = 'POST';
                 form.innerHTML = '<input type="hidden" name="review_action" value="signoff_revoke">' +
                     '<input type="hidden" name="signoff_role" value="' + role + '">' +
-                    '<input type="hidden" name="csrf_token" value="' + (document.querySelector('meta[name="csrf-token"]')?.content || '') + '">';
+                    '<input type="hidden" name="_csrf_token" value="' + (document.querySelector('meta[name="csrf-token"]')?.content || '') + '">';
                 document.body.appendChild(form);
                 form.submit();
             });

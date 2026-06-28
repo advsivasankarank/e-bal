@@ -27,7 +27,7 @@ if ($companyId <= 0) {
 /* Validate company ownership */
 require_once __DIR__ . '/../../app/helpers/plan_helper.php';
 $ownerId = getOwnerUserId($pdo, $userId);
-$stmt = $pdo->prepare("SELECT id FROM companies WHERE id = ? AND (owner_user_id = ? OR owner_user_id IS NULL)");
+$stmt = $pdo->prepare("SELECT id FROM companies WHERE id = ? AND owner_user_id = ?");
 $stmt->execute([$companyId, $ownerId]);
 if ((int) $stmt->fetchColumn() === 0) {
     http_response_code(403);

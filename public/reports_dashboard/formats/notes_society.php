@@ -1,7 +1,7 @@
 <?php
 $isFirstYear = (bool) ($isFirstYear ?? false);
-function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . \format_inr($val) . '</td>'; }
-function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . $val . '</td>'; }
+if (!function_exists('pv')) { function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . \format_inr($val) . '</td>'; } }
+if (!function_exists('pvRaw')) { function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . $val . '</td>'; } }
 $corpus = (float) ($data['corpus_fund'] ?? 0);
 $prevCorpus = (float) ($data['prev_corpus_fund'] ?? 0);
 $generalFund = (float) ($data['capital'] ?? 0) - $corpus;
