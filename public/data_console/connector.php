@@ -52,7 +52,7 @@ if ($bridgeMode) {
         const csrfToken = <?= json_encode($csrfToken) ?>;
         const activeCompanyId = <?= (int) $companyId ?>;
         const activeFyId = <?= (int) $fyId ?>;
-        const bridgeUrl = 'http://127.0.0.1:9123/sync';
+        const bridgeUrl = <?= json_encode(rtrim($bridgeUrl ?? 'http://127.0.0.1:9123', '/') . '/sync') ?>;
         const bridgeContextUrl = '<?= BASE_URL ?>bridge_context.php';
         const ledgerUploadUrl = <?= json_encode(BASE_URL . 'bridge_ledger.php') ?>;
         const tbUploadUrl = <?= json_encode(BASE_URL . 'bridge_tb.php') ?>;

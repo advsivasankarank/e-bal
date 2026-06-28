@@ -237,7 +237,7 @@ include __DIR__ . '/../layouts/header.php';
                 <div id="bridge-offline" class="qec-hidden" style="text-align:center;padding:20px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin-bottom:16px;">
                     <div style="color:#991b1b;font-weight:600;margin-bottom:6px;">Smart Bridge Not Detected</div>
                     <div style="font-size:.82rem;color:#991b1b;margin-bottom:12px;">Ensure e-BAL Smart Bridge is running on port 9123.</div>
-                    <button type="button" class="qec-btn qec-btn-outline" onclick="detectBridge()" style="font-size:.82rem;padding:6px 14px;">
+                    <button type="button" class="qec-btn qec-btn-outline" onclick="if(window.ebalBridge)window.ebalBridge.check();" style="font-size:.82rem;padding:6px 14px;">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                         Retry Detection
                     </button>
@@ -275,7 +275,6 @@ include __DIR__ . '/../layouts/header.php';
 <script>
 var ebalBaseUrl = '<?= BASE_URL ?>';
 var ebalCsrfToken = '<?= csrfToken() ?>';
-var tallyBridgeUrl = <?= json_encode($bridgeUrl) ?>;
 var tallyBridgeToken = '<?= htmlspecialchars($bridgeToken) ?>';
 var selectedTallyCompany = null;
 
@@ -288,7 +287,10 @@ function selectMethod(method) {
     document.getElementById('panel-manual').classList.toggle('qec-hidden', method !== 'manual');
     document.getElementById('panel-tally').classList.toggle('qec-hidden', method !== 'tally');
     if (method === 'tally') {
-        detectBridge();
+        syncBridgeStatus();
+        if (window.ebalBridge && typeof window.ebalBridge.check === 'function') {
+            window.ebalBridge.check();
+        }
     }
 }
 
@@ -301,33 +303,44 @@ function selectType(el, category, subcategory) {
     }
 }
 
-function detectBridge() {
+/* ---- Bridge Status Sync (consumes shared ebalBridge service) ---- */
+function syncBridgeStatus() {
     var statusEl = document.getElementById('bridge-status');
     var offlineEl = document.getElementById('bridge-offline');
     var companiesWrap = document.getElementById('tally-companies-wrap');
 
-    statusEl.className = 'qec-tally-status detecting';
-    statusEl.innerHTML = '<div class="spinner"></div><span>Detecting Smart Bridge...</span>';
-    statusEl.classList.remove('qec-hidden');
-    offlineEl.classList.add('qec-hidden');
-    companiesWrap.classList.add('qec-hidden');
+    if (!window.ebalBridge) {
+        statusEl.className = 'qec-tally-status detecting';
+        statusEl.innerHTML = '<div class="spinner"></div><span>Initializing bridge service...</span>';
+        statusEl.classList.remove('qec-hidden');
+        offlineEl.classList.add('qec-hidden');
+        companiesWrap.classList.add('qec-hidden');
+        return;
+    }
 
-    fetch(tallyBridgeUrl + '/health')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.status === 'ok' || data.status === 'running') {
-                statusEl.className = 'qec-tally-status online';
-                statusEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>Smart Bridge Connected</span>';
-                loadTallyCompanies();
-            } else {
-                throw new Error('Bridge not ready');
-            }
-        })
-        .catch(function() {
-            statusEl.classList.add('qec-hidden');
-            offlineEl.classList.remove('qec-hidden');
-        });
+    var bs = window.ebalBridge.state;
+    if (bs.bridge === 'online') {
+        statusEl.className = 'qec-tally-status online';
+        statusEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>Smart Bridge Connected</span>';
+        statusEl.classList.remove('qec-hidden');
+        offlineEl.classList.add('qec-hidden');
+        loadTallyCompanies();
+    } else if (bs.bridge === 'offline') {
+        statusEl.classList.add('qec-hidden');
+        offlineEl.classList.remove('qec-hidden');
+        companiesWrap.classList.add('qec-hidden');
+    } else {
+        statusEl.className = 'qec-tally-status detecting';
+        statusEl.innerHTML = '<div class="spinner"></div><span>Detecting Smart Bridge...</span>';
+        statusEl.classList.remove('qec-hidden');
+        offlineEl.classList.add('qec-hidden');
+        companiesWrap.classList.add('qec-hidden');
+    }
 }
+
+document.addEventListener('bridge:status', function (e) {
+    syncBridgeStatus();
+});
 
 function loadTallyCompanies() {
     var companiesWrap = document.getElementById('tally-companies-wrap');
@@ -338,8 +351,9 @@ function loadTallyCompanies() {
     companiesWrap.classList.remove('qec-hidden');
     emptyEl.classList.add('qec-hidden');
 
-    var sep = tallyBridgeUrl.indexOf('?') === -1 ? '?' : '&';
-    fetch(tallyBridgeUrl + '/companies' + sep + 'token=' + encodeURIComponent(tallyBridgeToken))
+    var bridgeUrl = (window.ebalBridgeUrl || 'http://127.0.0.1:9123').replace(/\/+$/, '');
+    var sep = bridgeUrl.indexOf('?') === -1 ? '?' : '&';
+    fetch(bridgeUrl + '/companies' + sep + 'token=' + encodeURIComponent(tallyBridgeToken))
         .then(function(r) { return r.json(); })
         .then(function(data) {
             var companies = data.companies || data || [];
@@ -381,8 +395,9 @@ function importSelectedTally() {
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner" style="width:12px;height:12px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;"></div> Importing...';
 
-    var sep = tallyBridgeUrl.indexOf('?') === -1 ? '?' : '&';
-    fetch(tallyBridgeUrl + '/company_detail' + sep + 'token=' + encodeURIComponent(tallyBridgeToken) + '&name=' + encodeURIComponent(selectedTallyCompany))
+    var bridgeUrl = (window.ebalBridgeUrl || 'http://127.0.0.1:9123').replace(/\/+$/, '');
+    var sep = bridgeUrl.indexOf('?') === -1 ? '?' : '&';
+    fetch(bridgeUrl + '/company_detail' + sep + 'token=' + encodeURIComponent(tallyBridgeToken) + '&name=' + encodeURIComponent(selectedTallyCompany))
         .then(function(r) { return r.json(); })
         .then(function(detail) {
             var name = detail.name || detail.CompanyName || selectedTallyCompany;

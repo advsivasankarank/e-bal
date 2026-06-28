@@ -306,26 +306,32 @@
             return;
         }
 
-        /* Step 1: Health check — browser → bridge directly */
-        bridgeFetch(tallyBridgeUrl + '/health')
-        .then(function(health) {
-            bridgeOnline = !!(health && health.ok);
+        /* Use shared bridge service state for health status */
+        if (window.ebalBridge && window.ebalBridge.state) {
+            bridgeOnline = window.ebalBridge.state.bridge === 'online';
+        }
+
+        if (!bridgeOnline) {
+            document.getElementById('tally-loading').style.display = 'none';
+            document.getElementById('tally-error').style.display = '';
+            document.getElementById('tally-error-msg').innerHTML =
+                '<div style="color:#dc2626;font-weight:600;margin-bottom:6px;">Smart Bridge is not connected</div>' +
+                '<div style="font-size:.78rem;color:#64748b;">Ensure the e-BAL Smart Bridge is running on this computer (port 9123).</div>';
             if (diagEl) {
-                var statusColor = bridgeOnline ? '#047857' : '#dc2626';
-                diagEl.innerHTML =
-                    '<div style="display:flex;gap:16px;font-size:.78rem;margin-bottom:12px;">' +
-                    '<span>Bridge: <strong style="color:' + statusColor + ';">' + esc(bridgeOnline ? 'online' : 'offline') + '</strong></span>' +
-                    '<span>Tally: <strong style="color:#94a3b8;">checking...</strong></span>' +
-                    '</div>';
+                diagEl.innerHTML = '<div style="display:flex;gap:16px;font-size:.78rem;"><span>Bridge: <strong style="color:#dc2626;">offline</strong></span><span>Tally: <strong style="color:#94a3b8;">unknown</strong></span></div>';
                 diagEl.style.display = '';
             }
-            if (!bridgeOnline) {
-                throw new Error('Bridge is not healthy');
-            }
-            /* Step 2: List companies — browser → bridge directly */
-            var sep = tallyBridgeUrl.indexOf('?') === -1 ? '?' : '&';
-            return bridgeFetch(tallyBridgeUrl + '/companies' + sep + 'token=' + encodeURIComponent(tallyBridgeToken));
-        })
+            return;
+        }
+
+        /* Bridge is online — fetch companies directly */
+        if (diagEl) {
+            diagEl.innerHTML = '<div style="display:flex;gap:16px;font-size:.78rem;margin-bottom:12px;"><span>Bridge: <strong style="color:#047857;">online</strong></span><span>Tally: <strong style="color:#94a3b8;">checking...</strong></span></div>';
+            diagEl.style.display = '';
+        }
+
+        var sep = tallyBridgeUrl.indexOf('?') === -1 ? '?' : '&';
+        bridgeFetch(tallyBridgeUrl + '/companies' + sep + 'token=' + encodeURIComponent(tallyBridgeToken))
         .then(function(data) {
             document.getElementById('tally-loading').style.display = 'none';
 
