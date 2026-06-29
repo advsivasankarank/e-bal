@@ -3,6 +3,23 @@ $page_title = "Offline Mode";
 
 require_once '../../app/context_check.php';
 require_once '../../config/database.php';
+require_once '../../app/helpers/financial_year_helper.php';
+
+/* Handle FY selection POST before any output */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['context_action']) && $_POST['context_action'] === 'select_fy') {
+    requireCsrfToken();
+    $selFyId = (int) ($_POST['fy_id'] ?? 0);
+    if ($selFyId > 0 && hasCompanyContext()) {
+        $fy = findFinancialYearById($pdo, $selFyId);
+        if ($fy) {
+            $_SESSION['fy_id'] = $fy['id'];
+            $_SESSION['fy_name'] = $fy['fy_label'];
+        }
+    }
+    header("Location: " . BASE_URL . "data_console/tally_offline.php");
+    exit;
+}
+
 requireFullContext();
 require_once __DIR__ . '/../layouts/header_v2.php';
 

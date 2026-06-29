@@ -60,3 +60,18 @@ function requireFullContext() {
         ensureFYClosureSchema($pdo);
     }
 }
+
+/* ============================================================
+   NON-BLOCKING CONTEXT CHECKS
+   ============================================================ */
+function hasCompanyContext(): bool {
+    return !empty($_SESSION['company_id']);
+}
+
+function hasFyContext(): bool {
+    return !empty($_SESSION['fy_id']);
+}
+
+function hasFullContext(): bool {
+    return hasCompanyContext() && hasFyContext();
+}

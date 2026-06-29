@@ -1,19 +1,39 @@
 <?php
+/**
+ * e-BAL V2 — Tally Online Console
+ *
+ * Live Tally import workflow.
+ * Handles missing FY gracefully with inline selector.
+ */
 $page_title = "Tally Online Console";
 
 require_once '../../app/context_check.php';
 require_once '../../config/database.php';
+require_once '../../app/helpers/financial_year_helper.php';
+
+/* Handle FY selection POST before any output */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['context_action']) && $_POST['context_action'] === 'select_fy') {
+    requireCsrfToken();
+    $selFyId = (int) ($_POST['fy_id'] ?? 0);
+    if ($selFyId > 0 && hasCompanyContext()) {
+        $fy = findFinancialYearById($pdo, $selFyId);
+        if ($fy) {
+            $_SESSION['fy_id'] = $fy['id'];
+            $_SESSION['fy_name'] = $fy['fy_label'];
+        }
+    }
+    /* Redirect back to self to re-render with new context */
+    header("Location: " . BASE_URL . "data_console/tally_online.php");
+    exit;
+}
+
 requireFullContext();
 require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
 
-/*
-|--------------------------------------------------------------------------
-| FETCH WORKFLOW STATUS
-|--------------------------------------------------------------------------
-*/
+/* FETCH WORKFLOW STATUS */
 $stmt = $pdo->prepare("SELECT * FROM workflow_status WHERE company_id=? AND fy_id=?");
 $stmt->execute([$company_id, $fy_id]);
 $wf = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -56,104 +76,55 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
 <?= uiWorkspaceStart() ?>
 
 <?php if ((int) $tallyFetched === 1): ?>
-    <div class="card" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-        <div>
-            <strong>Action Completed</strong><br>
-            The full online flow is already completed for this company and financial year. Continue to trial balance review, or re-run the online flow if you need a fresh sync.
-        </div>
-        <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php">Continue</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/connector.php?bridge=1">Re-sync Online</a>
-        </div>
+    <?= uiAlert('The full online flow is already completed for this company and financial year. Continue to trial balance review, or re-run the online flow.', 'success') ?>
+    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+        <?= uiButton('Continue to TB Review', BASE_URL . 'data_console/trial_balance_preview.php', 'primary') ?>
+        <?= uiButton('Re-sync Online', BASE_URL . 'data_console/connector.php?bridge=1', 'outline') ?>
     </div>
 <?php elseif ((int) $mappingDone === 1): ?>
-    <div class="card" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-        <div>
-            <strong>Action Completed</strong><br>
-            Mapping is already completed. Continue to fetch the trial balance, or re-sync the ledger master if you want to refresh the base data.
-        </div>
-        <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php?bridge=1">Continue</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/connector.php?bridge=1">Re-sync Ledgers</a>
-        </div>
+    <?= uiAlert('Mapping is already completed. Continue to fetch the trial balance, or re-sync the ledger master.', 'info') ?>
+    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+        <?= uiButton('Fetch Trial Balance', BASE_URL . 'data_console/tally_connect.php?bridge=1', 'primary') ?>
+        <?= uiButton('Re-sync Ledgers', BASE_URL . 'data_console/connector.php?bridge=1', 'outline') ?>
     </div>
 <?php elseif ((int) $ledgerFetched === 1): ?>
-    <div class="card" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-        <div>
-            <strong>Action Completed</strong><br>
-            Ledger sync is already completed. Continue to mapping, or re-sync the ledger master if you want fresh ledger data from Tally.
-        </div>
-        <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <a class="btn" href="<?= BASE_URL ?>data_console/mapping_console.php">Continue</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/connector.php?bridge=1">Re-sync Ledgers</a>
-        </div>
+    <?= uiAlert('Ledger sync is already completed. Continue to mapping, or re-sync for fresh data.', 'info') ?>
+    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+        <?= uiButton('Go to Mapping', BASE_URL . 'data_console/mapping_console.php', 'primary') ?>
+        <?= uiButton('Re-sync Ledgers', BASE_URL . 'data_console/connector.php?bridge=1', 'outline') ?>
     </div>
 <?php endif; ?>
 
-<div class="tile-container">
-<!-- STEP 0: CONNECTOR SYNC -->
-    <div class="tile"
-    onclick="location.href='<?= BASE_URL ?>data_console/connector.php?bridge=1'">
-
-    <h3>Step 0</h3>
-    <p>Verify the live Tally bridge and push fresh ledger XML into the application safely.</p>
-
-    <div class="status">
-        🔄 Click to Sync
-    </div>
+<!-- Workflow Steps -->
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px;">
+    <a href="<?= BASE_URL ?>data_console/connector.php?bridge=1" style="background:var(--panel);border:2px solid var(--brand);border-radius:var(--radius-lg);padding:20px;text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:8px;transition:all .15s;" onmouseover="this.style.boxShadow='var(--shadow)'" onmouseout="this.style.boxShadow='none'">
+        <div style="font-size:.82rem;font-weight:700;color:var(--brand);">Step 0 — Sync</div>
+        <div style="font-size:.82rem;color:var(--muted);">Verify the live Tally bridge and push fresh ledger XML into the application.</div>
+        <div style="margin-top:auto;font-size:.78rem;color:var(--brand);font-weight:600;">🔄 Click to Sync →</div>
+    </a>
+    <a href="<?= BASE_URL ?>data_console/ledger_fetch.php" style="background:var(--panel);border:2px solid <?= $ledgerFetched ? 'var(--success)' : 'var(--border)' ?>;border-radius:var(--radius-lg);padding:20px;text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:8px;transition:all .15s;<?= $ledgerFetched ? 'background:#f0fdf4;' : '' ?>" onmouseover="this.style.boxShadow='var(--shadow)'" onmouseout="this.style.boxShadow='none'">
+        <div style="font-size:.82rem;font-weight:700;color:<?= $ledgerFetched ? 'var(--success)' : 'var(--text)' ?>;">Step 1 — Ledger</div>
+        <div style="font-size:.82rem;color:var(--muted);">Pull the ledger master list with parent groups for the active company and FY.</div>
+        <div style="margin-top:auto;"><?= $ledgerFetched ? uiStatusBadge('Completed', 'success') : uiStatusBadge('Pending', 'default') ?></div>
+    </a>
+    <a href="<?= $ledgerFetched ? BASE_URL . 'data_console/mapping_console.php' : '#' ?>" style="background:var(--panel);border:2px solid <?= $mappingDone ? 'var(--success)' : ($ledgerFetched ? 'var(--brand)' : 'var(--border)') ?>;border-radius:var(--radius-lg);padding:20px;text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:8px;transition:all .15s;<?= $mappingDone ? 'background:#f0fdf4;' : '' ?><?= !$ledgerFetched ? 'opacity:.5;pointer-events:none;' : '' ?>" onmouseover="this.style.boxShadow='var(--shadow)'" onmouseout="this.style.boxShadow='none'">
+        <div style="font-size:.82rem;font-weight:700;color:<?= $mappingDone ? 'var(--success)' : ($ledgerFetched ? 'var(--brand)' : 'var(--text)') ?>;">Step 2 — Mapping</div>
+        <div style="font-size:.82rem;color:var(--muted);">Review suggestions, correct schedule heads, and confirm the ledger mapping set.</div>
+        <div style="margin-top:auto;"><?= $mappingDone ? uiStatusBadge('Completed', 'success') : ($ledgerFetched ? uiStatusBadge('Ready', 'brand') : uiStatusBadge('Locked', 'default')) ?></div>
+    </a>
 </div>
 
-    <!-- STEP 1: LEDGER FETCH -->
-    <div class="tile <?= $ledgerFetched ? 'completed' : '' ?>"
-        onclick="location.href='<?= BASE_URL ?>data_console/ledger_fetch.php'">
-
-        <h3>Step 1</h3>
-        <p>Pull the ledger master list with parent groups for the active company and financial year.</p>
-
-        <div class="status">
-            <?= $ledgerFetched ? '✅ Completed' : '⏳ Pending' ?>
-        </div>
-    </div>
-
-    <!-- STEP 2: MAPPING -->
-    <div class="tile <?= !$ledgerFetched ? 'disabled' : ($mappingDone ? 'completed' : '') ?>"
-        onclick="<?= $ledgerFetched ? "location.href='".BASE_URL."data_console/mapping_console.php'" : '' ?>">
-
-        <h3>Step 2</h3>
-        <p>Review suggestions, correct schedule heads, and confirm the ledger mapping set.</p>
-
-        <div class="status">
-            <?= !$ledgerFetched ? '🔒 Locked' : ($mappingDone ? '✅ Completed' : '⏳ Pending') ?>
-        </div>
-    </div>
-
-    <!-- STEP 3: TRIAL BALANCE -->
-    <div class="tile <?= !$mappingDone ? 'disabled' : ($tallyFetched ? 'completed' : '') ?>"
-        onclick="<?= $mappingDone ? "location.href='".BASE_URL."data_console/tally_connect.php?bridge=1'" : '' ?>">
-
-        <h3>Step 3</h3>
-        <p>Fetch live trial balance data from Tally once every ledger is mapped correctly.</p>
-
-        <div class="status">
-            <?= !$mappingDone ? '🔒 Locked' : ($tallyFetched ? '✅ Completed' : '⏳ Pending') ?>
-        </div>
-    </div>
-
-</div>
-
-<div class="card" style="margin-top:20px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+<!-- Next Process -->
+<div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
     <div>
-        <strong>Next Process</strong><br>
-        <?= htmlspecialchars($nextProcessHelp) ?>
+        <div style="font-size:.85rem;font-weight:700;color:var(--text);margin-bottom:2px;">Next Process</div>
+        <div style="font-size:.82rem;color:var(--muted);"><?= htmlspecialchars($nextProcessHelp) ?></div>
     </div>
-    <div>
-        <a class="btn" href="<?= htmlspecialchars($nextProcessUrl) ?>"><?= htmlspecialchars($nextProcessLabel) ?></a>
-    </div>
+    <?= uiButton(htmlspecialchars($nextProcessLabel), htmlspecialchars($nextProcessUrl), 'primary') ?>
 </div>
 
-<!-- BACK BUTTON -->
-<div style="margin-top:20px;">
-    <button onclick="history.back()" class="btn">← Back</button>
+<div style="margin-bottom:20px;">
+    <?= uiButton('← Back', 'javascript:history.back()', 'outline') ?>
 </div>
 
 <?= uiWorkspaceEnd() ?>
