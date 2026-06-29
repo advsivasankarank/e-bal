@@ -8,7 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['context_action']) && 
     requireCsrfToken();
     $selFyId = (int) ($_POST['fy_id'] ?? 0);
     if ($selFyId > 0 && hasCompanyContext()) {
-        $fy = findFinancialYearById($pdo, $selFyId);
+        $fy = findFinancialYearById($pdo, $selFyId, $_SESSION['company_id']);
         if ($fy) {
             $_SESSION['fy_id'] = $fy['id'];
             $_SESSION['fy_name'] = $fy['fy_label'];
