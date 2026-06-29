@@ -236,11 +236,15 @@ foreach ($v2SubSections as $ss) {
 <script>
 (function() {
     var tabs = document.querySelectorAll('.v2-dw-tab');
+    var panelsContainer = document.querySelector('.v2-dw-panels');
     var panels = document.querySelectorAll('.v2-dw-panel');
 
+    /* Show panels container on first tab click */
     for (var i = 0; i < tabs.length; i++) {
         tabs[i].addEventListener('click', function() {
             var target = this.getAttribute('data-tab');
+
+            if (panelsContainer) panelsContainer.style.display = 'block';
 
             for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove('active');
             for (var k = 0; k < panels.length; k++) panels[k].classList.remove('active');
@@ -249,6 +253,11 @@ foreach ($v2SubSections as $ss) {
             var panel = document.querySelector('[data-panel="' + target + '"]');
             if (panel) panel.classList.add('active');
         });
+    }
+
+    /* Auto-show first tab panel on load */
+    if (panelsContainer && tabs.length > 0) {
+        panelsContainer.style.display = 'block';
     }
 })();
 </script>
