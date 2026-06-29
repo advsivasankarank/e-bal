@@ -731,6 +731,28 @@ document.getElementById('selectAllCheck').addEventListener('change', function ()
     document.getElementById('bulkAssignBtn').disabled = !selectAllChecked;
 });
 
+// Bulk Assign — apply AI suggestion to all unmapped ledgers
+document.getElementById('bulkAssignBtn').addEventListener('click', function () {
+    if (!selectAllChecked) return;
+    var assigned = 0;
+    for (var i = 0; i < allData.length; i++) {
+        if (allData[i].ai_suggestion && allData[i].schedule_code !== allData[i].ai_suggestion) {
+            allData[i].schedule_code = allData[i].ai_suggestion;
+            allData[i].schedule_label = mwOptionsMap[allData[i].ai_suggestion] || '';
+            allData[i].status = 'Mapped';
+            allData[i]._conflict = false;
+            assigned++;
+        }
+    }
+    if (assigned > 0) {
+        filteredData = allData.slice();
+        renderList(filteredData);
+        updateProgress();
+        var counter = document.getElementById('selectedCount');
+        if (counter) counter.textContent = assigned + ' ledgers assigned';
+    }
+});
+
 // Save all
 document.getElementById('saveMwBtn').addEventListener('click', function () {
     var mappingData = {};

@@ -48,7 +48,11 @@ $totalCount = count($docs);
     </div>
     <div class="dw-doc-formats">
         <?php foreach ($doc['formats'] as $fmt): ?>
-        <span class="dw-format-btn" title="<?= strtoupper($fmt) ?>"><?= strtoupper($fmt) ?></span>
+        <?php if ($doc['ready']): ?>
+        <a href="<?= BASE_URL ?>report_download.php?format=<?= urlencode($fmt) ?>" class="dw-format-btn" title="Download <?= strtoupper($fmt) ?>"><?= strtoupper($fmt) ?></a>
+        <?php else: ?>
+        <span class="dw-format-btn" title="Not ready" style="opacity:0.4;cursor:not-allowed;"><?= strtoupper($fmt) ?></span>
+        <?php endif; ?>
         <?php endforeach; ?>
     </div>
 </div>

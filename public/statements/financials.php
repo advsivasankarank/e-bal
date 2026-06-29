@@ -302,10 +302,8 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     <?php if ($isAdmin || $debugMode): ?>
     <div class="fs-compliance-card">
         <h3>Review Notes</h3>
-        <div class="fs-compliance-placeholder">
-            <div class="badge">Coming Soon</div>
-            <div>Per-note review comments, sign-off tracking, and audit trail annotations.</div>
-        </div>
+        <p style="font-size:0.88rem;color:#475569;margin:0 0 12px;">Manage per-note review comments, sign-off tracking, and audit trail annotations.</p>
+        <a class="btn" href="<?= BASE_URL ?>review/index.php" style="display:inline-block;">Open Review Workspace</a>
     </div>
     <?php endif; ?>
 </div>
