@@ -63,7 +63,7 @@ foreach ($financialYears as $fy) {
     ];
 }
 
-/* ---- Handle FY selection POST ---- */
+/* ---- Handle FY selection / quick create POST ---- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrfToken();
     $action = $_POST['entity_action'] ?? '';
@@ -77,9 +77,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['company_name'] = $company['name'];
                 $_SESSION['fy_id'] = $fy['id'];
                 $_SESSION['fy_name'] = $fy['fy_label'];
+                $_SESSION['entity_type'] = $company['category'];
                 header('Location: ' . BASE_URL . 'my_assignments.php');
                 exit;
             }
+        }
+    }
+
+    if ($action === 'quick_create_fy') {
+        try {
+            $newFy = ensureFinancialYearRecord($pdo, $companyId, '2024-2025');
+            header('Location: ' . BASE_URL . 'entity_home.php?company_id=' . $companyId);
+            exit;
+        } catch (Throwable $e) {
+            // Fall through to render page with error
         }
     }
 }
@@ -131,7 +142,25 @@ require_once __DIR__ . '/layouts/header_v2.php';
     </div>
 
     <?php if (empty($fyData)): ?>
-        <?= uiEmptyState('📅', 'No Financial Years', 'Create a financial year to begin the audit workflow for this entity.', 'Create Financial Year', BASE_URL . 'company_dashboard/financial_year.php?company_id=' . $companyId) ?>
+        <form method="post">
+            <?= csrfInput() ?>
+            <input type="hidden" name="entity_action" value="quick_create_fy">
+            <div style="text-align:center;padding:40px 20px;">
+                <div style="font-size:2rem;margin-bottom:12px;opacity:0.4;">📅</div>
+                <div style="font-size:1.05rem;font-weight:600;color:var(--text);margin-bottom:6px;">
+                    No Financial Year has been created for this entity.
+                </div>
+                <div style="font-size:.85rem;color:var(--muted);margin-bottom:24px;">
+                    Create a Financial Year to continue to assignments.
+                </div>
+                <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+                    <?= uiButton('Create FY 2024-2025', '', 'primary', '➕') ?>
+                </div>
+                <div style="margin-top:16px;">
+                    <?= uiButton('Back to Entity Dashboard', BASE_URL . 'dashboard_company.php', 'outline', '←') ?>
+                </div>
+            </div>
+        </form>
     <?php else: ?>
         <form method="post">
             <?= csrfInput() ?>

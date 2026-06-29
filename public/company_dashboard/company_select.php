@@ -6,6 +6,20 @@ require_once '../../app/helpers/financial_year_helper.php';
 require_once '../../app/helpers/plan_helper.php';
 require_once '../../app/helpers/security_helper.php';
 
+/* ---- LEGACY REDIRECT ---- */
+/* If a company_id is supplied, redirect to Entity Home (new workflow). */
+$legacyCompanyId = (int)($_GET['company_id'] ?? 0);
+if ($legacyCompanyId > 0) {
+    header('Location: ' . BASE_URL . 'entity_home.php?company_id=' . $legacyCompanyId);
+    exit;
+}
+
+/* No company supplied — redirect to Entity Dashboard */
+if (!isset($_GET['company_id']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: ' . BASE_URL . 'dashboard_company.php');
+    exit;
+}
+
 $page_title = "Select Company";
 
 $userId = (int) ($_SESSION['user_id'] ?? 0);
