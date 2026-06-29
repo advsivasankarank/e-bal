@@ -5,6 +5,7 @@ require_once '../../config/database.php';
 require_once '../../app/engines/ai_mapping_engine.php';
 require_once '../../app/helpers/mapping_ai_helper.php';
 require_once '../../app/helpers/parent_group_validation_helper.php';
+require_once '../../app/helpers/hierarchy_ai_mapping.php';
 
 requireFullContext();
 
@@ -17,6 +18,7 @@ $companyStmt = $pdo->prepare("SELECT category FROM companies WHERE id = ?");
 $companyStmt->execute([$company_id]);
 $companyCategory = strtolower((string) $companyStmt->fetchColumn());
 $mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
+$hierarchyEngine = new HierarchyAIMappingEngine($pdo, (int) $company_id, $companyCategory);
 $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 
@@ -24,24 +26,33 @@ $page_title = "Mapping Console";
 require_once __DIR__ . '/../layouts/header_v2.php';
 
 /* =========================
-   FETCH LEDGERS
-========================= */
-$stmt = $pdo->prepare("
+   FETCH ALL LEDGERS (full data set for filtering)
+   ========================= */
+$allLedgersStmt = $pdo->prepare("
     SELECT
         t.ledger_name,
         t.parent_group,
-        lm.schedule_code AS mapped_code
+        COALESCE(tlm.primary_group, '') AS primary_group,
+        COALESCE(tlm.tally_group_path, '') AS tally_group_path,
+        COALESCE(tlm.tally_root_type, '') AS tally_root_type,
+        lm.schedule_code AS mapped_code,
+        lm.confidence_score,
+        lm.mapping_source
     FROM tally_ledger_master t
+    LEFT JOIN tally_ledger_master tlm 
+        ON tlm.company_id = t.company_id AND tlm.ledger_name = t.parent_group
     LEFT JOIN ledger_mapping lm
         ON lm.company_id = t.company_id
         AND lm.ledger_name = t.ledger_name
     WHERE t.company_id=?
-      AND (lm.schedule_code IS NULL OR lm.schedule_code = '')
     ORDER BY t.ledger_name
 ");
-$stmt->execute([$company_id]);
-$ledgers = $stmt->fetchAll();
+$allLedgersStmt->execute([$company_id]);
+$allLedgers = $allLedgersStmt->fetchAll(PDO::FETCH_ASSOC);
 
+/* =========================
+   AUTO-MAP: Apply AI mapping to unmapped ledgers
+   ========================= */
 $autoMapStmt = $pdo->prepare("
     INSERT INTO ledger_mapping
     (company_id, ledger_name, schedule_code, mapping_source, confidence_score, mapping_reason, remember_scope, approved_by_user_id, approved_at)
@@ -57,28 +68,44 @@ $autoMapStmt = $pdo->prepare("
 ");
 
 $autoMappedCount = 0;
-$unmatchedLedgers = [];
 $reviewCount = 0;
 $conflictCount = 0;
+$mappedCount = 0;
 
-foreach ($ledgers as $row) {
-    if (!empty($row['mapped_code'])) {
+foreach ($allLedgers as &$row) {
+    $isMapped = !empty($row['mapped_code']);
+    $parentGroup = (string) ($row['parent_group'] ?? '');
+
+    if ($isMapped) {
+        $mappedCount++;
+        $row['status'] = 'mapped';
+        $row['ai_suggested_code'] = $row['mapped_code'];
+        $row['ai_suggested_label'] = $mappingEngine->getLabel($row['mapped_code']);
+        $row['ai_confidence'] = (int) ($row['confidence_score'] ?? 100);
+        $row['ai_reason'] = $row['mapping_source'] === 'manual' ? 'Manually mapped by user' : 'Auto-mapped by engine';
+        $row['ai_source'] = $row['mapping_source'] ?? 'manual';
+        $row['ai_conflict'] = false;
         continue;
     }
 
-    $suggestion = $mappingEngine->mapLedger($row['ledger_name'], $row['parent_group']);
-    $suggestedCode = ($suggestion['head'] ?? 'unmapped') !== 'unmapped' ? $suggestion['head'] : '';
-    $confidence = (int) ($suggestion['confidence'] ?? 0);
+    /* Run hierarchy-aware AI for unmapped ledgers */
+    $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
+    $aiResult = $hierarchyEngine->mapLedger($row['ledger_name'], $parentGroup, $hierarchy);
 
-    $suggestedReason = (string) ($suggestion['reason'] ?? 'No reason available');
-    $suggestedSource = (string) ($suggestion['source'] ?? ($suggestion['method'] ?? 'ai'));
-    $hasConflict = $suggestedCode !== '' && !isScheduleCodeAllowedForParentGroup((string) ($row['parent_group'] ?? ''), $suggestedCode);
-
-    if ($hasConflict) {
-        $conflictCount++;
+    /* Also run legacy engine for comparison */
+    $legacyResult = $mappingEngine->mapLedger($row['ledger_name'], $parentGroup);
+    if ($legacyResult && (!$aiResult || ($legacyResult['confidence'] ?? 0) > ($aiResult['confidence'] ?? 0))) {
+        $aiResult = $legacyResult;
     }
 
-    if ($suggestedCode !== '' && $confidence >= 85 && !$hasConflict) {
+    $suggestedCode = $aiResult ? ($aiResult['suggested_head'] ?? $aiResult['head'] ?? '') : '';
+    $confidence = $aiResult ? (int) ($aiResult['confidence'] ?? 0) : 0;
+    $suggestedReason = $aiResult ? ($aiResult['reason'] ?? 'No reason available') : '';
+    $suggestedSource = $aiResult ? ($aiResult['source_basis'][0] ?? $aiResult['method'] ?? 'rule') : 'rule';
+    $hasConflict = $suggestedCode !== '' && !isScheduleCodeAllowedForParentGroup($parentGroup, $suggestedCode);
+
+    /* Auto-map high-confidence, low-risk, non-conflict suggestions */
+    if ($suggestedCode !== '' && $confidence >= 90 && !$hasConflict && ($aiResult['risk'] ?? 'Low') === 'Low') {
         $autoMapStmt->execute([
             $company_id,
             $row['ledger_name'],
@@ -90,23 +117,36 @@ foreach ($ledgers as $row) {
             $userId > 0 ? $userId : null,
         ]);
         $autoMappedCount++;
+        $row['status'] = 'auto_mapped';
+        $row['ai_suggested_code'] = $suggestedCode;
+        $row['ai_suggested_label'] = $mappingEngine->getLabel($suggestedCode);
+        $row['ai_confidence'] = $confidence;
+        $row['ai_reason'] = $suggestedReason;
+        $row['ai_source'] = $suggestedSource;
+        $row['ai_conflict'] = $hasConflict;
         continue;
     }
 
+    /* Review-required ledgers */
+    $reviewCount++;
+    $row['status'] = 'review_required';
     $row['ai_suggested_code'] = $suggestedCode;
     $row['ai_suggested_label'] = $suggestedCode !== '' ? $mappingEngine->getLabel($suggestedCode) : 'No confident match';
     $row['ai_confidence'] = $confidence;
     $row['ai_reason'] = $suggestedReason;
     $row['ai_source'] = $suggestedSource;
     $row['ai_conflict'] = $hasConflict;
-    $unmatchedLedgers[] = $row;
-    $reviewCount++;
+}
+unset($row);
+
+if ($autoMappedCount > 0) {
+    $_SESSION['success'] = $autoMappedCount . ' ledgers were auto-mapped using Tally hierarchy.';
 }
 
-$ledgers = $unmatchedLedgers;
-
-if (empty($ledgers)) {
-    updateWorkflow($company_id, $fy_id, 'mapping_completed');
+/* Count conflicts */
+$conflictCount = 0;
+foreach ($allLedgers as $r) {
+    if (!empty($r['ai_conflict'])) $conflictCount++;
 }
 
 ?>

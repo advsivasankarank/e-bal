@@ -266,6 +266,7 @@ class HierarchyAIMappingEngine
 
     /**
      * Main mapping function. Returns structured suggestion with confidence and reasoning.
+     * Priority: Learned > Hierarchy > Primary Group > Parent Group > Ledger Name
      */
     public function mapLedger(string $ledgerName, string $parentGroup = '', ?array $hierarchy = null): array
     {
@@ -279,6 +280,10 @@ class HierarchyAIMappingEngine
             'source_basis' => [],
         ];
 
+        $groupPath = $hierarchy['group_path'] ?? '';
+        $primaryGroup = $hierarchy['primary_group'] ?? '';
+        $rootType = $hierarchy['root_type'] ?? '';
+
         // 1. Check learned company mappings (confidence 90-99)
         $normLedger = $this->normalize($ledgerName);
         $normGroup = $this->normalize($parentGroup);
@@ -290,7 +295,7 @@ class HierarchyAIMappingEngine
                 'suggested_head' => $learned['schedule'],
                 'confidence' => $learned['confidence'],
                 'risk' => 'Low',
-                'reason' => 'Previously approved mapping for this exact ledger+group combination in this company',
+                'reason' => 'Previously approved mapping for this exact ledger+group combination in this company.',
                 'alternative_heads' => [],
                 'requires_manual_review' => false,
                 'source_basis' => ['Learned Mapping (Company)'],
@@ -304,68 +309,85 @@ class HierarchyAIMappingEngine
                 'suggested_head' => $learned['schedule'],
                 'confidence' => $learned['confidence'],
                 'risk' => 'Low',
-                'reason' => 'Previously approved mapping from another company (global learned)',
+                'reason' => 'Previously approved mapping from another company (global learned).',
                 'alternative_heads' => [],
                 'requires_manual_review' => false,
                 'source_basis' => ['Learned Mapping (Global)'],
             ];
         }
 
-        // 3. Check hierarchy-based rules
+        // 3. Hierarchy-first matching
+        //    Priority: group_path > primary_group > parent_group > ledger name
         $bestRule = null;
         $bestScore = 0;
+        $bestReason = '';
 
         foreach ($this->hierarchyRules as $rule) {
             $score = 0;
+            $matchedParts = [];
 
-            // Check parent group
+            // Hierarchy path is the strongest signal
+            if (!empty($groupPath) && $this->containsKeyword($groupPath, $rule['keywords'])) {
+                $score += 50;
+                $matchedParts[] = 'Tally hierarchy path';
+            }
+
+            // Primary group is strong
+            if (!empty($primaryGroup) && $this->containsKeyword($primaryGroup, $rule['keywords'])) {
+                $score += 25;
+                $matchedParts[] = 'Ultimate parent group';
+            }
+
+            // Parent group is moderate
             if (!empty($parentGroup) && $this->containsKeyword($parentGroup, $rule['keywords'])) {
-                $score += 60;
-            }
-
-            // Check primary group
-            if (!empty($hierarchy['primary_group']) && $this->containsKeyword($hierarchy['primary_group'], $rule['keywords'])) {
-                $score += 20;
-            }
-
-            // Check ledger name
-            if ($this->containsKeyword($ledgerName, $rule['keywords'])) {
                 $score += 15;
+                $matchedParts[] = 'Parent group';
             }
 
-            // Check group path (full hierarchy)
-            if (!empty($hierarchy['group_path']) && $this->containsKeyword($hierarchy['group_path'], $rule['keywords'])) {
+            // Ledger name is weak (only when nothing else matches)
+            if ($this->containsKeyword($ledgerName, $rule['keywords'])) {
                 $score += 5;
+                $matchedParts[] = 'Ledger name similarity';
             }
 
             if ($score > $bestScore) {
                 $bestScore = $score;
                 $bestRule = $rule;
+                $bestReason = $this->buildReason($rule, $parentGroup, $primaryGroup, $groupPath, $ledgerName, $matchedParts);
             }
         }
 
         if ($bestRule && $bestScore >= 40) {
-            // Scale confidence based on match strength
-            $confidence = min(99, max(40, $bestRule['confidence'] - (100 - $bestScore)));
-            if ($confidence < 70) {
-                $confidence = 70;
+            // Scale confidence: hierarchy match = 90-95%, parent group = 80-89%, name only = 60-75%
+            if ($bestScore >= 70) {
+                $confidence = min(99, $bestRule['confidence']);
+            } elseif ($bestScore >= 40) {
+                $confidence = min(89, max(70, $bestRule['confidence'] - 10));
+            } else {
+                $confidence = min(74, max(50, $bestRule['confidence'] - 20));
             }
 
-            $sourceBasis = ['Schedule III Rule'];
-            if (!empty($parentGroup)) {
-                $sourceBasis[] = 'Parent Group';
-            }
-            if (!empty($hierarchy['group_path'])) {
+            $sourceBasis = [];
+            if (!empty($groupPath) && $this->containsKeyword($groupPath, $bestRule['keywords'])) {
                 $sourceBasis[] = 'Tally Hierarchy';
             }
+            if (!empty($primaryGroup) && $this->containsKeyword($primaryGroup, $bestRule['keywords'])) {
+                $sourceBasis[] = 'Ultimate Group';
+            }
+            if (!empty($parentGroup) && $this->containsKeyword($parentGroup, $bestRule['keywords'])) {
+                $sourceBasis[] = 'Parent Group';
+            }
+            if (empty($sourceBasis)) {
+                $sourceBasis[] = 'Schedule III Rule';
+            }
 
-            $requiresReview = in_array($bestRule['risk'], ['High', 'Medium']);
+            $requiresReview = $confidence < 80 || in_array($bestRule['risk'], ['High', 'Medium']);
 
             return [
                 'suggested_head' => $bestRule['schedule'],
                 'confidence' => $confidence,
                 'risk' => $bestRule['risk'],
-                'reason' => $bestRule['reason'],
+                'reason' => $bestReason,
                 'alternative_heads' => $bestRule['alternatives'],
                 'requires_manual_review' => $requiresReview,
                 'source_basis' => $sourceBasis,
@@ -377,11 +399,33 @@ class HierarchyAIMappingEngine
             'suggested_head' => '',
             'confidence' => 0,
             'risk' => 'High',
-            'reason' => 'No matching rule found. Manual classification required.',
+            'reason' => 'No matching Tally hierarchy or group rule found. Manual classification required.',
             'alternative_heads' => [],
             'requires_manual_review' => true,
             'source_basis' => ['No Match'],
         ];
+    }
+
+    /**
+     * Build hierarchy-based reasoning string.
+     */
+    private function buildReason(array $rule, string $parentGroup, string $primaryGroup, string $groupPath, string $ledgerName, array $matchedParts): string
+    {
+        $scheduleLabel = $this->buildLabels()[$rule['schedule']] ?? $rule['schedule'];
+
+        if (!empty($groupPath) && $this->containsKeyword($groupPath, $rule['keywords'])) {
+            return "Ledger is under Tally hierarchy {$groupPath}. Therefore Schedule III classification is {$scheduleLabel}.";
+        }
+        if (!empty($primaryGroup) && $this->containsKeyword($primaryGroup, $rule['keywords'])) {
+            return "Ledger's ultimate parent group is {$primaryGroup} in Tally. Therefore Schedule III classification is {$scheduleLabel}.";
+        }
+        if (!empty($parentGroup) && $this->containsKeyword($parentGroup, $rule['keywords'])) {
+            return "Ledger is under {$parentGroup} in Tally hierarchy. Therefore Schedule III classification is {$scheduleLabel}.";
+        }
+        if ($this->containsKeyword($ledgerName, $rule['keywords'])) {
+            return "Ledger name suggests classification as {$scheduleLabel}. Manual review recommended as hierarchy is not available.";
+        }
+        return $rule['reason'];
     }
 
     /**
