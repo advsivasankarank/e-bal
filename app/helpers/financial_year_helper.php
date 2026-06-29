@@ -179,6 +179,7 @@ function getFinancialYears(PDO $pdo, $companyId = null)
 
     $hasId = fyColumnExists($pdo, $table, 'id');
     $hasFyName = fyColumnExists($pdo, $table, 'fy_name');
+    $hasFyLabel = fyColumnExists($pdo, $table, 'fy_label');
     $hasName = fyColumnExists($pdo, $table, 'name');
     $hasLabel = fyColumnExists($pdo, $table, 'label');
     $hasStart = fyColumnExists($pdo, $table, 'start_year');
@@ -202,6 +203,8 @@ function getFinancialYears(PDO $pdo, $companyId = null)
 
     if ($hasFyName) {
         $sql = "SELECT id, fy_name AS raw_label FROM `$table`{$where} ORDER BY id DESC";
+    } elseif ($hasFyLabel) {
+        $sql = "SELECT id, fy_label AS raw_label FROM `$table`{$where} ORDER BY id DESC";
     } elseif ($hasName) {
         $sql = "SELECT id, name AS raw_label FROM `$table`{$where} ORDER BY id DESC";
     } elseif ($hasLabel) {
@@ -238,6 +241,10 @@ function getFinancialYears(PDO $pdo, $companyId = null)
         }
     }
     unset($row);
+
+    if (empty($rows)) {
+        return [];
+    }
 
     $hasUsefulLabels = false;
     foreach ($rows as $row) {
