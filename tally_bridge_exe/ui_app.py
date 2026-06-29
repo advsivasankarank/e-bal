@@ -1423,7 +1423,8 @@ class SmartBridgeUI:
                 self._cors()
                 self.send_response(204)
                 self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token, Authorization")
+                self.send_header("Access-Control-Max-Age", "600")
                 self.end_headers()
 
             def do_GET(self):
@@ -1684,8 +1685,10 @@ class SmartBridgeUI:
                     origin = self.headers.get("Origin", "").strip()
                     if origin in allowed_browser_origins():
                         self.send_header("Access-Control-Allow-Origin", origin)
-                        self.send_header("Vary", "Origin")
-                        self.send_header("Access-Control-Allow-Private-Network", "true")
+                    else:
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("Vary", "Origin")
+                    self.send_header("Access-Control-Allow-Private-Network", "true")
                 except Exception:
                     pass
 
