@@ -5,6 +5,7 @@ require_once '../../config/database.php';
 require_once '../../app/engines/ai_mapping_engine.php';
 require_once '../../app/helpers/mapping_ai_helper.php';
 require_once '../../app/helpers/parent_group_validation_helper.php';
+require_once '../../app/helpers/hierarchy_ai_mapping.php';
 
 requireFullContext();
 
@@ -21,10 +22,17 @@ $mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
 $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 
+/* Hierarchy-aware AI mapping engine */
+$hierarchyEngine = new HierarchyAIMappingEngine($pdo, (int) $company_id, $companyCategory);
+
 $ledgerStmt = $pdo->prepare("
     SELECT
         tl.ledger_name,
         COALESCE(tlm.parent_group, tl.parent_group) AS parent_group,
+        COALESCE(tlm.primary_group, '') AS primary_group,
+        COALESCE(tlm.tally_group_path, '') AS tally_group_path,
+        COALESCE(tlm.tally_group_depth, 0) AS tally_group_depth,
+        COALESCE(tlm.tally_root_type, '') AS tally_root_type,
         lm.schedule_code AS mapped_code,
         lm.mapping_source,
         lm.confidence_score,
@@ -74,15 +82,30 @@ foreach ($allLedgers as $row) {
 
     $status = $mapped !== '' ? ($conflict ? 'Conflict' : 'Mapped') : 'Unmapped';
 
-    // Run AI suggestion for unmapped/conflict ledgers
+    // Run hierarchy-aware AI suggestion for unmapped/conflict ledgers
     $aiResult = null;
+    $hierarchy = null;
     if ($status !== 'Mapped') {
-        $aiResult = $mappingEngine->mapLedger($row['ledger_name'], $parentGroup);
+        $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
+        $aiResult = $hierarchyEngine->mapLedger($row['ledger_name'], $parentGroup, $hierarchy);
+
+        // Also run the original engine for comparison
+        $legacyResult = $mappingEngine->mapLedger($row['ledger_name'], $parentGroup);
+        // Use the better suggestion (higher confidence)
+        if ($legacyResult && (!$aiResult || ($legacyResult['confidence'] ?? 0) > ($aiResult['confidence'] ?? 0))) {
+            $aiResult = $legacyResult;
+        }
+    } else {
+        $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
     }
 
     $gridData[] = [
         'ledger_name' => $row['ledger_name'],
         'parent_group' => $parentGroup ?: '-',
+        'primary_group' => $row['primary_group'] ?? '',
+        'tally_group_path' => $row['tally_group_path'] ?? '',
+        'tally_group_depth' => (int) ($row['tally_group_depth'] ?? 0),
+        'tally_root_type' => $row['tally_root_type'] ?? '',
         'pg_nature' => $pgNature,
         'pg_nature_label' => $pgNature ? ($natureDisplay[$pgNature] ?? '') : '',
         'status' => $status,
@@ -91,10 +114,12 @@ foreach ($allLedgers as $row) {
         'override_parent_group' => (int) ($row['override_parent_group'] ?? 0),
         '_colour' => $colour,
         '_conflict' => $conflict,
-        'ai_suggestion' => $aiResult ? $aiResult['head'] : null,
-        'ai_confidence' => $aiResult ? (int) $aiResult['confidence'] : null,
-        'ai_reason' => $aiResult ? $aiResult['reason'] : null,
-        'ai_method' => $aiResult ? $aiResult['method'] : null,
+        'ai_suggestion' => $aiResult ? $aiResult['suggested_head'] ?? $aiResult['head'] ?? null : null,
+        'ai_confidence' => $aiResult ? (int) ($aiResult['confidence'] ?? 0) : null,
+        'ai_reason' => $aiResult ? $aiResult['reason'] ?? '' : null,
+        'ai_method' => $aiResult ? ($aiResult['source_basis'][0] ?? $aiResult['method'] ?? 'rule') : null,
+        'ai_risk' => $aiResult ? ($aiResult['risk'] ?? 'Low') : '',
+        'ai_alternatives' => $aiResult ? ($aiResult['alternative_heads'] ?? []) : [],
     ];
 }
 
@@ -176,6 +201,15 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     width: auto;
 }
 .mw-toolbar .btn { padding: 8px 16px; min-height: 38px; font-size: 0.85rem; }
+
+/* Hierarchy card */
+.hierarchy-card { background: var(--panel-strong); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.hierarchy-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.hierarchy-label { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.hierarchy-path { display: flex; flex-wrap: wrap; align-items: center; gap: 0; font-size: 0.82rem; }
+.hierarchy-item { color: var(--brand); font-weight: 500; }
+.hierarchy-item.current { font-weight: 700; color: var(--text); }
+.hierarchy-sep { color: var(--muted); margin: 0 4px; }
 
 .split-pane {
     display: grid;
@@ -387,6 +421,22 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             <option value="income">Income</option>
             <option value="expense">Expense</option>
         </select>
+        <select class="filter-select" id="filterParentGroup">
+            <option value="">All Parent Groups</option>
+            <?php
+            $parentGroups = $hierarchyEngine->getParentGroups();
+            foreach (array_slice($parentGroups, 0, 30) as $pg): ?>
+                <option value="<?= htmlspecialchars($pg) ?>"><?= htmlspecialchars($pg) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <select class="filter-select" id="filterRootType">
+            <option value="">All Root Types</option>
+            <?php
+            $rootTypes = $hierarchyEngine->getRootTypes();
+            foreach ($rootTypes as $rt): ?>
+                <option value="<?= htmlspecialchars($rt) ?>"><?= htmlspecialchars($rt) ?></option>
+            <?php endforeach; ?>
+        </select>
     </div>
     <a href="<?= BASE_URL ?>data_console/mapping_console.php" class="btn" id="runAiBtn">&#129302; Run AI Mapping</a>
     <button class="btn btn-outline" id="undoMwBtn">&#8617; Undo</button>
@@ -505,18 +555,43 @@ function showDetailPanel(rowData) {
         html += '</div>';
     }
 
+    // Tally Hierarchy
+    if (rowData.tally_group_path) {
+        html += '<div class="hierarchy-card">';
+        html += '<div class="hierarchy-header"><span style="font-size:1rem;">&#128193;</span><span class="hierarchy-label">Tally Hierarchy</span></div>';
+        var parts = rowData.tally_group_path.split(' > ');
+        html += '<div class="hierarchy-path">';
+        for (var p = 0; p < parts.length; p++) {
+            if (p > 0) html += '<span class="hierarchy-sep"> → </span>';
+            html += '<span class="hierarchy-item' + (p === parts.length - 1 ? ' current' : '') + '">' + escHtml(parts[p]) + '</span>';
+        }
+        html += '</div>';
+        html += '</div>';
+    } else if (rowData.parent_group && rowData.parent_group !== '-') {
+        html += '<div class="hierarchy-card" style="border-style:dashed;">';
+        html += '<div class="hierarchy-header"><span style="font-size:1rem;">&#128193;</span><span class="hierarchy-label">Parent Group</span></div>';
+        html += '<div style="font-size:0.85rem;color:var(--muted);">Hierarchy not available — re-sync from Tally to enable drill-down.</div>';
+        html += '</div>';
+    }
+
     // AI suggestion card
     if (rowData.ai_suggestion && rowData.ai_confidence !== null) {
         var pct = rowData.ai_confidence;
         var aiLabel = mwOptionsMap[rowData.ai_suggestion] || rowData.ai_suggestion;
+        var riskColor = rowData.ai_risk === 'High' ? '#c62828' : (rowData.ai_risk === 'Medium' ? '#e65100' : '#2e7d32');
+        var riskBg = rowData.ai_risk === 'High' ? '#ffebee' : (rowData.ai_risk === 'Medium' ? '#fff3e0' : '#e8f5e9');
         html += '<div class="ai-card">';
-        html += '<div class="ai-header"><span style="font-size:1.1rem;">&#129302;</span><span class="ai-label">AI Recommendation</span></div>';
+        html += '<div class="ai-header"><span style="font-size:1.1rem;">&#129302;</span><span class="ai-label">AI Recommendation</span>';
+        html += '<span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:' + riskBg + ';color:' + riskColor + ';font-weight:600;">' + escHtml(rowData.ai_risk || 'Low') + ' Risk</span></div>';
         html += '<div class="ai-conf">';
         html += '<span style="font-weight:700;">' + escHtml(aiLabel) + '</span>';
         html += '<div class="conf-bar"><div class="fill" style="width:' + pct + '%"></div></div>';
         html += '<span style="font-size:0.8rem;color:var(--muted);">' + pct + '% confidence</span>';
         html += '</div>';
         html += '<div class="ai-reason">' + escHtml(rowData.ai_reason || '') + '</div>';
+        if (rowData.ai_method) {
+            html += '<div style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Source: ' + escHtml(rowData.ai_method) + '</div>';
+        }
         html += '<div class="ai-actions">';
         html += '<button class="btn btn-sm btn-success" onclick="acceptAiSuggestion(\'' + escJs(rowData.ledger_name) + '\')">Accept</button>';
         html += '</div>';
@@ -668,11 +743,15 @@ function applyFilters() {
     var search = (document.getElementById('mwSearch').value || '').toLowerCase().trim();
     var statusFilter = document.getElementById('filterStatus').value;
     var natureFilter = document.getElementById('filterNature').value;
+    var parentGroupFilter = document.getElementById('filterParentGroup').value;
+    var rootTypeFilter = document.getElementById('filterRootType').value;
 
     filteredData = allData.filter(function (r) {
         if (search && r.ledger_name.toLowerCase().indexOf(search) < 0 && r.parent_group.toLowerCase().indexOf(search) < 0) return false;
         if (statusFilter && r.status !== statusFilter) return false;
         if (natureFilter && r.pg_nature !== natureFilter) return false;
+        if (parentGroupFilter && r.parent_group !== parentGroupFilter) return false;
+        if (rootTypeFilter && r.tally_root_type !== rootTypeFilter) return false;
         return true;
     });
 
@@ -707,6 +786,8 @@ document.getElementById('mwSearch').addEventListener('input', function () {
 
 document.getElementById('filterStatus').addEventListener('change', applyFilters);
 document.getElementById('filterNature').addEventListener('change', applyFilters);
+document.getElementById('filterParentGroup').addEventListener('change', applyFilters);
+document.getElementById('filterRootType').addEventListener('change', applyFilters);
 
 // Undo
 document.getElementById('undoMwBtn').addEventListener('click', function () {
