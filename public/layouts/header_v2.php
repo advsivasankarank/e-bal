@@ -75,8 +75,12 @@ $v2EntityLabel = $v2EntityMap[strtolower($v2CompanyCategory)] ?? ucfirst(str_rep
 $v2CurrentScript = basename($_SERVER['SCRIPT_NAME'] ?? '');
 $v2CurrentDir    = basename(dirname($_SERVER['SCRIPT_NAME'] ?? ''));
 
-$v2ActiveSection = 'assignments';
-if ($v2CurrentDir === 'data' || $v2CurrentScript === 'data') {
+$v2ActiveSection = 'entities';
+if ($v2CurrentScript === 'dashboard_company.php') {
+    $v2ActiveSection = 'entities';
+} elseif ($v2CurrentScript === 'my_assignments.php' || $v2CurrentScript === 'entity_home.php') {
+    $v2ActiveSection = 'assignments';
+} elseif ($v2CurrentDir === 'data' || $v2CurrentScript === 'data') {
     $v2ActiveSection = 'data';
 } elseif ($v2CurrentDir === 'statements' || $v2CurrentScript === 'statements') {
     $v2ActiveSection = 'statements';
@@ -84,6 +88,8 @@ if ($v2CurrentDir === 'data' || $v2CurrentScript === 'data') {
     $v2ActiveSection = 'review';
 } elseif ($v2CurrentDir === 'deliverables' || $v2CurrentScript === 'deliverables') {
     $v2ActiveSection = 'deliverables';
+} elseif ($v2CurrentScript === 'reports.php') {
+    $v2ActiveSection = 'reports';
 } elseif ($v2CurrentScript === 'settings.php') {
     $v2ActiveSection = 'settings';
 }
@@ -129,14 +135,16 @@ try {
 
 /* ---- Sidebar nav definition ---- */
 $v2NavItems = [
-    ['section' => 'assignments', 'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>', 'label' => 'My Assignments', 'href' => BASE_URL . 'my_assignments.php'],
-    ['section' => 'data',        'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>', 'label' => 'Data',          'href' => BASE_URL . 'data/'],
+    ['section' => 'entities',   'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>', 'label' => 'Entity Dashboard', 'href' => BASE_URL . 'dashboard_company.php'],
+    ['section' => 'assignments','icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>', 'label' => 'My Assignments', 'href' => BASE_URL . 'my_assignments.php'],
+    ['section' => 'data',        'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>', 'label' => 'Data Centre',     'href' => BASE_URL . 'data/'],
     ['section' => 'statements',  'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>', 'label' => 'Financials',    'href' => BASE_URL . 'statements/financials.php'],
     ['section' => 'review',      'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>', 'label' => 'Review',        'href' => BASE_URL . 'review/'],
     ['section' => 'deliverables','icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>', 'label' => 'Deliverables',  'href' => BASE_URL . 'deliverables/'],
 ];
 
 $v2FooterItems = [
+    ['section' => 'reports',    'icon' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>', 'label' => 'Reports', 'href' => BASE_URL . 'reports.php'],
     ['section' => 'settings', 'icon' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>', 'label' => 'Settings', 'href' => BASE_URL . 'settings.php'],
     ['section' => '',         'icon' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>', 'label' => 'Logout', 'href' => BASE_URL . 'logout.php', 'isFooter' => true],
 ];
@@ -150,7 +158,7 @@ $v2FooterItems = [
     <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/app_v2.css?v=<?= htmlspecialchars($v2CssVersion) ?>">
     <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/components.css?v=<?= file_exists(__DIR__ . '/../asset/css/components.css') ? (string) filemtime(__DIR__ . '/../asset/css/components.css') : (string) time() ?>">
     <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/bridge_connectivity.css?v=<?= htmlspecialchars($bridgeCssVersion) ?>">
-    <?php if ($v2ActiveSection === 'assignments'): ?>
+    <?php if ($v2ActiveSection === 'assignments' || $v2ActiveSection === 'entities'): ?>
     <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/workspace_launcher.css?v=<?= filemtime(__DIR__ . '/../asset/css/workspace_launcher.css') ?>">
     <?php endif; ?>
 </head>

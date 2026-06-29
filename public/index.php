@@ -1,7 +1,8 @@
 <?php
 /**
- * e-BAL V2 — Main Entry Point
- * Authenticated users are redirected to My Assignments (V2 Workspace).
+ * e-BAL V2 — Entry Point
+ *
+ * Authenticated users go to Entity Dashboard.
  * Unauthenticated users see the landing page.
  */
 require_once __DIR__ . '/../app/session_bootstrap.php';
@@ -12,6 +13,6 @@ if ($userId <= 0) {
     exit;
 }
 
-/* Authenticated users enter the V2 Workspace */
-header('Location: ' . BASE_URL . 'my_assignments.php');
+/* Authenticated users enter the Entity Dashboard */
+header('Location: ' . BASE_URL . 'dashboard_company.php');
 exit;
