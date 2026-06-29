@@ -1,6 +1,6 @@
 <?php
 /**
- * e-BAL V2 — Data Workspace Hub
+ * e-BAL V2 — Data Centre
  *
  * Unified Data workspace with 4 sub-sections:
  *   1. Ledger Import
@@ -8,83 +8,27 @@
  *   3. Trial Balance
  *   4. Reconciliation
  *
- * Shows status of each sub-section and provides open buttons.
- * No database changes. No engine changes.
+ * Requires active Entity + FY context.
+ * No inline context selection — context must be established before reaching this page.
  */
-$page_title = 'Data';
+$page_title = 'Data Centre';
 require_once __DIR__ . '/../../app/context_check.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../app/workflow_engine.php';
-require_once __DIR__ . '/../../app/helpers/financial_year_helper.php';
 
-/* Handle FY selection POST before any output */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['context_action']) && $_POST['context_action'] === 'select_fy') {
-    requireCsrfToken();
-    $selFyId = (int) ($_POST['fy_id'] ?? 0);
-    if ($selFyId > 0 && hasCompanyContext()) {
-        $fy = findFinancialYearById($pdo, $selFyId, $_SESSION['company_id']);
-        if ($fy) {
-            $_SESSION['fy_id'] = $fy['id'];
-            $_SESSION['fy_name'] = $fy['fy_label'];
-        }
-    }
-    header("Location: " . BASE_URL . "data/index.php");
-    exit;
-}
-
-/* ---- Resolve context (before any output) ---- */
+/* ---- Require active context ---- */
 $v2CompanyId = (int) ($_SESSION['company_id'] ?? 0);
 $v2FyId      = (int) ($_SESSION['fy_id']      ?? 0);
 $v2CompanyName = (string) ($_SESSION['company_name'] ?? '');
 $v2FyName = (string) ($_SESSION['fy_name'] ?? '');
 
-if ($v2CompanyId <= 0) {
-    header('Location: ' . BASE_URL . 'my_assignments.php');
+if ($v2CompanyId <= 0 || $v2FyId <= 0) {
+    /* Context missing — redirect to Entity Dashboard */
+    header('Location: ' . BASE_URL . 'dashboard_company.php');
     exit;
 }
 
-if ($v2FyId <= 0) {
-    /* FY not selected — show inline selector instead of redirect */
-    require_once __DIR__ . '/../layouts/header_v2.php';
-    $financialYears = getFinancialYears($pdo, $v2CompanyId);
-    ?>
-    <?= uiBreadcrumb([
-        ['label' => 'Dashboard', 'href' => BASE_URL . 'dashboard_main.php'],
-        ['label' => 'Data'],
-    ]) ?>
-    <?= uiPageHero('Data Workspace', 'Select a financial year to access the data workspace.') ?>
-    <?= uiContextCard(['company' => $v2CompanyName, 'fy' => 'Not Selected']) ?>
-    <?= uiWorkspaceStart() ?>
-    <?= uiAlert('No financial year is selected. Choose one below to continue.', 'warning') ?>
-    <div class="ui-section-card" style="max-width:480px;">
-        <div class="ui-section-card-header">
-            <div class="ui-section-card-title">Select Financial Year</div>
-        </div>
-        <div class="ui-section-card-body">
-            <form method="post">
-                <?= csrfInput() ?>
-                <input type="hidden" name="context_action" value="select_fy">
-                <div class="ui-field">
-                    <label class="ui-field-label">Financial Year</label>
-                    <select name="fy_id" required class="ui-input">
-                        <option value="">Select Financial Year</option>
-                        <?php foreach ($financialYears as $fy): ?>
-                            <option value="<?= (int) $fy['id'] ?>"><?= htmlspecialchars($fy['fy_label']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <?= uiButton('Continue to Data Workspace', '', 'primary') ?>
-            </form>
-        </div>
-    </div>
-    <?= uiWorkspaceEnd() ?>
-    <?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>
-    <?php exit; ?>
-<?php
-}
-
 requireAssignmentAccess();
-/* HARDENED: ensureWorkflowColumns() removed — DDL in migration script only */
 
 /* Now safe to output HTML */
 require_once __DIR__ . '/../layouts/header_v2.php';
@@ -202,11 +146,12 @@ foreach ($v2SubSections as $ss) {
 }
 ?>
 
-<div class="v2-dw-header">
-    <a href="<?= BASE_URL ?>assignment_home.php?company_id=<?= $v2CompanyId ?>&fy_id=<?= $v2FyId ?>" class="v2-dw-back">← Assignment Home</a>
-    <h1 class="v2-dw-title">📥 Data</h1>
-    <p class="v2-dw-subtitle"><?= htmlspecialchars($v2CompanyName) ?> · FY <?= htmlspecialchars($v2FyName) ?></p>
-</div>
+<?= uiBreadcrumb([
+    ['label' => 'My Assignments', 'href' => BASE_URL . 'my_assignments.php'],
+    ['label' => 'Data Centre'],
+]) ?>
+
+<?= uiPageHero('Data Centre', htmlspecialchars($v2CompanyName) . ' · FY ' . htmlspecialchars($v2FyName)) ?>
 
 <!-- Progress -->
 <div class="v2-dw-progress">
@@ -282,6 +227,10 @@ foreach ($v2SubSections as $ss) {
             </div>
         </div>
     <?php endforeach; ?>
+</div>
+
+<div style="margin-top:20px;">
+    <?= uiButton('← Back to My Assignments', BASE_URL . 'my_assignments.php', 'outline') ?>
 </div>
 
 <script>
