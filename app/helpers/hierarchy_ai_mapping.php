@@ -198,7 +198,27 @@ class HierarchyAIMappingEngine
      */
     public function getLedgerHierarchy(string $ledgerName): array
     {
+        $empty = [
+            'parent_group' => '',
+            'primary_group' => '',
+            'group_path' => '',
+            'group_depth' => 0,
+            'root_type' => '',
+            'has_hierarchy' => false,
+        ];
+
         try {
+            /* Check if hierarchy columns exist */
+            $chk = $this->pdo->query("SHOW COLUMNS FROM tally_ledger_master LIKE 'tally_group_path'");
+            if ($chk->rowCount() === 0) {
+                $row = $this->pdo->prepare("SELECT parent_group FROM tally_ledger_master WHERE company_id = ? AND ledger_name = ? LIMIT 1");
+                $row->execute([$this->companyId, $ledgerName]);
+                $data = $row->fetch(PDO::FETCH_ASSOC);
+                if (!$data) return $empty;
+                $empty['parent_group'] = $data['parent_group'] ?? '';
+                return $empty;
+            }
+
             $stmt = $this->pdo->prepare("
                 SELECT parent_group, primary_group, tally_group_path, tally_group_depth, tally_root_type
                 FROM tally_ledger_master
@@ -208,16 +228,7 @@ class HierarchyAIMappingEngine
             $stmt->execute([$this->companyId, $ledgerName]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$row) {
-                return [
-                    'parent_group' => '',
-                    'primary_group' => '',
-                    'group_path' => '',
-                    'group_depth' => 0,
-                    'root_type' => '',
-                    'has_hierarchy' => false,
-                ];
-            }
+            if (!$row) return $empty;
 
             return [
                 'parent_group' => $row['parent_group'] ?? '',

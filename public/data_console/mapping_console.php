@@ -28,13 +28,26 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 /* =========================
    FETCH ALL LEDGERS (full data set for filtering)
    ========================= */
+/* Check if hierarchy columns exist */
+$hasHierarchyCols = false;
+try {
+    $chkStmt = $pdo->query("SHOW COLUMNS FROM tally_ledger_master LIKE 'tally_group_path'");
+    $hasHierarchyCols = $chkStmt->rowCount() > 0;
+} catch (Throwable $e) { /* table may not exist */ }
+
 $allLedgersStmt = $pdo->prepare("
     SELECT
         t.ledger_name,
         t.parent_group,
+        " . ($hasHierarchyCols ? "
         COALESCE(tlm.primary_group, '') AS primary_group,
         COALESCE(tlm.tally_group_path, '') AS tally_group_path,
         COALESCE(tlm.tally_root_type, '') AS tally_root_type,
+        " : "
+        '' AS primary_group,
+        '' AS tally_group_path,
+        '' AS tally_root_type,
+        ") . "
         lm.schedule_code AS mapped_code,
         lm.confidence_score,
         lm.mapping_source

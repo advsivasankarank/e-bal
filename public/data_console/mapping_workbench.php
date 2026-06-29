@@ -25,14 +25,28 @@ asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 /* Hierarchy-aware AI mapping engine */
 $hierarchyEngine = new HierarchyAIMappingEngine($pdo, (int) $company_id, $companyCategory);
 
+/* Check if hierarchy columns exist in tally_ledger_master */
+$hasHierarchyCols = false;
+try {
+    $chkStmt = $pdo->query("SHOW COLUMNS FROM tally_ledger_master LIKE 'tally_group_path'");
+    $hasHierarchyCols = $chkStmt->rowCount() > 0;
+} catch (Throwable $e) { /* table may not exist */ }
+
 $ledgerStmt = $pdo->prepare("
     SELECT
         tl.ledger_name,
         COALESCE(tlm.parent_group, tl.parent_group) AS parent_group,
+        " . ($hasHierarchyCols ? "
         COALESCE(tlm.primary_group, '') AS primary_group,
         COALESCE(tlm.tally_group_path, '') AS tally_group_path,
         COALESCE(tlm.tally_group_depth, 0) AS tally_group_depth,
         COALESCE(tlm.tally_root_type, '') AS tally_root_type,
+        " : "
+        '' AS primary_group,
+        '' AS tally_group_path,
+        0 AS tally_group_depth,
+        '' AS tally_root_type,
+        ") . "
         lm.schedule_code AS mapped_code,
         lm.mapping_source,
         lm.confidence_score,
