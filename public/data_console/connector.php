@@ -181,15 +181,26 @@ if ($bridgeMode) {
                 setEl('res-status', 'Sync triggered…');
                 var resp = await fetch(bridgeUrl, {
                     method: 'POST',
+                    mode: 'cors',
                     headers: { 'Content-Type': 'application/json', ...(bridgeToken ? { 'X-Bridge-Token': bridgeToken } : {}) },
                     body: JSON.stringify({ client_id: bridgeClientId, site_origin: window.location.origin, ledger_upload_url: ledgerUploadUrl, tb_upload_url: tbUploadUrl })
                 });
                 var data = await resp.json().catch(function() { return {}; });
                 setEl('res-status', data.ok ? 'Sync queued' : 'Sync failed');
                 setEl('res-company', companyNameStr);
-                setEl('bridgeStatus', data.ok ? 'Synced' : 'Failed');
-                setElColor('bridgeStatus', data.ok ? 'var(--success)' : 'var(--danger)');
-                setEl('res-error', data.ok ? '—' : (data.message || 'Bridge returned an error.'));
+                if (data.ok) {
+                    setEl('bridgeStatus', 'Synced');
+                    setElColor('bridgeStatus', 'var(--success)');
+                    setEl('res-error', '—');
+                } else {
+                    setEl('bridgeStatus', 'Failed');
+                    setElColor('bridgeStatus', 'var(--danger)');
+                    var errMsg = data.message || 'Bridge returned an error.';
+                    if (errMsg === 'Unauthorized') {
+                        errMsg = 'Smart Bridge rejected the sync request due to missing or invalid authorization token. Please reinstall or restart the latest e-BAL Smart Bridge and refresh this page.';
+                    }
+                    setEl('res-error', errMsg);
+                }
                 setEl('res-sync', new Date().toLocaleString());
                 if (data.ok) { pollForResult(true); }
             } catch (err) {
