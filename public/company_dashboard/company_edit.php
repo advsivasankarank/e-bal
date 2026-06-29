@@ -27,7 +27,7 @@ if ($ownerId > 0) {
 }
 $company = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// 🔒 If not found
+// If not found
 if (!$company) {
     $_SESSION['error'] = 'Company not found.';
     header('Location: company_list.php?error=invalid_company');
@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-include __DIR__ . '/../layouts/header.php';
+include __DIR__ . '/../layouts/header_v2.php';
 $stateOptions = getIndianStateOptions();
 $companyTypeOptions = getCorporateCompanyTypeOptions();
 $nonCorpOptions = getNonCorporateSubcategoryOptions();
@@ -102,34 +102,51 @@ $profilePct = calculateProfileCompleteness($company, $hasFy);
 $company['profile_completeness'] = $profilePct;
 ?>
 
-<div class="page-title">Edit Company</div>
+<?= uiBreadcrumb([
+    ['label' => 'Dashboard', 'href' => BASE_URL . 'dashboard_main.php'],
+    ['label' => 'Companies', 'href' => BASE_URL . 'company_dashboard/company_list.php'],
+    ['label' => 'Edit']
+]) ?>
+
+<?= uiPageHero('Edit Company', htmlspecialchars($company['name'] ?? '')) ?>
+
+<?= uiContextCard([
+    'company' => $company['name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+    'entity_type' => strtoupper($company['category'] ?? ''),
+    'profile' => $profilePct,
+    'status' => $profilePct >= 80 ? 'Profile Complete' : 'Profile Incomplete',
+    'edit_url' => '',
+]) ?>
 
 <?php if (!empty($errors)): ?>
-    <div class="error-box">
-        <?php foreach ($errors as $error): ?>
-            <p><?= htmlspecialchars($error) ?></p>
-        <?php endforeach; ?>
-    </div>
+    <?php foreach ($errors as $error): ?>
+        <?= uiAlert($error, 'error') ?>
+    <?php endforeach; ?>
 <?php endif; ?>
 
 <?php if (isset($_GET['created'])): ?>
-    <div class="success-box"><p>Entity created successfully. Please complete the profile details below.</p></div>
+    <?= uiAlert('Entity created successfully. Please complete the profile details below.', 'success') ?>
 <?php endif; ?>
 
-<!-- Profile Completeness Bar -->
-<div class="wizard-card" style="padding:16px 20px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <span style="font-size:.85rem;font-weight:600;color:#1e293b;">Profile Completeness</span>
-        <span style="font-size:.85rem;font-weight:700;color:<?= $profilePct >= 80 ? '#047857' : ($profilePct >= 40 ? '#92400e' : '#dc2626') ?>;"><?= $profilePct ?>%</span>
+<div class="ui-section-card" style="margin-bottom:16px;">
+    <div class="ui-section-card-header">
+        <div class="ui-section-card-title">Profile Completeness</div>
     </div>
-    <div style="width:100%;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
-        <div style="width:<?= $profilePct ?>%;height:100%;background:<?= $profilePct >= 80 ? '#047857' : ($profilePct >= 40 ? '#f59e0b' : '#dc2626') ?>;border-radius:4px;transition:width .3s;"></div>
+    <div class="ui-section-card-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-size:.85rem;font-weight:600;color:#1e293b;">Progress</span>
+            <span style="font-size:.85rem;font-weight:700;color:<?= $profilePct >= 80 ? '#047857' : ($profilePct >= 40 ? '#92400e' : '#dc2626') ?>;"><?= $profilePct ?>%</span>
+        </div>
+        <div style="width:100%;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+            <div style="width:<?= $profilePct ?>%;height:100%;background:<?= $profilePct >= 80 ? '#047857' : ($profilePct >= 40 ? '#f59e0b' : '#dc2626') ?>;border-radius:4px;transition:width .3s;"></div>
+        </div>
+        <?php if ($profilePct < 100): ?>
+            <p style="font-size:.75rem;color:#64748b;margin:6px 0 0;">Complete the sections below to reach 100%.</p>
+        <?php else: ?>
+            <p style="font-size:.75rem;color:#047857;margin:6px 0 0;">Profile is complete.</p>
+        <?php endif; ?>
     </div>
-    <?php if ($profilePct < 100): ?>
-        <p style="font-size:.75rem;color:#64748b;margin:6px 0 0;">Complete the sections below to reach 100%.</p>
-    <?php else: ?>
-        <p style="font-size:.75rem;color:#047857;margin:6px 0 0;">Profile is complete.</p>
-    <?php endif; ?>
 </div>
 
 <style>
@@ -332,7 +349,7 @@ $company['profile_completeness'] = $profilePct;
         <?php endfor; ?>
     </div>
 
-    <button type="submit">Update</button>
+    <?= uiButton('Update', '', 'primary') ?>
 
 </form>
 
@@ -442,4 +459,4 @@ for (let i = 1; i <= 2; i++) {
 }
 </script>
 
-<?php include __DIR__ . '/../layouts/footer.php'; ?>
+<?php include __DIR__ . '/../layouts/footer_v2.php'; ?>

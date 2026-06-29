@@ -67,7 +67,7 @@ foreach ($mappingOptions as $code => $label) {
 }
 
 $page_title = 'TB Grid';
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@14/dist/handsontable.full.min.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/handsontable-overrides.css">
@@ -87,17 +87,19 @@ require_once __DIR__ . '/../layouts/header.php';
     }
 </style>
 
-<div class="page-title">Trial Balance Grid</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Trial Balance Grid'],
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Trial Balance Grid', 'A spreadsheet-style view of the trial balance. Edit schedule mappings inline using the dropdown, then save changes.') ?>
 
-<div class="card" style="margin-bottom:16px;">
-    A spreadsheet-style view of the trial balance. Edit schedule mappings inline using the dropdown, then save changes.
-    <a href="<?= BASE_URL ?>data_console/trial_balance_preview.php" class="btn" style="margin-left:12px;">Switch to Classic View</a>
-</div>
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <?php if (!empty($_SESSION['success'])): ?>
     <div class="success-box"><p><?= htmlspecialchars($_SESSION['success']) ?></p></div>
@@ -220,7 +222,9 @@ document.getElementById('undoBtn').addEventListener('click', function () {
 });
 </script>
 
+<?= uiWorkspaceEnd() ?>
+
 <?php
 unset($_SESSION['success'], $_SESSION['error']);
-require_once __DIR__ . '/../layouts/footer.php';
+require_once __DIR__ . '/../layouts/footer_v2.php';
 ?>

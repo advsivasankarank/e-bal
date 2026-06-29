@@ -16,10 +16,15 @@ ensureInvoiceTables($pdo);
 $invoices = getInvoicesForUser($pdo, $userId);
 
 $page_title = 'Invoice History';
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
-<div class="page-title">Invoice History</div>
+<?= uiBreadcrumb([
+    ['label' => 'Billing', 'href' => BASE_URL . 'invoice_history.php'],
+    ['label' => 'Invoices']
+]) ?>
+
+<?= uiPageHero('Invoice History') ?>
 
 <style>
 .invoice-grid { display:grid; grid-template-columns:1fr; gap:18px; }
@@ -132,5 +137,5 @@ require_once __DIR__ . '/layouts/header.php';
 <?php
 unset($_SESSION['error']);
 unset($_SESSION['success']);
-require_once __DIR__ . '/layouts/footer.php';
+require_once __DIR__ . '/layouts/footer_v2.php';
 ?>

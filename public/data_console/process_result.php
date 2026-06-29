@@ -16,10 +16,22 @@ $stats = $_SESSION['process_stats'] ?? [
 $error = $_SESSION['error'] ?? null;
 
 $page_title = "Processing Result";
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
-<div class="page-title">Data Processing Summary</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Process Result'],
+]) ?>
+
+<?= uiPageHero('Data Processing Summary', 'Review the results of your data processing operation.') ?>
+
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <div class="card" style="padding:20px; margin-top:20px;">
     <?php if ($error): ?>
@@ -44,7 +56,9 @@ require_once __DIR__ . '/../layouts/header.php';
     <a class="btn" href="<?= BASE_URL ?>dashboard_data.php">Back to Dashboard</a>
 </div>
 
+<?= uiWorkspaceEnd() ?>
+
 <?php
 unset($_SESSION['process_stats'], $_SESSION['error']);
-require_once __DIR__ . '/../layouts/footer.php';
+require_once __DIR__ . '/../layouts/footer_v2.php';
 ?>

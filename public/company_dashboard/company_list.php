@@ -3,7 +3,7 @@ require_once '../../app/session_bootstrap.php';
 require_once '../../config/database.php';
 require_once '../../app/workflow_engine.php';
 require_once '../../app/helpers/plan_helper.php';
-include __DIR__ . '/../layouts/header.php';
+include __DIR__ . '/../layouts/header_v2.php';
 
 $statusFilter = strtolower(trim((string) ($_GET['status'] ?? 'all')));
 $filterTitle = 'All Companies';
@@ -128,6 +128,27 @@ $sql .= $where . " GROUP BY c.id ORDER BY c.id DESC";
 $stmt = $pdo->query($sql);
 $companies = $stmt->fetchAll();
 
+/* Count KPIs */
+$totalCount = count($companies);
+$activeCount = 0;
+$pendingCount = 0;
+$completedCount = 0;
+foreach ($companies as $co) {
+    if ((int) ($co['tally_fetched'] ?? 0) === 1
+        && (int) ($co['mapping_completed'] ?? 0) === 1
+        && (int) ($co['ledger_fetched'] ?? 0) === 1
+        && (int) ($co['notes_prepared'] ?? 0) === 1
+        && (int) ($co['profit_loss_prepared'] ?? 0) === 1
+        && (int) ($co['balance_sheet_prepared'] ?? 0) === 1
+    ) {
+        $completedCount++;
+    } elseif ((int) ($co['ledger_fetched'] ?? 0) === 1 || (int) ($co['mapping_completed'] ?? 0) === 1) {
+        $activeCount++;
+    } else {
+        $pendingCount++;
+    }
+}
+
 function companyContinueLink(array $company): array
 {
     $base = defined('BASE_URL') ? BASE_URL : '/e-bal/public/';
@@ -148,109 +169,89 @@ function companyContinueLink(array $company): array
 }
 ?>
 
-<div class="page-title"><?= htmlspecialchars($filterTitle) ?></div>
+<?= uiBreadcrumb([
+    ['label' => 'Dashboard', 'href' => BASE_URL . 'dashboard_main.php'],
+    ['label' => 'Companies']
+]) ?>
 
-<style>
-.company-table { width:100%; border-collapse:collapse; }
-.company-table th, .company-table td { border:1px solid #dbe3ef; padding:10px 12px; vertical-align:top; }
-.company-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-.company-actions a,
-.company-actions button {
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    min-width:88px;
-    padding:7px 12px;
-    border-radius:8px;
-    border:1px solid #cfd8e3;
-    background:#f8fbff;
-    color:#1e4f91;
-    text-decoration:none;
-    cursor:pointer;
-    font:inherit;
-    line-height:1.2;
-}
-.company-actions a.primary {
-    background:#1e5aa8;
-    border-color:#1e5aa8;
-    color:#fff;
-}
-.company-actions a.warn,
-.company-actions button.warn {
-    color:#a2431f;
-    border-color:#e6c7bb;
-    background:#fff8f5;
-}
-.company-actions form { display:inline-flex; margin:0; }
-</style>
+<?= uiPageHero($filterTitle, 'Manage and track all entities in your workspace') ?>
+
+<?= uiKpiCards([
+    ['label' => 'Total Companies', 'value' => $totalCount, 'color' => 'var(--brand)', 'href' => BASE_URL . 'company_dashboard/company_list.php?status=active'],
+    ['label' => 'Active', 'value' => $activeCount, 'color' => 'var(--success)', 'href' => BASE_URL . 'company_dashboard/company_list.php?status=active'],
+    ['label' => 'Pending', 'value' => $pendingCount, 'color' => 'var(--warning)', 'href' => BASE_URL . 'company_dashboard/company_list.php?status=pending'],
+    ['label' => 'Completed', 'value' => $completedCount, 'color' => 'var(--brand)', 'href' => BASE_URL . 'company_dashboard/company_list.php?status=completed'],
+]) ?>
 
 <?php if (isset($_GET['success'])): ?>
-    <div class="success-box"><p>Entity created successfully. You can now complete the profile from the Edit page.</p></div>
+    <?= uiAlert('Entity created successfully. You can now complete the profile from the Edit page.', 'success') ?>
 <?php endif; ?>
 
 <?php if (isset($_GET['updated'])): ?>
-    <div class="success-box"><p>Company updated successfully.</p></div>
+    <?= uiAlert('Company updated successfully.', 'success') ?>
 <?php endif; ?>
 
 <?php if (isset($_GET['deleted'])): ?>
-    <div class="success-box"><p>Company deleted successfully.</p></div>
+    <?= uiAlert('Company deleted successfully.', 'success') ?>
 <?php endif; ?>
 
 <?php if (isset($_GET['error']) && $_GET['error'] === 'invalid_company'): ?>
-    <div class="error-box"><p>Invalid company selected for deletion.</p></div>
+    <?= uiAlert('Invalid company selected for deletion.', 'error') ?>
 <?php endif; ?>
 
-<a href="company_create.php" class="btn">+ Create Entity</a>
-
-<div class="card" style="margin:14px 0;">
-    <strong>View</strong>:
-    <a href="company_list.php?status=active">Active</a> |
-    <a href="company_list.php?status=pending">Pending</a> |
-    <a href="company_list.php?status=completed">Completed</a> |
-    <a href="company_list.php?status=ledger_sync">Ledger Sync</a> |
-    <a href="company_list.php?status=mapping">Mapping</a> |
-    <a href="company_list.php?status=trial_balance">Trial Balance</a> |
-    <a href="company_list.php?status=notes">Notes</a> |
-    <a href="company_list.php?status=profit_loss">Profit and Loss</a> |
-    <a href="company_list.php?status=balance_sheet">Balance Sheet</a> |
-    <a href="company_list.php?status=directors_report">Directors Report</a> |
-    <a href="company_list.php?status=reports">Reports</a>
+<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+    <?= uiButton('Create Entity', BASE_URL . 'company_dashboard/company_create.php', 'primary', '+') ?>
 </div>
 
-<table class="company-table">
-    <tr>
-        <th>Name</th>
-        <th>Category</th>
-        <th>CIN / LLP Code</th>
-        <th>Profile</th>
-        <th>Status</th>
-        <th>Actions</th>
-    </tr>
+<div class="ui-section-card" style="margin-bottom:16px;">
+    <div class="ui-section-card-header">
+        <div class="ui-section-card-title">Filters</div>
+    </div>
+    <div class="ui-section-card-body" style="display:flex;flex-wrap:wrap;gap:8px;">
+        <?php
+        $filters = [
+            'active' => 'Active', 'pending' => 'Pending', 'completed' => 'Completed',
+            'ledger_sync' => 'Ledger Sync', 'mapping' => 'Mapping', 'trial_balance' => 'Trial Balance',
+            'notes' => 'Notes', 'profit_loss' => 'Profit & Loss', 'balance_sheet' => 'Balance Sheet',
+            'directors_report' => 'Directors Report', 'reports' => 'Reports'
+        ];
+        foreach ($filters as $key => $label):
+            $isActive = $statusFilter === $key;
+        ?>
+            <a href="<?= BASE_URL ?>company_dashboard/company_list.php?status=<?= $key ?>"
+               class="v2-btn <?= $isActive ? 'v2-btn--primary' : 'v2-btn--outline' ?>"
+               style="font-size:.78rem;"><?= htmlspecialchars($label) ?></a>
+        <?php endforeach; ?>
+    </div>
+</div>
 
+<?php if (empty($companies)): ?>
+    <?= uiEmptyState('🏢', 'No Companies Found', 'Create your first entity to get started.', 'Create Entity', BASE_URL . 'company_dashboard/company_create.php') ?>
+<?php else: ?>
+    <?= uiTableStart(['Name', 'Category', 'CIN / LLP Code', 'Profile', 'Status', 'Actions']) ?>
     <?php foreach ($companies as $c): $continue = companyContinueLink($c); ?>
     <tr>
         <td><?= htmlspecialchars($c['name'] ?? '') ?></td>
         <td><?= strtoupper($c['category'] ?? '') ?></td>
         <td>
-	<?php
-	$category = $c['category'] ?? '';
-	$cin = $c['cin'] ?? '';
-	$llp = $c['llp_code'] ?? '';
+            <?php
+            $category = $c['category'] ?? '';
+            $cin = $c['cin'] ?? '';
+            $llp = $c['llp_code'] ?? '';
 
-	if ($category === 'corporate') {
-	    echo htmlspecialchars($cin);
-	} elseif ($category === 'llp') {
-	    echo htmlspecialchars($llp);
-	} else {
-	    echo '-';
-	}
-	?>
+            if ($category === 'corporate') {
+                echo htmlspecialchars($cin);
+            } elseif ($category === 'llp') {
+                echo htmlspecialchars($llp);
+            } else {
+                echo '-';
+            }
+            ?>
         </td>
         <td>
             <?php
             $pct = (int) ($c['profile_completeness'] ?? 0);
             $barColor = $pct >= 80 ? '#047857' : ($pct >= 40 ? '#f59e0b' : '#dc2626');
-            $bgColor = $pct >= 80 ? '#d1fae5' : ($pct >= 40 ? '#fef3c7' : '#fee2e2');
             ?>
             <div style="display:flex;align-items:center;gap:6px;">
                 <div style="width:50px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;">
@@ -261,29 +262,30 @@ function companyContinueLink(array $company): array
         </td>
         <td>
             <?php if ((int) ($c['tally_fetched'] ?? 0) === 1): ?>
-                Reports Ready
+                <?= uiStatusBadge('Reports Ready', 'success') ?>
             <?php elseif ((int) ($c['mapping_completed'] ?? 0) === 1): ?>
-                Trial Balance Pending
+                <?= uiStatusBadge('Trial Balance Pending', 'warning') ?>
             <?php elseif ((int) ($c['ledger_fetched'] ?? 0) === 1): ?>
-                Mapping Pending
+                <?= uiStatusBadge('Mapping Pending', 'default') ?>
             <?php else: ?>
-                Ledger Sync Pending
+                <?= uiStatusBadge('Ledger Sync Pending', 'default') ?>
             <?php endif; ?>
         </td>
         <td>
-            <div class="company-actions">
-                <a class="primary" href="<?= htmlspecialchars($continue['href']) ?>"><?= htmlspecialchars($continue['label']) ?></a>
-                <a href="company_select.php?company_id=<?= (int) $c['id'] ?>">Select</a>
-                <a href="company_edit.php?id=<?= (int) $c['id'] ?>">Edit</a>
-                <form method="post" action="company_delete.php" onsubmit="return confirm('Delete this company?')">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                <?= uiButton($continue['label'], $continue['href'], 'primary') ?>
+                <?= uiButton('Select', BASE_URL . 'company_dashboard/company_select.php?company_id=' . (int) $c['id'], 'outline') ?>
+                <?= uiButton('Edit', BASE_URL . 'company_dashboard/company_edit.php?id=' . (int) $c['id'], 'outline') ?>
+                <form method="post" action="company_delete.php" onsubmit="return confirm('Delete this company?')" style="display:inline-flex;margin:0;">
                     <?= csrfInput() ?>
                     <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
-                    <button class="warn" type="submit">Delete</button>
+                    <?= uiButton('Delete', '', 'danger') ?>
                 </form>
             </div>
         </td>
     </tr>
     <?php endforeach; ?>
-</table>
+    <?= uiTableEnd() ?>
+<?php endif; ?>
 
-<?php include __DIR__ . '/../layouts/footer.php'; ?>
+<?php include __DIR__ . '/../layouts/footer_v2.php'; ?>

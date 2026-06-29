@@ -24,7 +24,7 @@ foreach ($monthlyRevenue as $row) {
     $maxRevenue = max($maxRevenue, (int) ($row['revenue'] ?? 0));
 }
 
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
 <style>
@@ -202,8 +202,12 @@ require_once __DIR__ . '/layouts/header.php';
 }
 </style>
 
-<div class="page-title">Admin Dashboard</div>
-<div class="active-info">System overview and monitoring &middot; Superadmin access</div>
+<?= uiBreadcrumb([
+    ['label' => 'Admin', 'href' => BASE_URL . 'superadmin_dashboard.php'],
+    ['label' => 'Dashboard']
+]) ?>
+
+<?= uiPageHero('Admin Dashboard', 'System overview and monitoring · Superadmin access') ?>
 
 <div class="kpi-row">
     <div class="kpi-card">
@@ -394,4 +398,4 @@ require_once __DIR__ . '/layouts/header.php';
     </div>
 </div>
 
-<?php require_once __DIR__ . '/layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/layouts/footer_v2.php'; ?>

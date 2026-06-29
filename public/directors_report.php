@@ -26,7 +26,7 @@ $fs = generateFinancialStatements(
 
 if (($fs['entity_category'] ?? '') !== 'corporate') {
     echo '<div class="error-box"><p>Directors Report is currently available only for Corporate entities.</p></div>';
-    require_once __DIR__ . '/layouts/footer.php';
+    require_once __DIR__ . '/layouts/footer_v2.php';
     exit;
 }
 
@@ -80,15 +80,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
-<div class="page-title">Directors Report</div>
+<?= uiBreadcrumb([
+    ['label' => 'Reports', 'href' => BASE_URL . 'reports.php'],
+    ['label' => 'Directors Report']
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
-    FY: <strong><?= htmlspecialchars($fyName) ?></strong>
-</div>
+<?= uiPageHero('Directors Report') ?>
+
+<?= uiContextCard([
+    'company' => $companyName,
+    'fy' => $fyName,
+    'entity_type' => '',
+    'profile' => 0,
+    'status' => '',
+    'edit_url' => '',
+]) ?>
 
 <?php if ($infoMessage !== ''): ?>
     <div class="card section-card"><?= htmlspecialchars($infoMessage) ?></div>
@@ -134,4 +143,4 @@ require_once __DIR__ . '/layouts/header.php';
     ?>
 </div>
 
-<?php require_once __DIR__ . '/layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/layouts/footer_v2.php'; ?>

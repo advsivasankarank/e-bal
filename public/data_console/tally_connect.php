@@ -9,7 +9,7 @@ require_once '../../app/helpers/security_helper.php';
 requireFullContext();
 
 $page_title = "Tally Connect";
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
@@ -38,7 +38,19 @@ $hasLiveCompanyName = $tallyContext && $liveCompanyNormalized !== '';
 $hasLivePeriod = $tallyContext && !empty($tallyContext['period_from']) && !empty($tallyContext['period_to']);
 ?>
 
-<div class="page-title">Tally Integration</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Tally Connect'],
+]) ?>
+
+<?= uiPageHero('Tally Integration', 'Trial balance will be fetched for the active FY. Make sure mapping is complete before starting the fetch.') ?>
+
+<?= uiContextCard([
+    'company' => $selectedCompanyName,
+    'fy' => $fy_label,
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <?php if ($bridgeMode): ?>
     <div class="card" style="margin-bottom:20px;">
@@ -53,15 +65,6 @@ $hasLivePeriod = $tallyContext && !empty($tallyContext['period_from']) && !empty
         <p>Tally is not reachable right now. Check that Tally is running with XML over HTTP enabled on port 9000, then retry.</p>
     </div>
 <?php endif; ?>
-
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($selectedCompanyName) ?></strong><br>
-    FY: <strong><?= htmlspecialchars($fy_label) ?></strong>
-</div>
-
-<div class="card" style="margin-bottom:20px;">
-    Trial balance will be fetched for the active FY. Make sure mapping is complete before starting the fetch.
-</div>
 
 <?php if ($tallyFetched === 1): ?>
     <div class="card" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -267,4 +270,6 @@ $hasLivePeriod = $tallyContext && !empty($tallyContext['period_from']) && !empty
 
 <?php unset($_SESSION['error']); ?>
 
-<?php require_once __DIR__ . '/../layouts/footer.php'; ?>
+<?= uiWorkspaceEnd() ?>
+
+<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

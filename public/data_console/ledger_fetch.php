@@ -20,14 +20,22 @@ function renderLedgerFetchPage(string $title, string $message, bool $success = f
 {
     global $page_title, $companyName, $fyName;
 
-    require __DIR__ . '/../layouts/header.php';
+    require __DIR__ . '/../layouts/header_v2.php';
     ?>
-    <div class="page-title"><?= htmlspecialchars($title) ?></div>
 
-    <div class="active-info">
-        Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
-        FY: <strong><?= htmlspecialchars($fyName) ?></strong>
-    </div>
+    <?= uiBreadcrumb([
+        ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+        ['label' => 'Ledger Fetch'],
+    ]) ?>
+
+    <?= uiPageHero($title) ?>
+
+    <?= uiContextCard([
+        'company' => $companyName,
+        'fy' => $fyName,
+    ]) ?>
+
+    <?= uiWorkspaceStart() ?>
 
     <?php if ($success): ?>
         <div class="success-box"><p><?= htmlspecialchars($message) ?></p></div>
@@ -46,8 +54,10 @@ function renderLedgerFetchPage(string $title, string $message, bool $success = f
         <a class="btn" href="<?= BASE_URL ?>data_console/tally_online.php">Back to Online Console</a>
     </div>
 
+    <?= uiWorkspaceEnd() ?>
+
     <?php
-    require __DIR__ . '/../layouts/footer.php';
+    require __DIR__ . '/../layouts/footer_v2.php';
 }
 
 $xml = <<<XML
@@ -177,15 +187,22 @@ try {
     exit;
 }
 
-require __DIR__ . '/../layouts/header.php';
+require __DIR__ . '/../layouts/header_v2.php';
 ?>
 
-<div class="page-title">Ledger Fetch Result</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Ledger Fetch'],
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
-    FY: <strong><?= htmlspecialchars($fyName) ?></strong>
-</div>
+<?= uiPageHero('Ledger Fetch Result', 'Ledger fetch completed successfully.') ?>
+
+<?= uiContextCard([
+    'company' => $companyName,
+    'fy' => $fyName,
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <div class="success-box">
     <p>Ledger fetch completed successfully.</p>
@@ -212,4 +229,6 @@ require __DIR__ . '/../layouts/header.php';
     <a class="btn" href="<?= BASE_URL ?>data_console/tally_online.php">Back to Online Console</a>
 </div>
 
-<?php require __DIR__ . '/../layouts/footer.php'; ?>
+<?= uiWorkspaceEnd() ?>
+
+<?php require __DIR__ . '/../layouts/footer_v2.php'; ?>

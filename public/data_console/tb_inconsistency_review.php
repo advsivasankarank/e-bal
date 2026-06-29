@@ -25,15 +25,20 @@ $mappingEngine = new AIMappingEngine($companyCategory);
 $mappingOptions = $mappingEngine->getMappingOptions();
 
 $page_title = "TB Inconsistency Review";
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
-<div class="page-title">Trial Balance Inconsistency Review</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'dashboard_data.php'],
+    ['label' => 'TB Inconsistency Review']
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Trial Balance Inconsistency Review') ?>
+
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy'      => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
 
 <div class="error-box" style="margin-bottom:20px;">
     <p>The trial balance contains ledgers that are not present in the synced ledger master. Review them carefully, then confirm whether they should be added to the ledger master and mapped before the TB import continues.</p>
@@ -82,4 +87,4 @@ require_once __DIR__ . '/../layouts/header.php';
     </div>
 </form>
 
-<?php require_once __DIR__ . '/../layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

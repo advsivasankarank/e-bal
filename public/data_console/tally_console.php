@@ -2,19 +2,22 @@
 $page_title = "Tally Console";
 require_once '../../app/context_check.php';
 requireFullContext();
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
-<div class="page-title">Tally Console</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Tally Import'],
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Tally Console', 'Pick the mode that matches how you want to bring data in.') ?>
 
-<div class="card" style="margin-bottom:20px;">
-    Pick the mode that matches how you want to bring data in. Live mode talks to Tally directly, while offline mode accepts XML exports you already downloaded.
-</div>
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <div class="tile-container">
 
@@ -32,4 +35,6 @@ require_once __DIR__ . '/../layouts/header.php';
 
 </div>
 
-<?php require_once __DIR__ . '/../layouts/footer.php'; ?>
+<?= uiWorkspaceEnd() ?>
+
+<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

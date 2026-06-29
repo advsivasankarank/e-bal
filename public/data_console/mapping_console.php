@@ -21,7 +21,7 @@ $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 
 $page_title = "Mapping Console";
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 /* =========================
    FETCH LEDGERS
@@ -111,16 +111,19 @@ if (empty($ledgers)) {
 
 ?>
 
-<div class="page-title">Mapping Console</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Mapping Console'],
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Mapping Console', 'Only unmatched or review-required ledgers are shown here. The mapper applies company learning, global learning, keyword rules, and parent-group controls before asking for manual review.') ?>
 
-<div class="card" style="margin-bottom:20px;">
-    Only unmatched or review-required ledgers are shown here. The mapper now applies company learning, global learning, keyword rules, and parent-group controls before asking for manual review.
-</div>
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <div class="summary-bar">
     <div class="summary-card">
@@ -331,4 +334,6 @@ function applyBulkMapping() {
 unset($_SESSION['success'], $_SESSION['error'], $_SESSION['mapping_parent_group_conflicts']);
 ?>
 
-<?php require_once __DIR__ . '/../layouts/footer.php'; ?>
+<?= uiWorkspaceEnd() ?>
+
+<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

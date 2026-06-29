@@ -100,87 +100,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-include __DIR__ . '/../layouts/header.php';
+include __DIR__ . '/../layouts/header_v2.php';
 ?>
 
-<div class="page-title">Select Company</div>
+<?= uiBreadcrumb([
+    ['label' => 'Dashboard', 'href' => BASE_URL . 'dashboard_main.php'],
+    ['label' => 'Select Company']
+]) ?>
+
+<?= uiPageHero('Select Company', 'Choose a company and financial year to work with') ?>
 
 <?php if (empty($companies)): ?>
-    <div class="error-box">
-        <p>No companies found. Create a company first.</p>
-    </div>
+    <?= uiAlert('No companies found. Create a company first.', 'error') ?>
 <?php endif; ?>
 
 <?php if (empty($financialYears)): ?>
-    <div class="error-box">
-        <p>No financial years are available right now. Please add or repair the financial year master.</p>
-    </div>
+    <?= uiAlert('No financial years are available right now. Please add or repair the financial year master.', 'warning') ?>
 <?php endif; ?>
 
 <?php if (!empty($errors)): ?>
-    <div class="error-box">
-        <?php foreach ($errors as $error): ?>
-            <p><?= htmlspecialchars($error) ?></p>
-        <?php endforeach; ?>
-    </div>
+    <?php foreach ($errors as $error): ?>
+        <?= uiAlert($error, 'error') ?>
+    <?php endforeach; ?>
 <?php endif; ?>
 
 <?php if ($successMessage !== ''): ?>
-    <div class="success-box">
-        <p><?= htmlspecialchars($successMessage) ?></p>
-    </div>
+    <?= uiAlert($successMessage, 'success') ?>
 <?php endif; ?>
 
 <form method="post">
 <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8') ?>">
 <input type="hidden" name="next" value="<?= htmlspecialchars($next) ?>">
 
-<div class="form-group">
-    <label>Company</label>
-    <select name="company_id" id="company_id" required>
-        <option value="">Select Company</option>
+<div class="ui-section-card" style="margin-bottom:16px;">
+    <div class="ui-section-card-header">
+        <div class="ui-section-card-title">Company & Financial Year</div>
+    </div>
+    <div class="ui-section-card-body">
+        <div class="ui-field" style="margin-bottom:14px;">
+            <label for="company_id" class="ui-field-label">Company</label>
+            <select name="company_id" id="company_id" required class="ui-input">
+                <option value="">Select Company</option>
+                <?php foreach ($companies as $c): ?>
+                    <option value="<?= (int) $c['id'] ?>" <?= ((int) ($c['id'] ?? 0) === $prefillCompanyId) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($c['name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
 
-        <?php foreach ($companies as $c): ?>
-            <option value="<?= (int) $c['id'] ?>" <?= ((int) ($c['id'] ?? 0) === $prefillCompanyId) ? 'selected' : '' ?>>
-                <?= htmlspecialchars($c['name']) ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-</div>
+        <div class="ui-field" style="margin-bottom:14px;">
+            <label class="ui-field-label">Financial Year</label>
+            <select name="fy_id" required class="ui-input">
+                <option value="">Select Financial Year</option>
+                <?php foreach ($financialYears as $fy): ?>
+                    <option value="<?= (int) $fy['id'] ?>" <?= ((int) ($fy['id'] ?? 0) === $prefillFyId) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($fy['fy_label']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <?php if (!empty($financialYears)): ?>
+                <div class="ui-field-help">Current year is suggested automatically based on today's date. You can still switch to any other financial year when needed.</div>
+            <?php endif; ?>
+        </div>
 
-<div class="form-group">
-    <label>Financial Year</label>
-    <select name="fy_id" required>
-        <option value="">Select Financial Year</option>
-
-        <?php foreach ($financialYears as $fy): ?>
-            <option value="<?= (int) $fy['id'] ?>" <?= ((int) ($fy['id'] ?? 0) === $prefillFyId) ? 'selected' : '' ?>>
-                <?= htmlspecialchars($fy['fy_label']) ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-    <?php if (!empty($financialYears)): ?>
-        <small style="display:block; margin-top:8px; color:#5b6b79;">
-            Current year is suggested automatically based on today's date. You can still switch to any other financial year when needed.
-        </small>
-    <?php endif; ?>
-</div>
-
-<div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
-    <button type="submit" name="form_action" value="select" <?= empty($companies) || empty($financialYears) ? 'disabled' : '' ?>>Select</button>
+        <?= uiButton('Select', '', 'primary') ?>
+    </div>
 </div>
 
 <?php if (!empty($companies)): ?>
-    <div class="card" style="margin-top:20px;">
-        <strong>Add Missing Financial Year</strong>
-        <p style="margin:8px 0 14px; color:#5b6b79;">
-            If an older year is missing, enter it here in `2018-2019` or `2018-19` format. It will be saved for the selected company.
-        </p>
-        <div class="form-group" style="margin-bottom:14px;">
-            <label>Manual Financial Year</label>
-            <input type="text" name="manual_fy_label" value="<?= htmlspecialchars($manualFyLabel) ?>" placeholder="Example: 2018-2019">
+    <div class="ui-section-card" style="margin-bottom:16px;">
+        <div class="ui-section-card-header">
+            <div class="ui-section-card-title">Add Missing Financial Year</div>
         </div>
-        <button type="submit" name="form_action" value="add_fy" <?= empty($companies) ? 'disabled' : '' ?>>Add Financial Year</button>
+        <div class="ui-section-card-body">
+            <p style="margin:0 0 14px; color:#5b6b79;">
+                If an older year is missing, enter it here in `2018-2019` or `2018-19` format. It will be saved for the selected company.
+            </p>
+            <div class="ui-field" style="margin-bottom:14px;">
+                <label class="ui-field-label">Manual Financial Year</label>
+                <input type="text" name="manual_fy_label" value="<?= htmlspecialchars($manualFyLabel) ?>" placeholder="Example: 2018-2019" class="ui-input">
+            </div>
+            <?= uiButton('Add Financial Year', '', 'outline', '', 'name="form_action" value="add_fy"') ?>
+        </div>
     </div>
 <?php endif; ?>
 
@@ -207,4 +209,4 @@ include __DIR__ . '/../layouts/header.php';
     })();
 </script>
 
-<?php include __DIR__ . '/../layouts/footer.php'; ?>
+<?php include __DIR__ . '/../layouts/footer_v2.php'; ?>

@@ -20,13 +20,18 @@ if ($userId > 0 && $razorpayEnabled) {
 }
 
 $page_title = 'Upgrade Plan';
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
-<div class="page-title">Upgrade Plan</div>
+<?= uiBreadcrumb([
+    ['label' => 'Dashboard', 'href' => BASE_URL . 'dashboard_main.php'],
+    ['label' => 'Upgrade']
+]) ?>
+
+<?= uiPageHero('Upgrade Plan', 'Manage your subscription and billing') ?>
 
 <?php if (!empty($_SESSION['error'])): ?>
-    <div class="error-box"><p><?= htmlspecialchars($_SESSION['error']) ?></p></div>
+    <?= uiAlert($_SESSION['error'], 'error') ?>
 <?php endif; ?>
 
 <style>
@@ -49,135 +54,137 @@ require_once __DIR__ . '/layouts/header.php';
 </style>
 
 <div class="upgrade-grid">
-    <div class="card section-card">
-        <strong>Current Plan</strong><br>
-        <?php if ($plan && $usage): ?>
-            <div style="margin-top:12px; font-size:18px; font-weight:700; color:#0f172a;"><?= htmlspecialchars($plan['plan_name']) ?></div>
-            <div style="color:#64748b; margin-top:4px;">Expires on <?= htmlspecialchars($plan['expires_at']) ?></div>
-            <div class="usage-grid">
-                <div class="usage-box">
-                    <span>Companies</span>
-                    <strong><?= (int) $usage['companies_used'] ?> / <?= (int) $usage['company_limit'] ?></strong>
+    <div class="ui-section-card">
+        <div class="ui-section-card-header">
+            <div class="ui-section-card-title">Current Plan</div>
+        </div>
+        <div class="ui-section-card-body">
+            <?php if ($plan && $usage): ?>
+                <div style="margin-top:0; font-size:18px; font-weight:700; color:#0f172a;"><?= htmlspecialchars($plan['plan_name']) ?></div>
+                <div style="color:#64748b; margin-top:4px;">Expires on <?= htmlspecialchars($plan['expires_at']) ?></div>
+                <div class="usage-grid">
+                    <div class="usage-box">
+                        <span>Companies</span>
+                        <strong><?= (int) $usage['companies_used'] ?> / <?= (int) $usage['company_limit'] ?></strong>
+                    </div>
+                    <div class="usage-box">
+                        <span>Users</span>
+                        <strong><?= (int) $usage['users_used'] ?> / <?= (int) $usage['user_limit'] ?></strong>
+                    </div>
+                    <div class="usage-box">
+                        <span>AI</span>
+                        <strong><?= !empty($usage['ai_enabled']) ? 'On' : 'Off' ?></strong>
+                    </div>
                 </div>
-                <div class="usage-box">
-                    <span>Users</span>
-                    <strong><?= (int) $usage['users_used'] ?> / <?= (int) $usage['user_limit'] ?></strong>
-                </div>
-                <div class="usage-box">
-                    <span>AI</span>
-                    <strong><?= !empty($usage['ai_enabled']) ? 'On' : 'Off' ?></strong>
-                </div>
-            </div>
-            <p style="margin-top:14px; color:#64748b;"><?= htmlspecialchars((string) ($usage['description_text'] ?? '')) ?></p>
-        <?php else: ?>
-            <p style="margin-top:12px;">No active license found yet for this workspace.</p>
-        <?php endif; ?>
-
-        <div style="margin-top:12px;">
-            <?php if (!$razorpayEnabled): ?>
-                <span class="status">Payment gateway setup pending</span>
-            <?php elseif (!$canPay): ?>
-                <span class="status">Only workspace admin can initiate payment</span>
+                <p style="margin-top:14px; color:#64748b;"><?= htmlspecialchars((string) ($usage['description_text'] ?? '')) ?></p>
             <?php else: ?>
-                <span class="status">Online payment enabled</span>
+                <p style="margin-top:12px;">No active license found yet for this workspace.</p>
             <?php endif; ?>
+
+            <div style="margin-top:12px;">
+                <?php if (!$razorpayEnabled): ?>
+                    <?= uiStatusBadge('Payment gateway setup pending', 'warning') ?>
+                <?php elseif (!$canPay): ?>
+                    <?= uiStatusBadge('Only workspace admin can initiate payment', 'default') ?>
+                <?php else: ?>
+                    <?= uiStatusBadge('Online payment enabled', 'success') ?>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 
-    <div class="card section-card">
-        <strong>Payment Notes</strong>
-        <ul class="upgrade-list">
-            <li>e-BAL Base: 1 user, 10 entities, annual price ₹7,499.</li>
-            <li>e-BAL Pro: 10 users, 25 entities, annual price ₹14,999.</li>
-            <li>e-BAL Elite: Unlimited users, unlimited entities, annual price ₹29,999.</li>
-            <li>AI-assisted drafting is available from Pro upwards.</li>
-        </ul>
+    <div class="ui-section-card">
+        <div class="ui-section-card-header">
+            <div class="ui-section-card-title">Payment Notes</div>
+        </div>
+        <div class="ui-section-card-body">
+            <ul class="upgrade-list">
+                <li>e-BAL Base: 1 user, 10 entities, annual price ₹7,499.</li>
+                <li>e-BAL Pro: 10 users, 25 entities, annual price ₹14,999.</li>
+                <li>e-BAL Elite: Unlimited users, unlimited entities, annual price ₹29,999.</li>
+                <li>AI-assisted drafting is available from Pro upwards.</li>
+            </ul>
 
-        <?php if (!$razorpayEnabled): ?>
-            <div class="error-box" style="margin-top:16px;">
-                <p>Razorpay is not configured yet. Set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` before enabling live payments.</p>
-            </div>
-        <?php elseif (!$canPay): ?>
-            <div class="card" style="margin-top:16px;">
-                Staff users can review plan options here, but only workspace admins can pay and renew the subscription.
-            </div>
-        <?php else: ?>
-            <div class="card" style="margin-top:16px;">
-                Payment is collected through Razorpay Payment Links. After successful payment, the license is activated automatically.
-            </div>
-        <?php endif; ?>
+            <?php if (!$razorpayEnabled): ?>
+                <?= uiAlert('Razorpay is not configured yet. Set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` before enabling live payments.', 'warning') ?>
+            <?php elseif (!$canPay): ?>
+                <div style="margin-top:14px;padding:14px;background:#f8fbff;border:1px solid #d8e2ef;border-radius:12px;font-size:.82rem;color:#5b6b79;">
+                    Staff users can review plan options here, but only workspace admins can pay and renew the subscription.
+                </div>
+            <?php else: ?>
+                <div style="margin-top:14px;padding:14px;background:#f8fbff;border:1px solid #d8e2ef;border-radius:12px;font-size:.82rem;color:#5b6b79;">
+                    Payment is collected through Razorpay Payment Links. After successful payment, the license is activated automatically.
+                </div>
+            <?php endif; ?>
+        </div>
     </div>
 </div>
 
-<div class="card section-card">
-    <strong>Available Plans</strong>
-    <div class="upgrade-plans" style="margin-top:16px;">
-        <?php foreach ($plans as $planRow): ?>
-            <?php $isCurrent = $plan && $plan['plan'] === $planRow['code']; ?>
-            <div class="upgrade-plan <?= $isCurrent ? 'is-current' : '' ?>">
-                <?php if ($isCurrent): ?><div class="upgrade-badge">Current</div><?php endif; ?>
-                <h3><?= htmlspecialchars($planRow['name']) ?></h3>
-                <div class="upgrade-price">Rs.<?= number_format((int) $planRow['price_inr']) ?><span style="font-size:14px; font-weight:500; color:#64748b;">/year</span></div>
-                <ul class="upgrade-list">
-                    <li><?= (int) $planRow['company_limit'] >= 999 ? 'Unlimited companies' : ((int) $planRow['company_limit'] . ' companies') ?></li>
-                    <li><?= (int) $planRow['user_limit'] ?> users</li>
-                    <li><?= (int) $planRow['ai_enabled'] === 1 ? 'AI drafting included' : 'AI drafting not included' ?></li>
-                </ul>
-                <p style="margin-top:12px; color:#64748b;"><?= htmlspecialchars($planRow['description_text']) ?></p>
+<div class="ui-section-card" style="margin-top:16px;">
+    <div class="ui-section-card-header">
+        <div class="ui-section-card-title">Available Plans</div>
+    </div>
+    <div class="ui-section-card-body">
+        <div class="upgrade-plans">
+            <?php foreach ($plans as $planRow): ?>
+                <?php $isCurrent = $plan && $plan['plan'] === $planRow['code']; ?>
+                <div class="upgrade-plan <?= $isCurrent ? 'is-current' : '' ?>">
+                    <?php if ($isCurrent): ?><div class="upgrade-badge">Current</div><?php endif; ?>
+                    <h3><?= htmlspecialchars($planRow['name']) ?></h3>
+                    <div class="upgrade-price">Rs.<?= number_format((int) $planRow['price_inr']) ?><span style="font-size:14px; font-weight:500; color:#64748b;">/year</span></div>
+                    <ul class="upgrade-list">
+                        <li><?= (int) $planRow['company_limit'] >= 999 ? 'Unlimited companies' : ((int) $planRow['company_limit'] . ' companies') ?></li>
+                        <li><?= (int) $planRow['user_limit'] ?> users</li>
+                        <li><?= (int) $planRow['ai_enabled'] === 1 ? 'AI drafting included' : 'AI drafting not included' ?></li>
+                    </ul>
+                    <p style="margin-top:12px; color:#64748b;"><?= htmlspecialchars($planRow['description_text']) ?></p>
 
-                <div class="plan-actions">
-                    <?php if ($razorpayEnabled && $canPay): ?>
-                        <form method="post" action="<?= BASE_URL ?>create_payment_link.php" class="plan-pay-form">
-                            <?= csrfInput() ?>
-                            <input type="hidden" name="plan_code" value="<?= htmlspecialchars($planRow['code']) ?>">
-                            <button class="btn" type="submit"><?= $isCurrent ? 'Renew / Pay Again' : ('Pay Rs.' . number_format((int) $planRow['price_inr'])) ?></button>
-                        </form>
-                    <?php else: ?>
-                        <span class="status"><?= $razorpayEnabled ? 'Workspace admin payment only' : 'Payment setup pending' ?></span>
-                    <?php endif; ?>
+                    <div class="plan-actions">
+                        <?php if ($razorpayEnabled && $canPay): ?>
+                            <form method="post" action="<?= BASE_URL ?>create_payment_link.php" class="plan-pay-form">
+                                <?= csrfInput() ?>
+                                <input type="hidden" name="plan_code" value="<?= htmlspecialchars($planRow['code']) ?>">
+                                <?= uiButton($isCurrent ? 'Renew / Pay Again' : ('Pay Rs.' . number_format((int) $planRow['price_inr'])), '', 'primary') ?>
+                            </form>
+                        <?php else: ?>
+                            <?= uiStatusBadge($razorpayEnabled ? 'Workspace admin payment only' : 'Payment setup pending', 'default') ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
-            </div>
-        <?php endforeach; ?>
+            <?php endforeach; ?>
+        </div>
     </div>
 </div>
 
 <?php if ($recentPaymentLinks !== []): ?>
-<div class="card section-card">
-    <strong>Recent Payment Links</strong>
-    <table class="payment-table">
-        <thead>
-            <tr>
-                <th>Reference</th>
-                <th>Plan</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th>Open</th>
-            </tr>
-        </thead>
-        <tbody>
+<div class="ui-section-card" style="margin-top:16px;">
+    <div class="ui-section-card-header">
+        <div class="ui-section-card-title">Recent Payment Links</div>
+    </div>
+    <div class="ui-section-card-body">
+        <?= uiTableStart(['Reference', 'Plan', 'Amount', 'Status', 'Created', 'Open']) ?>
             <?php foreach ($recentPaymentLinks as $paymentLink): ?>
                 <tr>
                     <td><?= htmlspecialchars((string) $paymentLink['reference_id']) ?></td>
                     <td><?= htmlspecialchars((string) strtoupper((string) $paymentLink['plan_code'])) ?></td>
                     <td>Rs.<?= number_format((int) ($paymentLink['amount_inr'] ?? 0)) ?></td>
-                    <td><?= htmlspecialchars((string) strtoupper((string) $paymentLink['status'])) ?></td>
+                    <td><?= uiStatusBadge(strtoupper((string) $paymentLink['status']), 'default') ?></td>
                     <td><?= htmlspecialchars((string) $paymentLink['created_at']) ?></td>
                     <td>
                         <?php if (!empty($paymentLink['razorpay_short_url'])): ?>
-                            <a class="btn" href="<?= htmlspecialchars((string) $paymentLink['razorpay_short_url']) ?>" target="_blank" rel="noopener">Open Link</a>
+                            <?= uiButton('Open Link', htmlspecialchars((string) $paymentLink['razorpay_short_url']), 'outline', '', 'target="_blank" rel="noopener"') ?>
                         <?php else: ?>
                             -
                         <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
-        </tbody>
-    </table>
+        <?= uiTableEnd() ?>
+    </div>
 </div>
 <?php endif; ?>
 
 <?php
 unset($_SESSION['error']);
-require_once __DIR__ . '/layouts/footer.php';
+require_once __DIR__ . '/layouts/footer_v2.php';
 ?>

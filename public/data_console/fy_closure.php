@@ -64,7 +64,7 @@ if ($status === 'closed') {
 }
 
 $page_title = "Financial Year Closure";
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 $statusLabels = ['draft' => 'Draft', 'finalized' => 'Finalized', 'closed' => 'Closed'];
 $statusColors = ['draft' => '#667085', 'finalized' => '#b54708', 'closed' => '#067647'];
@@ -79,12 +79,17 @@ $fyStmt->execute([$fy_id, $company_id]);
 $fyLabel = (string) $fyStmt->fetchColumn();
 ?>
 
-<div class="page-title">Financial Year Closure</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'dashboard_data.php'],
+    ['label' => 'FY Closure']
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
-    FY: <strong><?= htmlspecialchars($fyLabel) ?></strong>
-</div>
+<?= uiPageHero('Financial Year Closure') ?>
+
+<?= uiContextCard([
+    'company' => $companyName,
+    'fy'      => $fyLabel,
+]) ?>
 
 <?php if (!empty($_SESSION['closure_message'])): ?>
     <div class="success-box"><p><?= htmlspecialchars($_SESSION['closure_message']) ?></p></div>
@@ -256,4 +261,4 @@ $fyLabel = (string) $fyStmt->fetchColumn();
     <a class="btn" href="<?= BASE_URL ?>reports.php">View Reports</a>
 </div>
 
-<?php require_once __DIR__ . '/../layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

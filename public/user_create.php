@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../app/session_bootstrap.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 
 $errors = [];
 $userId = (int) ($_SESSION['user_id'] ?? 0);
@@ -45,7 +45,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 
-<div class="page-title">Create User</div>
+<?= uiBreadcrumb([
+    ['label' => 'Admin', 'href' => BASE_URL . 'superadmin_dashboard.php'],
+    ['label' => 'Create User']
+]) ?>
+
+<?= uiPageHero('Create User') ?>
 
 <?php if (!empty($_SESSION['success'])): ?>
     <div class="success-box"><p><?= htmlspecialchars($_SESSION['success']) ?></p></div>
@@ -85,5 +90,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <?php
 unset($_SESSION['success']);
-require_once __DIR__ . '/layouts/footer.php';
+require_once __DIR__ . '/layouts/footer_v2.php';
 ?>

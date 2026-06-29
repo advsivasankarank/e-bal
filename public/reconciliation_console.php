@@ -151,7 +151,7 @@ $companies = $pdo->query("SELECT id, name FROM companies ORDER BY name")->fetchA
 
 $page_title = 'Balance Sheet Reconciliation Console';
 $showSidebar = true;
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 <style>
 :root {
@@ -367,12 +367,17 @@ require_once __DIR__ . '/layouts/header.php';
 }
 </style>
 
-<div class="page-title">Balance Sheet Reconciliation Console</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'dashboard_data.php'],
+    ['label' => 'Reconciliation Console']
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Balance Sheet Reconciliation Console') ?>
+
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy'      => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
 
 <div class="card" style="margin-bottom:18px;">
     Validate trial balance integrity, unmapped ledgers, profit transfer, balance sheet build, and reconciliation difference.
@@ -941,4 +946,4 @@ require_once __DIR__ . '/layouts/header.php';
 </div>
 <?php endif; ?>
 
-<?php require_once __DIR__ . '/layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/layouts/footer_v2.php'; ?>

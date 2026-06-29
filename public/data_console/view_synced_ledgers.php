@@ -18,7 +18,7 @@ $companyCategory = strtolower((string) $companyStmt->fetchColumn());
 $mappingEngine = new AIMappingEngine($companyCategory);
 
 $page_title = "Synced Ledgers";
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 $stmt = $pdo->prepare("
     SELECT
@@ -56,31 +56,27 @@ foreach ($rows as $row) {
 }
 ?>
 
-<div class="page-title">Synced Ledgers</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'dashboard_data.php'],
+    ['label' => 'View Synced Ledgers']
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Synced Ledgers') ?>
+
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy'      => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
 
 <div class="card" style="margin-bottom:20px;">
     This view shows the synced ledger master for the selected company, the saved mapping head, and any live trial balance value already fetched for the active financial year.
 </div>
 
-<div class="summary-bar">
-    <div class="summary-card">
-        <div class="summary-number"><?= $totalLedgers ?></div>
-        <div class="summary-label">Synced Ledgers</div>
-    </div>
-    <div class="summary-card">
-        <div class="summary-number"><?= $mappedCount ?></div>
-        <div class="summary-label">Mapped Ledgers</div>
-    </div>
-    <div class="summary-card">
-        <div class="summary-number"><?= $tbCount ?></div>
-        <div class="summary-label">Ledgers With TB Value</div>
-    </div>
-</div>
+<?= uiKpiCards([
+    ['value' => $totalLedgers, 'label' => 'Synced Ledgers'],
+    ['value' => $mappedCount, 'label' => 'Mapped Ledgers'],
+    ['value' => $tbCount, 'label' => 'Ledgers With TB Value'],
+]) ?>
 
 <div class="card" style="margin-bottom:16px;">
     <a class="btn" href="<?= BASE_URL ?>data_console/mapping_console.php">Back to Mapping</a>
@@ -113,4 +109,4 @@ foreach ($rows as $row) {
     <?php endforeach; ?>
 </table>
 
-<?php require_once __DIR__ . '/../layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

@@ -102,10 +102,15 @@ foreach ($catalog as $catalogPlan) {
     }
 }
 
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
-<div class="page-title">Workspace Admin</div>
+<?= uiBreadcrumb([
+    ['label' => 'Admin', 'href' => BASE_URL . 'superadmin_dashboard.php'],
+    ['label' => 'Workspace']
+]) ?>
+
+<?= uiPageHero('Workspace Admin') ?>
 
 <?php foreach ($messages as $message): ?>
     <div class="success-box"><p><?= htmlspecialchars($message) ?></p></div>
@@ -380,4 +385,4 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
-<?php require_once __DIR__ . '/layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/layouts/footer_v2.php'; ?>

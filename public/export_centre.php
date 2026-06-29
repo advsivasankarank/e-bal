@@ -23,8 +23,24 @@ if (!in_array($selectedFormat, $allowedFormats, true)) {
 
 $page_title = 'Export Centre';
 $showSidebar = true;
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
+
+<?= uiBreadcrumb([
+    ['label' => 'Export', 'href' => BASE_URL . 'export_centre.php'],
+    ['label' => 'Centre']
+]) ?>
+
+<?= uiPageHero('Export Centre') ?>
+
+<?= uiContextCard([
+    'company' => $companyName,
+    'fy' => $fyName,
+    'entity_type' => ucwords(str_replace('_', ' ', $companyCategory)),
+    'profile' => 0,
+    'status' => '',
+    'edit_url' => '',
+]) ?>
 
 <style>
 :root {
@@ -181,14 +197,6 @@ require_once __DIR__ . '/layouts/header.php';
 }
 </style>
 
-<div class="page-title">Export Centre</div>
-
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
-    FY: <strong><?= htmlspecialchars($fyName) ?></strong> &middot;
-    <?= htmlspecialchars(ucwords(str_replace('_', ' ', $companyCategory))) ?>
-</div>
-
 <div class="card" style="margin-bottom:18px;">
     Export financial statements, notes, and reports in PDF, Excel, or Word format. Configure options below and generate your download.
 </div>
@@ -318,4 +326,4 @@ require_once __DIR__ . '/layouts/header.php';
     </table>
 <?php endif; ?>
 
-<?php require_once __DIR__ . '/layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/layouts/footer_v2.php'; ?>

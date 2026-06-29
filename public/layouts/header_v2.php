@@ -22,6 +22,7 @@ require_once __DIR__ . '/../../app/session_bootstrap.php';
 require_once __DIR__ . '/../../app/middleware/license_check.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../app/helpers/plan_helper.php';
+require_once __DIR__ . '/../components/ui.php';
 
 /* Activate V2 mode so any included V1 module uses V2 shell */
 $_SESSION['v2_mode'] = true;
@@ -147,6 +148,7 @@ $v2FooterItems = [
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= htmlspecialchars($page_title) ?> | e-BAL</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/app_v2.css?v=<?= htmlspecialchars($v2CssVersion) ?>">
+    <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/components.css?v=<?= file_exists(__DIR__ . '/../asset/css/components.css') ? (string) filemtime(__DIR__ . '/../asset/css/components.css') : (string) time() ?>">
     <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/bridge_connectivity.css?v=<?= htmlspecialchars($bridgeCssVersion) ?>">
     <?php if ($v2ActiveSection === 'assignments'): ?>
     <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/workspace_launcher.css?v=<?= filemtime(__DIR__ . '/../asset/css/workspace_launcher.css') ?>">

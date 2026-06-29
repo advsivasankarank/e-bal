@@ -4,7 +4,7 @@ $page_title = "Offline Mode";
 require_once '../../app/context_check.php';
 require_once '../../config/database.php';
 requireFullContext();
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
@@ -41,16 +41,19 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
 }
 ?>
 
-<div class="page-title">Offline XML Console</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Tally Offline (XML Upload)'],
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Offline XML Console', 'Use this path when you have XML exports from Tally. Upload the ledger master first, complete mapping, and then upload the trial balance XML.') ?>
 
-<div class="card" style="margin-bottom:20px;">
-    Use this path when you have XML exports from Tally. Upload the ledger master first, complete mapping, and then upload the trial balance XML.
-</div>
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <?php if ((int) $tallyFetched === 1): ?>
     <div class="card" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -150,8 +153,10 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
     <button onclick="history.back()" class="btn">← Back</button>
 </div>
 
+<?= uiWorkspaceEnd() ?>
+
 <?php
 unset($_SESSION['success'], $_SESSION['error']);
 ?>
 
-<?php require_once __DIR__ . '/../layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

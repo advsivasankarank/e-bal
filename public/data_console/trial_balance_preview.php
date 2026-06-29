@@ -333,7 +333,7 @@ foreach ($rows as $row) {
 
 $page_title = 'Trial Balance Preview & Mapping';
 $showSidebar = true;
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
 <style>
@@ -479,12 +479,19 @@ require_once __DIR__ . '/../layouts/header.php';
 }
 </style>
 
-<div class="page-title">TB Import Dashboard</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Trial Balance Preview'],
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('TB Import Dashboard', 'Review and map trial balance entries to financial statement notes.') ?>
+
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <?php
 $totalLedgers = count($rows);
@@ -719,7 +726,9 @@ $mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) 
     </div>
 </form>
 
+<?= uiWorkspaceEnd() ?>
+
 <?php
 unset($_SESSION['success'], $_SESSION['error'], $_SESSION['tb_preview_parent_group_conflicts']);
-require_once __DIR__ . '/../layouts/footer.php';
+require_once __DIR__ . '/../layouts/footer_v2.php';
 ?>

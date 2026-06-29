@@ -52,10 +52,15 @@ try {
 
 $usage = getPlanUsage($pdo, $userId);
 $page_title = 'Payment Result';
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
-<div class="page-title">Payment Result</div>
+<?= uiBreadcrumb([
+    ['label' => 'Billing', 'href' => BASE_URL . 'invoice_history.php'],
+    ['label' => 'Payment Result']
+]) ?>
+
+<?= uiPageHero('Payment Result') ?>
 
 <?php if ($error !== ''): ?>
     <div class="error-box"><p><?= htmlspecialchars($error) ?></p></div>
@@ -86,4 +91,4 @@ require_once __DIR__ . '/layouts/header.php';
     <a class="btn" href="<?= BASE_URL ?>index.php">Go to Dashboard</a>
 </div>
 
-<?php require_once __DIR__ . '/layouts/footer.php'; ?>
+<?php require_once __DIR__ . '/layouts/footer_v2.php'; ?>

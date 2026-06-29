@@ -90,8 +90,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errors === []) {
     }
 }
 
-include __DIR__ . '/../layouts/header.php';
+include __DIR__ . '/../layouts/header_v2.php';
 ?>
+
+<?= uiBreadcrumb([
+    ['label' => 'Dashboard', 'href' => BASE_URL . 'dashboard_main.php'],
+    ['label' => 'Create Entity']
+]) ?>
+
+<?= uiPageHero('Create Entity') ?>
 
 <style>
 .qec{max-width:600px;margin:40px auto}
@@ -436,4 +443,4 @@ function escHtml(s) {
 }
 </script>
 
-<?php include __DIR__ . '/../layouts/footer.php'; ?>
+<?php include __DIR__ . '/../layouts/footer_v2.php'; ?>

@@ -205,15 +205,24 @@ $lastValidated = date('M d, Y, g:i A');
 require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
+<?= uiBreadcrumb([
+    ['label' => 'Review', 'href' => BASE_URL . 'review/index.php'],
+    ['label' => 'Workspace']
+]) ?>
+
 <meta name="csrf-token" content="<?= $_SESSION['_csrf_token'] ?? '' ?>">
 <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/review_workspace.css?v=<?= filemtime(__DIR__ . '/../asset/css/review_workspace.css') ?>">
 
-<div class="active-info" style="display:flex;justify-content:space-between;align-items:center;">
-    <span>
-        Company: <strong><?= htmlspecialchars($companyName) ?></strong> &middot;
-        FY: <strong><?= htmlspecialchars($fyName) ?></strong> &middot;
-        Entity: <strong><?= htmlspecialchars($entityType) ?></strong>
-    </span>
+<?= uiContextCard([
+    'company' => $companyName,
+    'fy' => $fyName,
+    'entity_type' => $entityType,
+    'profile' => 0,
+    'status' => $hasReportData ? 'Reports Ready' : 'Setup Required',
+    'edit_url' => '',
+]) ?>
+
+<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
     <a class="btn btn-sm" href="<?= BASE_URL ?>assignment_home.php">&larr; Back to Assignment</a>
 </div>
 

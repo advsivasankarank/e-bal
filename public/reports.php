@@ -8,7 +8,7 @@ require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 $showSidebar = true;
 $page_title = 'Financial Statements Workspace';
-require_once __DIR__ . '/layouts/header.php';
+require_once __DIR__ . '/layouts/header_v2.php';
 
 requireFullContext();
 
@@ -151,20 +151,28 @@ if (!empty($validationResult['warnings'])) {
     $validationIssues[] = ['type' => 'warning', 'text' => count($validationResult['warnings']) . ' validation warning(s)'];
 }
 ?>
-<div class="page-title">Financial Statement Workspace</div>
 
-<div class="active-info" style="display:flex;justify-content:space-between;align-items:center;">
-    <span>
-        Company: <strong><?= htmlspecialchars($companyName) ?></strong> &middot;
-        FY: <strong><?= htmlspecialchars($fyName) ?></strong> &middot;
-        Entity: <strong><?= htmlspecialchars($fs['company_meta']['entity_type'] ?? 'N/A') ?></strong>
-    </span>
+<?= uiBreadcrumb([
+    ['label' => 'Reports', 'href' => BASE_URL . 'reports.php'],
+    ['label' => 'Dashboard']
+]) ?>
+
+<?= uiPageHero('Financial Statement Workspace') ?>
+
+<?= uiContextCard([
+    'company' => $companyName,
+    'fy' => $fyName,
+    'entity_type' => $fs['company_meta']['entity_type'] ?? '',
+    'profile' => 0,
+    'status' => $hasReportData ? 'Reports Ready' : 'Setup Required',
+    'edit_url' => '',
+]) ?>
+
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;">
     <?php if ($hasReportData): ?>
-    <span style="display:flex;gap:8px;">
-        <a class="btn" href="<?= BASE_URL ?>report_download.php?format=pdf" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;">PDF</a>
-        <a class="btn" href="<?= BASE_URL ?>report_download.php?format=word" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;background:linear-gradient(135deg,#1d4ed8,#1e40af);">Word</a>
-        <a class="btn" href="<?= BASE_URL ?>report_download.php?format=excel" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;background:linear-gradient(135deg,#15803d,#166534);">Excel</a>
-    </span>
+    <a class="btn" href="<?= BASE_URL ?>report_download.php?format=pdf" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;">PDF</a>
+    <a class="btn" href="<?= BASE_URL ?>report_download.php?format=word" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;background:linear-gradient(135deg,#1d4ed8,#1e40af);">Word</a>
+    <a class="btn" href="<?= BASE_URL ?>report_download.php?format=excel" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;background:linear-gradient(135deg,#15803d,#166534);">Excel</a>
     <?php endif; ?>
 </div>
 
@@ -743,5 +751,5 @@ if (!empty($validationResult['warnings'])) {
 
 <?php
 unset($_SESSION['success'], $_SESSION['error']);
-require_once __DIR__ . '/layouts/footer.php';
+require_once __DIR__ . '/layouts/footer_v2.php';
 ?>

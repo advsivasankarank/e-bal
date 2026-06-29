@@ -24,16 +24,21 @@ session_write_close();
 
 /* ========= BRIDGE MODE ========= */
 if ($bridgeMode) {
-    require_once __DIR__ . '/../layouts/header.php';
+    require_once __DIR__ . '/../layouts/header_v2.php';
     ?>
-    <div class="page-title">e-BAL Smart Bridge</div>
-    <div class="active-info">
-        Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
-        FY: <strong><?= htmlspecialchars($fyName) ?></strong>
-    </div>
-    <div class="card" style="margin-bottom:16px;">
-        Click the button below to trigger the Smart Bridge running on this PC. It will sync the ledger master into e-BAL.
-    </div>
+    <?= uiBreadcrumb([
+        ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+        ['label' => 'Smart Bridge Connector'],
+    ]) ?>
+
+    <?= uiPageHero('e-BAL Smart Bridge', 'Click the button below to trigger the Smart Bridge running on this PC.') ?>
+
+    <?= uiContextCard([
+        'company' => $companyName,
+        'fy' => $fyName,
+    ]) ?>
+
+    <?= uiWorkspaceStart() ?>
 
     <div class="card" style="margin-bottom:16px;">
         <strong>Status:</strong> <span id="bridgeStatus">Waiting</span><br>
@@ -146,8 +151,9 @@ if ($bridgeMode) {
                 });
         }
     </script>
+    <?= uiWorkspaceEnd() ?>
     <?php
-    require_once __DIR__ . '/../layouts/footer.php';
+    require_once __DIR__ . '/../layouts/footer_v2.php';
     exit;
 }
 
@@ -182,13 +188,22 @@ XML;
 $response = fetchFromTally($xml);
 if ($response === false) {
     $errorMessage = "Error contacting Tally.";
-    require_once __DIR__ . '/../layouts/header.php';
+    require_once __DIR__ . '/../layouts/header_v2.php';
     ?>
-    <div class="page-title">e-BAL Sync Result</div>
-    <div class="active-info">
-        Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
-        FY: <strong><?= htmlspecialchars($fyName) ?></strong>
-    </div>
+    <?= uiBreadcrumb([
+        ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+        ['label' => 'Smart Bridge Connector'],
+    ]) ?>
+
+    <?= uiPageHero('e-BAL Sync Result') ?>
+
+    <?= uiContextCard([
+        'company' => $companyName,
+        'fy' => $fyName,
+    ]) ?>
+
+    <?= uiWorkspaceStart() ?>
+
     <div class="error-box"><p><?= htmlspecialchars($errorMessage) ?></p></div>
     <div class="card">
         The live Tally bridge did not respond successfully. Check that your Tally Bridge is running, the XML interface is enabled in Tally, and the bridge URL is reachable from this machine.
@@ -196,8 +211,10 @@ if ($response === false) {
     <div style="margin-top:20px;">
         <a class="btn" href="<?= BASE_URL ?>data_console/tally_online.php">Back to Online Console</a>
     </div>
+
+    <?= uiWorkspaceEnd() ?>
     <?php
-    require_once __DIR__ . '/../layouts/footer.php';
+    require_once __DIR__ . '/../layouts/footer_v2.php';
     exit;
 }
 
@@ -222,13 +239,22 @@ $result = curl_exec($ch);
 if ($result === false) {
     $errorMessage = "Error contacting e-BAL API: " . curl_error($ch);
     curl_close($ch);
-    require_once __DIR__ . '/../layouts/header.php';
+    require_once __DIR__ . '/../layouts/header_v2.php';
     ?>
-    <div class="page-title">e-BAL Sync Result</div>
-    <div class="active-info">
-        Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
-        FY: <strong><?= htmlspecialchars($fyName) ?></strong>
-    </div>
+    <?= uiBreadcrumb([
+        ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+        ['label' => 'Smart Bridge Connector'],
+    ]) ?>
+
+    <?= uiPageHero('e-BAL Sync Result') ?>
+
+    <?= uiContextCard([
+        'company' => $companyName,
+        'fy' => $fyName,
+    ]) ?>
+
+    <?= uiWorkspaceStart() ?>
+
     <div class="error-box"><p><?= htmlspecialchars($errorMessage) ?></p></div>
     <div class="card">
         Tally returned data, but the application could not complete the ledger import. Retry once, and if it persists we should inspect the local API logs.
@@ -236,8 +262,10 @@ if ($result === false) {
     <div style="margin-top:20px;">
         <a class="btn" href="<?= BASE_URL ?>data_console/tally_online.php">Back to Online Console</a>
     </div>
+
+    <?= uiWorkspaceEnd() ?>
     <?php
-    require_once __DIR__ . '/../layouts/footer.php';
+    require_once __DIR__ . '/../layouts/footer_v2.php';
     exit;
 }
 curl_close($ch);
@@ -251,15 +279,22 @@ if (preg_match('/SUCCESS:\s*([0-9]+)\s+ledgers inserted/i', $resultText, $matche
     $ledgerCount = null;
 }
 
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
-<div class="page-title">e-BAL Sync Result</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Smart Bridge Connector'],
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($companyName) ?></strong><br>
-    FY: <strong><?= htmlspecialchars($fyName) ?></strong>
-</div>
+<?= uiPageHero('e-BAL Sync Result') ?>
+
+<?= uiContextCard([
+    'company' => $companyName,
+    'fy' => $fyName,
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <?php if ($isSuccess): ?>
     <div class="success-box">
@@ -300,4 +335,6 @@ require_once __DIR__ . '/../layouts/header.php';
     </div>
 <?php endif; ?>
 
-<?php require_once __DIR__ . '/../layouts/footer.php'; ?>
+<?= uiWorkspaceEnd() ?>
+
+<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

@@ -68,14 +68,23 @@ $internalReady = 4;
 $baseUrl = BASE_URL . 'report_download.php';
 ?>
 
+<?= uiBreadcrumb([
+    ['label' => 'Deliverables', 'href' => BASE_URL . 'deliverables/index.php'],
+    ['label' => 'Package']
+]) ?>
+
 <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/deliverables_workspace.css?v=<?= filemtime(__DIR__ . '/../asset/css/deliverables_workspace.css') ?>">
 
-<div class="active-info" style="display:flex;justify-content:space-between;align-items:center;">
-    <span>
-        Company: <strong><?= htmlspecialchars($companyName) ?></strong> &middot;
-        FY: <strong><?= htmlspecialchars($fyName) ?></strong> &middot;
-        Entity: <strong><?= htmlspecialchars($entityType) ?></strong>
-    </span>
+<?= uiContextCard([
+    'company' => $companyName,
+    'fy' => $fyName,
+    'entity_type' => $entityType,
+    'profile' => 0,
+    'status' => $deliveryStatus === 'ready' ? 'Ready for Delivery' : ucfirst($deliveryStatus),
+    'edit_url' => '',
+]) ?>
+
+<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
     <a class="btn btn-sm" href="<?= BASE_URL ?>assignment_home.php">&larr; Back to Assignment</a>
 </div>
 

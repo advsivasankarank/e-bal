@@ -4,7 +4,7 @@ $page_title = "Tally Online Console";
 require_once '../../app/context_check.php';
 require_once '../../config/database.php';
 requireFullContext();
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
@@ -41,18 +41,19 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
 }
 ?>
 
-<div class="page-title">
-    Tally Online Console
-</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Tally Online'],
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Tally Online Console', 'Follow the sequence from top to bottom. First sync the ledger master from Tally, then complete mapping, and finally fetch the trial balance.') ?>
 
-<div class="card" style="margin-bottom:20px;">
-    Follow the sequence from top to bottom. First sync the ledger master from Tally, then complete mapping, and finally fetch the trial balance for the selected FY.
-</div>
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
+
+<?= uiWorkspaceStart() ?>
 
 <?php if ((int) $tallyFetched === 1): ?>
     <div class="card" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -155,4 +156,6 @@ if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
     <button onclick="history.back()" class="btn">← Back</button>
 </div>
 
-<?php require_once __DIR__ . '/../layouts/footer.php'; ?>
+<?= uiWorkspaceEnd() ?>
+
+<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

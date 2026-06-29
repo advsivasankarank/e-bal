@@ -113,7 +113,7 @@ $pctComplete = $totalLedgers > 0 ? round(($mappedCount / $totalLedgers) * 100) :
 
 $page_title = "Mapping Workbench";
 $showSidebar = true;
-require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@14/dist/handsontable.full.min.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/handsontable-overrides.css">
@@ -324,12 +324,17 @@ require_once __DIR__ . '/../layouts/header.php';
 .override-check label { margin: 0; white-space: nowrap; font-size: 0.8rem; }
 </style>
 
-<div class="page-title">Mapping Workbench</div>
+<?= uiBreadcrumb([
+    ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
+    ['label' => 'Mapping Workbench'],
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong> &middot;
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Mapping Workbench', 'Advanced ledger mapping with split-pane view and AI recommendations.') ?>
+
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+]) ?>
 
 <?php if (!empty($_SESSION['success'])): ?>
     <div class="success-box"><p><?= htmlspecialchars($_SESSION['success']) ?></p></div>
@@ -337,6 +342,8 @@ require_once __DIR__ . '/../layouts/header.php';
 <?php if (!empty($_SESSION['error'])): ?>
     <div class="error-box"><p><?= htmlspecialchars($_SESSION['error']) ?></p></div>
 <?php endif; ?>
+
+<?= uiWorkspaceStart() ?>
 
 <!-- Progress overview -->
 <div class="mw-progress" id="progressBar">
@@ -740,7 +747,9 @@ document.getElementById('saveMwBtn').addEventListener('click', function () {
 renderList(filteredData);
 </script>
 
+<?= uiWorkspaceEnd() ?>
+
 <?php
 unset($_SESSION['success'], $_SESSION['error']);
-require_once __DIR__ . '/../layouts/footer.php';
+require_once __DIR__ . '/../layouts/footer_v2.php';
 ?>

@@ -38,45 +38,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-include __DIR__ . '/../layouts/header.php';
+include __DIR__ . '/../layouts/header_v2.php';
 ?>
 
-<div class="page-title">Select Financial Year</div>
+<?= uiBreadcrumb([
+    ['label' => 'Dashboard', 'href' => BASE_URL . 'dashboard_main.php'],
+    ['label' => 'Financial Year']
+]) ?>
 
-<div class="active-info">
-    Company: <strong><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></strong><br>
-    FY: <strong><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></strong>
-</div>
+<?= uiPageHero('Select Financial Year', 'Switch the active financial year for the current company') ?>
+
+<?= uiContextCard([
+    'company' => $_SESSION['company_name'] ?? 'Not Selected',
+    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
+    'entity_type' => '',
+    'profile' => 0,
+    'status' => '',
+    'edit_url' => '',
+]) ?>
 
 <?php if (empty($financialYears)): ?>
-    <div class="error-box">
-        <p>No financial years found. Please add financial years in the database first.</p>
-    </div>
+    <?= uiAlert('No financial years found. Please add financial years in the database first.', 'warning') ?>
 <?php endif; ?>
 
 <?php if (!empty($errors)): ?>
-    <div class="error-box">
-        <?php foreach ($errors as $error): ?>
-            <p><?= htmlspecialchars($error) ?></p>
-        <?php endforeach; ?>
-    </div>
+    <?php foreach ($errors as $error): ?>
+        <?= uiAlert($error, 'error') ?>
+    <?php endforeach; ?>
 <?php endif; ?>
 
-<form method="post">
-    <?= csrfInput() ?>
-    <div class="form-group">
-        <label>Financial Year</label>
-        <select name="fy_id" required>
-            <option value="">Select Financial Year</option>
-            <?php foreach ($financialYears as $fy): ?>
-                <option value="<?= (int) $fy['id'] ?>" <?= ((int) ($fy['id'] ?? 0) === (int) ($_SESSION['fy_id'] ?? 0)) ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($fy['fy_label']) ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
+<div class="ui-section-card" style="margin-bottom:16px;">
+    <div class="ui-section-card-header">
+        <div class="ui-section-card-title">Financial Year Selection</div>
     </div>
+    <div class="ui-section-card-body">
+        <form method="post">
+            <?= csrfInput() ?>
+            <div class="ui-field" style="margin-bottom:14px;">
+                <label class="ui-field-label">Financial Year</label>
+                <select name="fy_id" required class="ui-input">
+                    <option value="">Select Financial Year</option>
+                    <?php foreach ($financialYears as $fy): ?>
+                        <option value="<?= (int) $fy['id'] ?>" <?= ((int) ($fy['id'] ?? 0) === (int) ($_SESSION['fy_id'] ?? 0)) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($fy['fy_label']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
 
-    <button type="submit" <?= empty($financialYears) ? 'disabled' : '' ?>>Save Financial Year</button>
-</form>
+            <?= uiButton('Save Financial Year', '', 'primary', '', empty($financialYears) ? 'disabled' : '') ?>
+        </form>
+    </div>
+</div>
 
-<?php include __DIR__ . '/../layouts/footer.php'; ?>
+<?php include __DIR__ . '/../layouts/footer_v2.php'; ?>
