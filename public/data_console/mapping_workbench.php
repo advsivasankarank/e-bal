@@ -23,7 +23,14 @@ $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 
 /* Hierarchy-aware AI mapping engine */
-$hierarchyEngine = new HierarchyAIMappingEngine($pdo, (int) $company_id, $companyCategory);
+$hierarchyEngine = null;
+$pageWarning = '';
+try {
+    $hierarchyEngine = new HierarchyAIMappingEngine($pdo, (int) $company_id, $companyCategory);
+} catch (Throwable $e) {
+    error_log('Mapping Workbench: hierarchy engine init failed: ' . $e->getMessage());
+    $pageWarning = 'Hierarchy AI mapping unavailable. Basic mapping mode active.';
+}
 
 /* Check if hierarchy columns exist in tally_ledger_master */
 $hasHierarchyCols = false;
@@ -99,18 +106,25 @@ foreach ($allLedgers as $row) {
     // Run hierarchy-aware AI suggestion for unmapped/conflict ledgers
     $aiResult = null;
     $hierarchy = null;
-    if ($status !== 'Mapped') {
-        $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
-        $aiResult = $hierarchyEngine->mapLedger($row['ledger_name'], $parentGroup, $hierarchy);
-
-        // Also run the original engine for comparison
-        $legacyResult = $mappingEngine->mapLedger($row['ledger_name'], $parentGroup);
-        // Use the better suggestion (higher confidence)
-        if ($legacyResult && (!$aiResult || ($legacyResult['confidence'] ?? 0) > ($aiResult['confidence'] ?? 0))) {
-            $aiResult = $legacyResult;
+    if ($status !== 'Mapped' && $hierarchyEngine) {
+        try {
+            $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
+            $aiResult = $hierarchyEngine->mapLedger($row['ledger_name'], $parentGroup, $hierarchy);
+            // Also run the original engine for comparison
+            $legacyResult = $mappingEngine->mapLedger($row['ledger_name'], $parentGroup);
+            if ($legacyResult && (!$aiResult || ($legacyResult['confidence'] ?? 0) > ($aiResult['confidence'] ?? 0))) {
+                $aiResult = $legacyResult;
+            }
+        } catch (Throwable $e) {
+            error_log('Mapping Workbench: AI mapping failed for ' . $row['ledger_name'] . ': ' . $e->getMessage());
+            $aiResult = null;
         }
-    } else {
-        $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
+    } elseif ($hierarchyEngine) {
+        try {
+            $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
+        } catch (Throwable $e) {
+            $hierarchy = null;
+        }
     }
 
     $gridData[] = [
@@ -378,6 +392,10 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 ]) ?>
 
 <?= uiPageHero('Mapping Workbench', 'Advanced ledger mapping with split-pane view and AI recommendations.') ?>
+
+<?php if (!empty($pageWarning)): ?>
+    <?= uiAlert($pageWarning, 'warning') ?>
+<?php endif; ?>
 
 <?= uiContextCard([
     'company' => $_SESSION['company_name'] ?? 'Not Selected',

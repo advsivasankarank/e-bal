@@ -18,7 +18,14 @@ $companyStmt = $pdo->prepare("SELECT category FROM companies WHERE id = ?");
 $companyStmt->execute([$company_id]);
 $companyCategory = strtolower((string) $companyStmt->fetchColumn());
 $mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
-$hierarchyEngine = new HierarchyAIMappingEngine($pdo, (int) $company_id, $companyCategory);
+$hierarchyEngine = null;
+$pageWarning = '';
+try {
+    $hierarchyEngine = new HierarchyAIMappingEngine($pdo, (int) $company_id, $companyCategory);
+} catch (Throwable $e) {
+    error_log('Mapping Console: hierarchy engine init failed: ' . $e->getMessage());
+    $pageWarning = 'Hierarchy AI mapping unavailable. Basic mapping mode active.';
+}
 $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 
@@ -170,6 +177,10 @@ foreach ($allLedgers as $r) {
 ]) ?>
 
 <?= uiPageHero('Mapping Console', 'Only unmatched or review-required ledgers are shown here. The mapper applies company learning, global learning, keyword rules, and parent-group controls before asking for manual review.') ?>
+
+<?php if (!empty($pageWarning)): ?>
+    <?= uiAlert($pageWarning, 'warning') ?>
+<?php endif; ?>
 
 <?= uiContextCard([
     'company' => $_SESSION['company_name'] ?? 'Not Selected',
