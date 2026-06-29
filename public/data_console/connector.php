@@ -153,8 +153,12 @@ if ($bridgeMode) {
                         setElColor('tallyStatus', 'var(--muted)');
                     }
                 })
-                .catch(function() {
-                    setEl('bridgeStatus', 'Offline');
+                .catch(function(err) {
+                    var msg = err.message || String(err);
+                    if (msg.indexOf('Failed to fetch') !== -1 || msg.indexOf('NetworkError') !== -1) {
+                        msg = 'Cannot reach Smart Bridge at ' + healthUrl + '. Ensure Bridge is running on this PC and browser Private Network Access is allowed.';
+                    }
+                    setEl('bridgeStatus', 'Offline — ' + msg);
                     setElColor('bridgeStatus', 'var(--danger)');
                     setEl('tallyStatus', 'Unknown');
                     setElColor('tallyStatus', 'var(--muted)');
@@ -204,10 +208,14 @@ if ($bridgeMode) {
                 setEl('res-sync', new Date().toLocaleString());
                 if (data.ok) { pollForResult(true); }
             } catch (err) {
+                var msg = err.message || 'Bridge not reachable.';
+                if (msg.indexOf('Failed to fetch') !== -1 || msg.indexOf('NetworkError') !== -1) {
+                    msg = 'Cannot reach Smart Bridge at ' + bridgeUrl + '. Ensure Bridge is running on this PC and browser Private Network Access is allowed.';
+                }
                 setEl('bridgeStatus', 'Offline');
                 setElColor('bridgeStatus', 'var(--danger)');
                 setEl('res-status', 'Failed');
-                setEl('res-error', err.message || 'Bridge not reachable. Start the Smart Bridge app.');
+                setEl('res-error', msg);
             }
             if (btn) { btn.disabled = false; btn.textContent = 'Start Bridge Sync'; }
         }
