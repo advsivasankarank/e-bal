@@ -83,6 +83,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+
+/* ---- Load layout (header opens HTML shell, sidebar, main content area) ---- */
+require_once __DIR__ . '/layouts/header_v2.php';
+
 ?>
 
 <?= uiBreadcrumb([
@@ -165,4 +169,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <?= uiWorkspaceEnd() ?>
 
-<?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>
+<?php require_once __DIR__ . '/layouts/footer_v2.php'; ?>
