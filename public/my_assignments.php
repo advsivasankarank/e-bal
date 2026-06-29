@@ -46,7 +46,7 @@ if ($effectiveOwner > 0) {
             COALESCE(ws.verified, 0) AS verified,
             ws.updated_at
         FROM companies c
-        INNER JOIN financial_years fy ON fy.company_id = c.id
+        LEFT JOIN financial_years fy ON fy.company_id = c.id
         LEFT JOIN workflow_status ws ON ws.company_id = c.id AND ws.fy_id = fy.id
         WHERE c.owner_user_id = ?
         ORDER BY c.name ASC, fy.fy_start DESC
