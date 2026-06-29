@@ -25,6 +25,14 @@ require_once '../../config/app.php';
 require_once '../../app/helpers/security_helper.php';
 
 $page_title = "Tally Connect";
+
+/* ---- Resolve Bridge URL from configuration ---- */
+$bridgeUrl = defined('TALLY_BRIDGE_URL') ? trim((string) TALLY_BRIDGE_URL) : '';
+if ($bridgeUrl === '') {
+    $bridgeUrl = 'http://127.0.0.1:9123';
+}
+$bridgeUrl = rtrim($bridgeUrl, '/');
+
 require_once __DIR__ . '/../layouts/header_v2.php';
 
 $company_id = $_SESSION['company_id'];

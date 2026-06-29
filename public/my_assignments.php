@@ -6,14 +6,17 @@
  * Context must be established before reaching this page.
  */
 $page_title = 'My Assignments';
+require_once __DIR__ . '/../app/context_check.php';
 require_once __DIR__ . '/layouts/header_v2.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 
-/* ---- Resolve owner ---- */
-$v2UserId  = (int) ($_SESSION['user_id'] ?? 0);
-$v2OwnerId = $v2UserId > 0 ? getOwnerUserId($pdo, $v2UserId) : 0;
-$effectiveOwner = $v2OwnerId > 0 ? $v2OwnerId : $v2UserId;
+/* ---- Verify user is authenticated ---- */
+$v2UserId = (int) ($_SESSION['user_id'] ?? 0);
+if ($v2UserId <= 0) {
+    header('Location: ' . BASE_URL . 'login.php');
+    exit;
+}
 
 /* ---- Check if context is established ---- */
 $activeCompanyId = (int) ($_SESSION['company_id'] ?? 0);
@@ -29,8 +32,8 @@ if ($activeFyId <= 0) {
     exit;
 }
 
-/* ---- Load assignment context ---- */
-$companyStmt = $pdo->prepare("SELECT id, name, category, pan, cin, llp_code, profile_completeness FROM companies WHERE id = ?");
+/* ---- Verify company exists and FY belongs to company ---- */
+$companyStmt = $pdo->prepare("SELECT id, name, category, pan, cin, llp_code, profile_completeness, owner_user_id FROM companies WHERE id = ?");
 $companyStmt->execute([$activeCompanyId]);
 $company = $companyStmt->fetch(PDO::FETCH_ASSOC);
 
@@ -39,6 +42,18 @@ $fyStmt->execute([$activeFyId, $activeCompanyId]);
 $fy = $fyStmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$company || !$fy) {
+    header('Location: ' . BASE_URL . 'dashboard_company.php');
+    exit;
+}
+
+/* ---- Verify user owns the company (unless superadmin) ---- */
+$v2OwnerId = $v2UserId > 0 ? getOwnerUserId($pdo, $v2UserId) : 0;
+$effectiveOwner = $v2OwnerId > 0 ? $v2OwnerId : $v2UserId;
+$isSuperadmin = ($company['owner_user_id'] ?? 0) === 0 && isSuperAdmin($pdo, $v2UserId);
+
+if (!$isSuperadmin && (int) ($company['owner_user_id'] ?? 0) !== $effectiveOwner && (int) ($company['owner_user_id'] ?? 0) !== $v2UserId) {
+    /* Unauthorized — clear context and redirect */
+    unset($_SESSION['company_id'], $_SESSION['company_name'], $_SESSION['fy_id'], $_SESSION['fy_name']);
     header('Location: ' . BASE_URL . 'dashboard_company.php');
     exit;
 }

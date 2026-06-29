@@ -86,10 +86,12 @@ if ($format === 'pdf') {
         $dompdf->render();
         $dompdf->stream(buildReportExportFilename($companyName, $fyName, 'pdf'), ['Attachment' => true]);
     } else {
+        appLog('WARN', 'Dompdf not available, using fallback PDF export', ['company_id' => $company_id, 'fy_id' => $fy_id]);
         $pdfPath = createFallbackPdf($htmlDocument, $title);
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'pdf') . '"');
         header('Content-Length: ' . filesize($pdfPath));
+        header('X-eBAL-Export-Notice: Advanced export library unavailable. Basic export format generated.');
         readfile($pdfPath);
         unlink($pdfPath);
     }
@@ -97,26 +99,36 @@ if ($format === 'pdf') {
 }
 
 if (in_array($format, ['word', 'docx'], true)) {
-    $docxPath = function_exists('exportFinancialStatementsToDocx')
+    $useAdvancedDocx = function_exists('exportFinancialStatementsToDocx');
+    $docxPath = $useAdvancedDocx
         ? exportFinancialStatementsToDocx($fs, $companyName, $fyName)
         : createFallbackDocx($htmlDocument);
     header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document; charset=UTF-8');
     header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'docx') . '"');
     header('Cache-Control: max-age=0');
     header('Content-Length: ' . filesize($docxPath));
+    if (!$useAdvancedDocx) {
+        appLog('WARN', 'PhpWord not available, using fallback DOCX export', ['company_id' => $company_id, 'fy_id' => $fy_id]);
+        header('X-eBAL-Export-Notice: Advanced export library unavailable. Basic export format generated.');
+    }
     readfile($docxPath);
     unlink($docxPath);
     exit;
 }
 
 if (in_array($format, ['excel', 'xlsx'], true)) {
-    $xlsxPath = function_exists('exportFinancialStatementsToXlsx')
+    $useAdvancedXlsx = function_exists('exportFinancialStatementsToXlsx');
+    $xlsxPath = $useAdvancedXlsx
         ? exportFinancialStatementsToXlsx($fs, $companyName, $fyName)
         : createFallbackXlsx($htmlDocument);
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=UTF-8');
     header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'xlsx') . '"');
     header('Cache-Control: max-age=0');
     header('Content-Length: ' . filesize($xlsxPath));
+    if (!$useAdvancedXlsx) {
+        appLog('WARN', 'PhpSpreadsheet not available, using fallback XLSX export', ['company_id' => $company_id, 'fy_id' => $fy_id]);
+        header('X-eBAL-Export-Notice: Advanced export library unavailable. Basic export format generated.');
+    }
     readfile($xlsxPath);
     unlink($xlsxPath);
     exit;
