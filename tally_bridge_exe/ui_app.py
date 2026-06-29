@@ -1420,11 +1420,11 @@ class SmartBridgeUI:
             server_version = "eBAL-Bridge/%s" % BRIDGE_VERSION
 
             def do_OPTIONS(self):
-                self._cors()
                 self.send_response(204)
                 self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Bridge-Token, Authorization")
                 self.send_header("Access-Control-Max-Age", "600")
+                self._cors()
                 self.end_headers()
 
             def do_GET(self):
