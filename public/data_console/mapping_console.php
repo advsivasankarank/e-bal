@@ -109,13 +109,27 @@ foreach ($allLedgers as &$row) {
     }
 
     /* Run hierarchy-aware AI for unmapped ledgers */
-    $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
-    $aiResult = $hierarchyEngine->mapLedger($row['ledger_name'], $parentGroup, $hierarchy);
+    $hierarchy = null;
+    $aiResult = null;
+    if ($hierarchyEngine) {
+        try {
+            $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
+            $aiResult = $hierarchyEngine->mapLedger($row['ledger_name'], $parentGroup, $hierarchy);
+        } catch (Throwable $e) {
+            error_log('Mapping Console: AI mapping failed for ledger ' . $row['ledger_name'] . ': ' . $e->getMessage());
+            $hierarchy = null;
+            $aiResult = null;
+        }
+    }
 
     /* Also run legacy engine for comparison */
-    $legacyResult = $mappingEngine->mapLedger($row['ledger_name'], $parentGroup);
-    if ($legacyResult && (!$aiResult || ($legacyResult['confidence'] ?? 0) > ($aiResult['confidence'] ?? 0))) {
-        $aiResult = $legacyResult;
+    try {
+        $legacyResult = $mappingEngine->mapLedger($row['ledger_name'], $parentGroup);
+        if ($legacyResult && (!$aiResult || ($legacyResult['confidence'] ?? 0) > ($aiResult['confidence'] ?? 0))) {
+            $aiResult = $legacyResult;
+        }
+    } catch (Throwable $e) {
+        $legacyResult = null;
     }
 
     $suggestedCode = $aiResult ? ($aiResult['suggested_head'] ?? $aiResult['head'] ?? '') : '';
