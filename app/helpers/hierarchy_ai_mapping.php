@@ -497,6 +497,43 @@ class HierarchyAIMappingEngine
     }
 
     /**
+     * Build schedule code to label mapping for display purposes.
+     */
+    private function buildLabels(): array
+    {
+        return [
+            'PPE' => 'Property, Plant and Equipment',
+            'CCE' => 'Cash and Cash Equivalents',
+            'TRADE_RECEIVABLES' => 'Trade Receivables',
+            'TRADE_PAYABLES' => 'Trade Payables',
+            'OTHER_CURRENT_LIABILITIES' => 'Other Current Liabilities',
+            'SHORT_TERM_PROVISIONS' => 'Short-Term Provisions',
+            'SHARE_CAPITAL' => 'Share Capital',
+            'RESERVES' => 'Reserves and Surplus',
+            'LT_BORROWINGS' => 'Long-Term Borrowings',
+            'ST_BORROWINGS' => 'Short-Term Borrowings',
+            'INVENTORY' => 'Inventories',
+            'OTHER_CURRENT_ASSETS' => 'Other Current Assets',
+            'REVENUE' => 'Revenue from Operations',
+            'OTHER_INCOME' => 'Other Income',
+            'EMPLOYEE_COST' => 'Employee Benefits Expense',
+            'FINANCE_COST' => 'Finance Costs',
+            'DEPRECIATION' => 'Depreciation and Amortisation',
+            'OTHER_EXPENSES' => 'Other Expenses',
+            'MATERIALS' => 'Cost of Materials Consumed',
+            'CWIP' => 'Capital Work in Progress',
+            'INTANGIBLE_ASSETS' => 'Intangible Assets',
+            'NC_INVESTMENTS' => 'Non-Current Investments',
+            'NC_LOANS' => 'Non-Current Loans and Advances',
+            'DEFERRED_TAX' => 'Deferred Tax Asset/Liability',
+            'NC_OTHER_ASSETS' => 'Other Non-Current Assets',
+            'BANK_BALANCES' => 'Other Bank Balances',
+            'CURRENT_INVESTMENTS' => 'Current Investments',
+            'LOANS_CURRENT' => 'Short-Term Loans and Advances',
+        ];
+    }
+
+    /**
      * Record an accepted AI suggestion in the audit trail.
      */
     public function recordAcceptance(

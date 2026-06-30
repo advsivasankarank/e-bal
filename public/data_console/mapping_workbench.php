@@ -6,6 +6,7 @@ require_once '../../app/engines/ai_mapping_engine.php';
 require_once '../../app/helpers/mapping_ai_helper.php';
 require_once '../../app/helpers/parent_group_validation_helper.php';
 require_once '../../app/helpers/hierarchy_ai_mapping.php';
+require_once '../../app/helpers/bulk_mapping_helper.php';
 
 requireFullContext();
 
@@ -22,7 +23,6 @@ $mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
 $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 
-/* Hierarchy-aware AI mapping engine */
 $hierarchyEngine = null;
 $pageWarning = '';
 try {
@@ -32,26 +32,28 @@ try {
     $pageWarning = 'Hierarchy AI mapping unavailable. Basic mapping mode active.';
 }
 
-/* Check if hierarchy columns exist in tally_ledger_master */
+/* Previous FY info */
+$prevFy = getPreviousFyForCompany($pdo, (int) $company_id, (int) $fy_id);
+
+/* Check hierarchy columns */
 $hasHierarchyCols = false;
 try {
     $chkStmt = $pdo->query("SHOW COLUMNS FROM tally_ledger_master LIKE 'tally_group_path'");
     $hasHierarchyCols = $chkStmt->rowCount() > 0;
-} catch (Throwable $e) { /* table may not exist */ }
+} catch (Throwable $e) { /* ignore */ }
 
+/* Load all ledgers with mapping, amounts, and suggestions */
 $ledgerStmt = $pdo->prepare("
     SELECT
-        tl.ledger_name,
-        COALESCE(tlm.parent_group, tl.parent_group) AS parent_group,
+        t.ledger_name,
+        COALESCE(tlm.parent_group, t.parent_group) AS parent_group,
         " . ($hasHierarchyCols ? "
         COALESCE(tlm.primary_group, '') AS primary_group,
         COALESCE(tlm.tally_group_path, '') AS tally_group_path,
-        COALESCE(tlm.tally_group_depth, 0) AS tally_group_depth,
         COALESCE(tlm.tally_root_type, '') AS tally_root_type,
         " : "
         '' AS primary_group,
         '' AS tally_group_path,
-        0 AS tally_group_depth,
         '' AS tally_root_type,
         ") . "
         lm.schedule_code AS mapped_code,
@@ -59,339 +61,292 @@ $ledgerStmt = $pdo->prepare("
         lm.confidence_score,
         lm.mapping_reason,
         lm.override_parent_group
-    FROM tally_ledgers tl
-    LEFT JOIN tally_ledger_master tlm ON tlm.company_id = tl.company_id AND tlm.ledger_name = tl.ledger_name
-    LEFT JOIN ledger_mapping lm
-        ON lm.company_id = tl.company_id
-        AND lm.ledger_name = tl.ledger_name
-    WHERE tl.company_id = ? AND tl.fy_id = ?
-    ORDER BY tl.ledger_name
+    FROM tally_ledger_master t
+    LEFT JOIN tally_ledger_master tlm ON tlm.company_id = t.company_id AND tlm.ledger_name = t.parent_group
+    LEFT JOIN ledger_mapping lm ON lm.company_id = t.company_id AND lm.ledger_name = t.ledger_name
+    WHERE t.company_id = ?
+    ORDER BY t.ledger_name
 ");
-$ledgerStmt->execute([$company_id, $fy_id]);
+$ledgerStmt->execute([$company_id]);
 $allLedgers = $ledgerStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$natureDisplay = [
-    'asset' => 'Asset',
-    'liability' => 'Liability',
-    'income' => 'Income',
-    'expense' => 'Expense',
-];
+/* Load trial balance amounts */
+$tbStmt = $pdo->prepare("
+    SELECT ledger_name,
+           opening_amount,
+           amount AS closing_amount,
+           dr_cr,
+           parent_group
+    FROM tally_ledgers
+    WHERE company_id = ? AND fy_id = ?
+");
+$tbStmt->execute([$company_id, $fy_id]);
+$tbData = [];
+while ($row = $tbStmt->fetch(PDO::FETCH_ASSOC)) {
+    $tbData[$row['ledger_name']] = $row;
+}
 
-$natureColours = [
-    'asset'    => ['bg' => '#e3f2fd', 'text' => '#1565c0'],
-    'liability' => ['bg' => '#fce4ec', 'text' => '#c62828'],
-    'income'   => ['bg' => '#e8f5e9', 'text' => '#2e7d32'],
-    'expense'  => ['bg' => '#fff3e0', 'text' => '#e65100'],
-];
+/* Compute debits/credits from voucher_entries */
+$veStmt = $pdo->prepare("
+    SELECT ledger_name,
+           SUM(CASE WHEN dr_cr = 'DR' THEN amount ELSE 0 END) AS total_dr,
+           SUM(CASE WHEN dr_cr = 'CR' THEN amount ELSE 0 END) AS total_cr
+    FROM voucher_entries
+    WHERE company_id = ? AND fy_id = ?
+    GROUP BY ledger_name
+");
+$veData = [];
+try {
+    $veStmt->execute([$company_id, $fy_id]);
+    while ($row = $veStmt->fetch(PDO::FETCH_ASSOC)) {
+        $veData[$row['ledger_name']] = $row;
+    }
+} catch (Throwable $e) {
+    /* voucher_entries may not exist */
+}
+
+/* Build grid data with suggestions */
+$previousFyMappings = $prevFy ? loadPreviousFyMappings($pdo, (int) $company_id, $prevFy['id']) : [];
+$globalMaster = loadGlobalMappingMaster($pdo);
+$keywordRules = getEnhancedKeywordRules();
+
+/* Current mappings lookup */
+$currentMappings = [];
+foreach ($allLedgers as $row) {
+    if (!empty($row['mapped_code'])) {
+        $currentMappings[$row['ledger_name']] = ['schedule_code' => $row['mapped_code']];
+    }
+}
 
 $gridData = [];
-$conflictCount = 0;
+$stats = ['total' => 0, 'mapped' => 0, 'unmapped' => 0, 'auto_suggested' => 0, 'high_confidence' => 0, 'manual_review' => 0];
+
 foreach ($allLedgers as $row) {
-    $parentGroup = (string) ($row['parent_group'] ?? '');
-    $mapped = (string) ($row['mapped_code'] ?? '');
-    $pgNature = normalizeParentGroupNature($parentGroup);
-    $colour = $pgNature ? ($natureColours[$pgNature] ?? ['bg' => '#f5f5f5', 'text' => '#616161']) : ['bg' => '#f5f5f5', 'text' => '#616161'];
+    $name = $row['ledger_name'];
+    $group = $row['parent_group'] ?? '';
+    $mappedCode = $row['mapped_code'] ?? '';
+    $isMapped = $mappedCode !== '';
 
-    $conflict = false;
-    if ($mapped !== '' && $pgNature) {
-        $scNature = normalizeScheduleCodeNature($mapped);
-        if ($scNature && $pgNature !== $scNature) {
-            $conflict = true;
-            $conflictCount++;
-        }
-    }
+    $tb = $tbData[$name] ?? null;
+    $ve = $veData[$name] ?? null;
 
-    $status = $mapped !== '' ? ($conflict ? 'Conflict' : 'Mapped') : 'Unmapped';
+    $opening = $tb ? (float) $tb['opening_amount'] : 0;
+    $closing = $tb ? (float) $tb['closing_amount'] : 0;
+    $drcr = $tb ? ($tb['dr_cr'] ?? '') : '';
+    $totalDr = $ve ? (float) $ve['total_dr'] : 0;
+    $totalCr = $ve ? (float) $ve['total_cr'] : 0;
 
-    // Run hierarchy-aware AI suggestion for unmapped/conflict ledgers
-    $aiResult = null;
-    $hierarchy = null;
-    if ($status !== 'Mapped' && $hierarchyEngine) {
-        try {
-            $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
-            $aiResult = $hierarchyEngine->mapLedger($row['ledger_name'], $parentGroup, $hierarchy);
-            // Also run the original engine for comparison
-            $legacyResult = $mappingEngine->mapLedger($row['ledger_name'], $parentGroup);
-            if ($legacyResult && (!$aiResult || ($legacyResult['confidence'] ?? 0) > ($aiResult['confidence'] ?? 0))) {
-                $aiResult = $legacyResult;
-            }
-        } catch (Throwable $e) {
-            error_log('Mapping Workbench: AI mapping failed for ' . $row['ledger_name'] . ': ' . $e->getMessage());
-            $aiResult = null;
-        }
-    } elseif ($hierarchyEngine) {
-        try {
-            $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
-        } catch (Throwable $e) {
-            $hierarchy = null;
-        }
-    }
+    /* Get suggestion */
+    $suggestion = suggestBulkMapping(
+        $name, $group, $currentMappings,
+        $previousFyMappings, $globalMaster, $keywordRules,
+        $hierarchyEngine, $mappingEngine
+    );
+
+    $scheduleLabel = $mappedCode !== '' ? $mappingEngine->getLabel($mappedCode) : '';
+    $suggestedLabel = $suggestion['schedule_code'] !== '' ? $mappingEngine->getLabel($suggestion['schedule_code']) : '';
+
+    $status = $isMapped ? 'Mapped' : 'Unmapped';
 
     $gridData[] = [
-        'ledger_name' => $row['ledger_name'],
-        'parent_group' => $parentGroup ?: '-',
-        'primary_group' => $row['primary_group'] ?? '',
-        'tally_group_path' => $row['tally_group_path'] ?? '',
-        'tally_group_depth' => (int) ($row['tally_group_depth'] ?? 0),
-        'tally_root_type' => $row['tally_root_type'] ?? '',
-        'pg_nature' => $pgNature,
-        'pg_nature_label' => $pgNature ? ($natureDisplay[$pgNature] ?? '') : '',
+        'id' => $name,
+        'ledger_name' => $name,
+        'parent_group' => $group,
+        'opening' => $opening,
+        'total_dr' => $totalDr,
+        'total_cr' => $totalCr,
+        'closing' => $closing,
+        'drcr' => $drcr,
+        'current_mapping' => $mappedCode,
+        'current_label' => $scheduleLabel,
+        'suggested' => $suggestion['schedule_code'],
+        'suggested_label' => $suggestedLabel,
+        'suggestion_source' => $suggestion['source'],
+        'confidence' => $suggestion['confidence'],
+        'final_mapping' => $mappedCode,
         'status' => $status,
-        'schedule_code' => $mapped,
-        'schedule_label' => $mapped !== '' ? $mappingEngine->getLabel($mapped) : '',
-        'override_parent_group' => (int) ($row['override_parent_group'] ?? 0),
-        '_colour' => $colour,
-        '_conflict' => $conflict,
-        'ai_suggestion' => $aiResult ? $aiResult['suggested_head'] ?? $aiResult['head'] ?? null : null,
-        'ai_confidence' => $aiResult ? (int) ($aiResult['confidence'] ?? 0) : null,
-        'ai_reason' => $aiResult ? $aiResult['reason'] ?? '' : null,
-        'ai_method' => $aiResult ? ($aiResult['source_basis'][0] ?? $aiResult['method'] ?? 'rule') : null,
-        'ai_risk' => $aiResult ? ($aiResult['risk'] ?? 'Low') : '',
-        'ai_alternatives' => $aiResult ? ($aiResult['alternative_heads'] ?? []) : [],
+        'remarks' => '',
     ];
+
+    $stats['total']++;
+    if ($isMapped) {
+        $stats['mapped']++;
+    } else {
+        $stats['unmapped']++;
+        if ($suggestion['confidence'] >= 90) {
+            $stats['auto_suggested']++;
+            $stats['high_confidence']++;
+        } elseif ($suggestion['confidence'] >= 70) {
+            $stats['auto_suggested']++;
+        } else {
+            $stats['manual_review']++;
+        }
+    }
 }
 
-$mappedCount = 0;
-foreach ($gridData as $item) {
-    if ($item['status'] === 'Mapped') $mappedCount++;
-}
+$pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
+/* Mapping options as JSON for JS */
 $mappingOptionsJson = [];
 foreach ($mappingOptions as $code => $label) {
-    $mappingOptionsJson[] = ['id' => $code, 'label' => $label];
+    $mappingOptionsJson[] = ['id' => $code, 'label' => $label . ' (' . $code . ')', 'code' => $code, 'fullLabel' => $label];
 }
 
-$totalLedgers = count($gridData);
-$pctComplete = $totalLedgers > 0 ? round(($mappedCount / $totalLedgers) * 100) : 0;
-
-$page_title = "Mapping Workbench";
+$page_title = "Ledger Mapping Workbench";
 $showSidebar = true;
 require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@14/dist/handsontable.full.min.css">
-<link rel="stylesheet" href="<?= BASE_URL ?>asset/css/handsontable-overrides.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tabulator-tables@6/dist/css/tabulator_midnight.min.css">
 <style>
-.mw-progress {
-    background: var(--panel-strong);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 18px 20px;
-    margin-bottom: 20px;
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    align-items: center;
-    gap: 24px;
-}
-.mw-progress .big-stat { font-size: 2rem; font-weight: 700; color: var(--brand); line-height: 1; }
-.mw-progress .big-stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
-.mw-progress .track { flex: 1; }
-.mw-progress .track .bar { height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; }
-.mw-progress .track .bar .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--warning), var(--brand), var(--success)); }
-.mw-progress .track .labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
-.mw-progress .stats { display: flex; gap: 20px; font-size: 0.85rem; }
-.mw-progress .stats span { display: flex; align-items: center; gap: 6px; }
-
-.mw-toolbar {
-    display: flex;
-    align-items: center;
+/* Tabulator theme overrides to match e-BAL design */
+.tabulator { border: none !important; font-family: inherit !important; }
+.tabulator .tabulator-header { background: var(--panel-strong) !important; border-bottom: 1px solid var(--border) !important; }
+.tabulator .tabulator-header .tabulator-col { background: var(--panel-strong) !important; border-color: var(--border) !important; }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 6px 8px !important; }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content .tabulator-col-title { font-size: 0.78rem !important; font-weight: 600 !important; color: var(--muted) !important; text-transform: uppercase !important; }
+.tabulator .tabulator-tableholder { background: var(--panel-strong) !important; }
+.tabulator .tabulator-row { background: var(--panel-strong) !important; border-color: var(--border) !important; min-height: 34px !important; }
+.tabulator .tabulator-row .tabulator-cell { border-color: var(--border) !important; padding: 4px 8px !important; font-size: 0.82rem !important; }
+.tabulator .tabulator-row:hover { background: #f1f5f9 !important; }
+.tabulator .tabulator-row.tabulator-selected { background: #e8f0fe !important; }
+.tabulator .tabulator-row .tabulator-cell.tabulator-frozen { background: var(--panel-strong) !important; z-index: 1 !important; }
+.tabulator-row.row-unmapped { background: #fff8e1 !important; }
+.tabulator-row.row-lowconf { background: #fff3e0 !important; }
+.tabulator .tabulator-footer { background: var(--panel-strong) !important; border-top: 1px solid var(--border) !important; }
+.tabulator .tabulator-footer .tabulator-page { color: var(--text) !important; border-color: var(--border) !important; }
+.tabulator .tabulator-footer .tabulator-page.active { background: var(--brand) !important; color: #fff !important; }
+.tabulator-row .tabulator-cell .tabulator-select-editor select { width: 100% !important; border: 1px solid var(--border-strong) !important; border-radius: 4px !important; padding: 2px 4px !important; font-size: 0.8rem !important; background: var(--panel-strong) !important; color: var(--text) !important; }
+</style>
+<style>
+.wb-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 12px;
     margin-bottom: 16px;
+}
+.wb-card {
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+    cursor: default;
+    transition: border-color 0.15s;
+}
+.wb-card:hover { border-color: var(--brand); }
+.wb-card .num { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+.wb-card .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+.wb-card.total .num { color: var(--text); }
+.wb-card.mapped .num { color: var(--success); }
+.wb-card.unmapped .num { color: var(--danger); }
+.wb-card.suggested .num { color: var(--brand); }
+.wb-card.high .num { color: #2e7d32; }
+.wb-card.review .num { color: var(--warning); }
+.wb-card.unsaved .num { color: #c62828; }
+
+.wb-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
     flex-wrap: wrap;
 }
-.mw-toolbar .search-box {
+.wb-toolbar .search-box {
     position: relative;
     flex: 1;
-    min-width: 200px;
+    min-width: 220px;
 }
-.mw-toolbar .search-box input {
+.wb-toolbar .search-box input {
     width: 100%;
-    padding: 9px 12px 9px 34px;
+    padding: 8px 12px 8px 32px;
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     font-size: 0.85rem;
     background: var(--panel-strong);
 }
-.mw-toolbar .search-box .icon {
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--muted);
-    font-size: 0.9rem;
+.wb-toolbar .search-box .s-icon {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 0.85rem; pointer-events: none;
 }
-.mw-toolbar .filter-group { display: flex; gap: 8px; }
-.mw-toolbar .filter-select {
-    padding: 9px 12px;
+
+.filter-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.filter-chip {
+    padding: 6px 12px;
     border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    font-size: 0.85rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
     background: var(--panel-strong);
-    width: auto;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    color: var(--text);
 }
-.mw-toolbar .btn { padding: 8px 16px; min-height: 38px; font-size: 0.85rem; }
+.filter-chip:hover { border-color: var(--brand); color: var(--brand); }
+.filter-chip.active { background: var(--brand); color: #fff; border-color: var(--brand); }
 
-/* Hierarchy card */
-.hierarchy-card { background: var(--panel-strong); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
-.hierarchy-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.hierarchy-label { font-size: 0.85rem; font-weight: 600; color: var(--text); }
-.hierarchy-path { display: flex; flex-wrap: wrap; align-items: center; gap: 0; font-size: 0.82rem; }
-.hierarchy-item { color: var(--brand); font-weight: 500; }
-.hierarchy-item.current { font-weight: 700; color: var(--text); }
-.hierarchy-sep { color: var(--muted); margin: 0 4px; }
-
-.split-pane {
-    display: grid;
-    grid-template-columns: 1fr 360px;
-    gap: 16px;
-    min-height: 520px;
-}
-
-/* ---- Ledger list (left) ---- */
-.ledger-list {
+.wb-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    box-shadow: var(--shadow-sm);
+}
+.wb-actions .btn { min-height: 34px; padding: 0 14px; font-size: 0.8rem; }
+.wb-actions .sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+.wb-actions .status-text { font-size: 0.8rem; color: var(--muted); margin-left: auto; }
+
+.hot-container {
+    border: 1px solid var(--border);
+    border-radius: 10px;
     overflow: hidden;
     box-shadow: var(--shadow-sm);
-    display: flex;
-    flex-direction: column;
 }
-.ledger-list .list-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
-}
-.ledger-list .list-header h3 { font-size: 0.95rem; margin: 0; }
-.ledger-list .list-header .count { font-size: 0.8rem; color: var(--muted); }
-.ledger-list .list-body { flex: 1; overflow-y: auto; max-height: 600px; }
-.ledger-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.1s;
-}
-.ledger-row:hover { background: #f8fafc; }
-.ledger-row.selected { background: var(--brand); color: #fff; }
-.ledger-row.selected .ledger-parent { color: rgba(255,255,255,0.7); }
-.ledger-row.selected .status-dot.mapped { background: #fff; }
-.ledger-row.selected .status-dot.conflict { background: #fff; }
-.ledger-row.selected .status-dot.pending { background: rgba(255,255,255,0.7); }
-.ledger-row .ledger-name { font-weight: 500; flex: 1; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ledger-row .ledger-parent { font-size: 0.75rem; color: var(--muted); width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
-.ledger-row .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.status-dot.mapped { background: var(--success); }
-.status-dot.conflict { background: var(--danger); }
-.status-dot.pending { background: var(--warning); }
 
-/* ---- Detail panel (right) ---- */
-.detail-panel {
-    background: var(--panel-strong);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px;
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    flex-direction: column;
-    gap: 0;
+#hotSearch {
+    display: inline-block;
+    min-width: 140px;
 }
-.detail-panel .panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: start;
-    margin-bottom: 14px;
-}
-.detail-panel .panel-header h3 { font-size: 1.1rem; margin: 0; }
-.detail-panel .panel-header .pg { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
-.detail-panel .panel-header .badge {
-    font-size: 0.75rem;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-weight: 600;
-    white-space: nowrap;
-}
-.detail-panel .panel-header .badge.mapped { background: #e8f5e9; color: var(--success); }
-.detail-panel .panel-header .badge.conflict { background: #fef2f2; color: var(--danger); }
-.detail-panel .panel-header .badge.pending { background: #fffbeb; color: var(--warning); }
 
-.conflict-banner {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: var(--radius-sm);
-    padding: 12px 14px;
-    margin-bottom: 14px;
+.toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    color: #fff;
     font-size: 0.85rem;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    z-index: 9999;
+    animation: fadeInUp 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
-.conflict-banner .resolve-btn { margin-left: auto; flex-shrink: 0; }
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+.toast.info { background: var(--brand); }
 
-.ai-card {
-    background: linear-gradient(135deg, #f0f9ff, #e9f4fb);
-    border: 1px solid #b7d6f0;
-    border-radius: var(--radius-sm);
-    padding: 14px;
-    margin-bottom: 14px;
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
-.ai-card .ai-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.ai-card .ai-header .ai-label { font-weight: 600; font-size: 0.9rem; }
-.ai-card .ai-conf { display: flex; align-items: center; gap: 8px; }
-.ai-card .ai-conf .conf-bar { flex: 1; height: 6px; background: #dbeafe; border-radius: 999px; max-width: 120px; }
-.ai-card .ai-conf .conf-bar .fill { height: 100%; border-radius: 999px; background: var(--brand); }
-.ai-card .ai-reason { font-size: 0.8rem; color: var(--muted); margin-top: 6px; }
-.ai-card .ai-actions { display: flex; gap: 8px; margin-top: 10px; }
-.ai-card .ai-actions .btn { min-height: 32px; padding: 0 12px; font-size: 0.8rem; }
 
-.detail-row { margin-bottom: 12px; }
-.detail-row label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-.detail-row select, .detail-row input { width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 8px; font-size: 0.85rem; }
-.detail-row input[readonly] { background: var(--bg); }
-
-.detail-actions { display: flex; gap: 10px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border); }
-.detail-actions .btn { flex: 1; min-height: 38px; font-size: 0.85rem; }
-
-/* ---- Batch bar ---- */
-.batch-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: var(--panel-strong);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    margin-top: 16px;
-    box-shadow: var(--shadow-sm);
-}
-.batch-bar .selected-count { font-size: 0.85rem; font-weight: 600; margin: 0; }
-.batch-bar .btn { min-height: 34px; padding: 0 14px; font-size: 0.8rem; }
-
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 48px 20px;
-    color: var(--muted);
-    text-align: center;
-}
-.empty-state .empty-icon { font-size: 2rem; margin-bottom: 8px; opacity: 0.4; }
-
-.override-check { display: flex; align-items: center; gap: 8px; }
-.override-check input { width: auto; }
-.override-check label { margin: 0; white-space: nowrap; font-size: 0.8rem; }
+.hidden-input { display: none; }
 </style>
 
 <?= uiBreadcrumb([
     ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
-    ['label' => 'Mapping Workbench'],
+    ['label' => 'Ledger Mapping Workbench'],
 ]) ?>
 
-<?= uiPageHero('Mapping Workbench', 'Advanced ledger mapping with split-pane view and AI recommendations.') ?>
+<?= uiPageHero('Ledger Mapping Workbench', 'Excel-like workspace for bulk ledger mapping. Edit cells inline, use keyboard navigation, and save only changed rows.') ?>
 
 <?php if (!empty($pageWarning)): ?>
     <?= uiAlert($pageWarning, 'warning') ?>
@@ -411,478 +366,516 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
 <?= uiWorkspaceStart() ?>
 
-<!-- Progress overview -->
-<div class="mw-progress" id="progressBar">
-    <div>
-        <div class="big-stat"><?= $pctComplete ?>%</div>
-        <div class="big-stat-label">Complete</div>
-    </div>
-    <div class="track">
-        <div class="bar"><div class="fill" style="width:<?= $pctComplete ?>%"></div></div>
-        <div class="labels">
-            <span>0%</span>
-            <span><?= $mappedCount ?> Mapped</span>
-            <span><?= $totalLedgers - $mappedCount ?> Remaining</span>
-            <span>100%</span>
-        </div>
-    </div>
-    <div class="stats" id="progressStats">
-        <span><span style="color:var(--success)">&#10003;</span> <strong><?= $mappedCount ?></strong> Mapped</span>
-        <span><span style="color:var(--danger)">&#9888;</span> <strong><?= $conflictCount ?></strong> Conflicts</span>
-        <span><span style="color:var(--warning)">&#9203;</span> <strong><?= $totalLedgers - $mappedCount ?></strong> Pending</span>
-    </div>
+<!-- Summary Cards -->
+<div class="wb-summary" id="wbSummary">
+    <div class="wb-card total"><div class="num" id="statTotal"><?= $stats['total'] ?></div><div class="lbl">Total Ledgers</div></div>
+    <div class="wb-card mapped"><div class="num" id="statMapped"><?= $stats['mapped'] ?></div><div class="lbl">Mapped</div></div>
+    <div class="wb-card unmapped"><div class="num" id="statUnmapped"><?= $stats['unmapped'] ?></div><div class="lbl">Unmapped</div></div>
+    <div class="wb-card suggested"><div class="num" id="statSuggested"><?= $stats['auto_suggested'] ?></div><div class="lbl">Auto-Suggested</div></div>
+    <div class="wb-card high"><div class="num" id="statHigh"><?= $stats['high_confidence'] ?></div><div class="lbl">High Confidence</div></div>
+    <div class="wb-card review"><div class="num" id="statReview"><?= $stats['manual_review'] ?></div><div class="lbl">Manual Review</div></div>
+    <div class="wb-card unsaved"><div class="num" id="statUnsaved">0</div><div class="lbl">Unsaved Changes</div></div>
 </div>
 
-<!-- Toolbar -->
-<div class="mw-toolbar" id="mwToolbar">
+<!-- Toolbar: Search + Filter Chips -->
+<div class="wb-toolbar">
     <div class="search-box">
-        <span class="icon">&#128269;</span>
-        <input type="text" id="mwSearch" placeholder="Search by ledger name or parent group&hellip;">
+        <span class="s-icon">&#128269;</span>
+        <input type="text" id="hotSearch" placeholder="Search ledger, group, schedule&hellip;">
     </div>
-    <div class="filter-group">
-        <select class="filter-select" id="filterStatus">
-            <option value="">All Status</option>
-            <option value="Mapped">Mapped</option>
-            <option value="Conflict">Conflict</option>
-            <option value="Unmapped">Pending</option>
-        </select>
-        <select class="filter-select" id="filterNature">
-            <option value="">All Groups</option>
-            <option value="asset">Asset</option>
-            <option value="liability">Liability</option>
-            <option value="income">Income</option>
-            <option value="expense">Expense</option>
-        </select>
-        <select class="filter-select" id="filterParentGroup">
-            <option value="">All Parent Groups</option>
-            <?php
-            $parentGroups = $hierarchyEngine->getParentGroups();
-            foreach (array_slice($parentGroups, 0, 30) as $pg): ?>
-                <option value="<?= htmlspecialchars($pg) ?>"><?= htmlspecialchars($pg) ?></option>
-            <?php endforeach; ?>
-        </select>
-        <select class="filter-select" id="filterRootType">
-            <option value="">All Root Types</option>
-            <?php
-            $rootTypes = $hierarchyEngine->getRootTypes();
-            foreach ($rootTypes as $rt): ?>
-                <option value="<?= htmlspecialchars($rt) ?>"><?= htmlspecialchars($rt) ?></option>
-            <?php endforeach; ?>
-        </select>
-    </div>
-    <a href="<?= BASE_URL ?>data_console/mapping_console.php" class="btn" id="runAiBtn">&#129302; Run AI Mapping</a>
-    <button class="btn btn-outline" id="undoMwBtn">&#8617; Undo</button>
-</div>
-
-<!-- Split pane -->
-<div class="split-pane">
-    <div class="ledger-list">
-        <div class="list-header">
-            <h3>Ledgers</h3>
-            <span class="count" id="listCount">Showing <?= $totalLedgers ?> of <?= $totalLedgers ?></span>
-        </div>
-        <div class="list-body" id="ledgerListBody"></div>
-    </div>
-    <div class="detail-panel" id="detailPanel">
-        <div class="empty-state">
-            <div class="empty-icon">&#128203;</div>
-            <div>Select a ledger to view details</div>
-        </div>
+    <div class="filter-chips" id="filterChips">
+        <span class="filter-chip active" data-filter="all">All</span>
+        <span class="filter-chip" data-filter="unmapped">Unmapped</span>
+        <span class="filter-chip" data-filter="mapped">Mapped</span>
+        <span class="filter-chip" data-filter="suggested">Auto-Suggested</span>
+        <span class="filter-chip" data-filter="high_conf">High Confidence</span>
+        <span class="filter-chip" data-filter="low_conf">Low Confidence</span>
+        <span class="filter-chip" data-filter="review">Manual Review</span>
+        <span class="filter-chip" data-filter="bs">Balance Sheet</span>
+        <span class="filter-chip" data-filter="pl">Profit & Loss</span>
+        <span class="filter-chip" data-filter="asset">Assets</span>
+        <span class="filter-chip" data-filter="liability">Liabilities</span>
+        <span class="filter-chip" data-filter="income">Income</span>
+        <span class="filter-chip" data-filter="expense">Expenses</span>
     </div>
 </div>
 
-<!-- Batch bar -->
-<div class="batch-bar">
-    <input type="checkbox" id="selectAllCheck" style="width:auto;">
-    <span class="selected-count" id="selectedCount">0 Selected</span>
-    <button class="btn btn-outline btn-sm" id="bulkAssignBtn" disabled>Bulk Assign</button>
-    <span style="flex:1;"></span>
-    <a href="<?= BASE_URL ?>data_console/mapping_console.php" class="btn" style="position:static;min-height:34px;padding:0 14px;font-size:0.8rem;background:transparent;border:1px solid var(--border-strong);color:var(--text);box-shadow:none;">&#128451; Switch to Classic View</a>
-    <button class="btn btn-sm" id="saveMwBtn">&#128190; Save All Changes</button>
+<!-- Handsontable Grid -->
+<div class="hot-container">
+    <div id="hot"></div>
 </div>
 
-<form method="post" action="mapping_save.php" id="mwForm">
+<!-- Action Bar -->
+<div class="wb-actions">
+    <button class="btn btn-success" id="btnAcceptHigh" title="Accept all suggestions with confidence >= 90%">Accept High Confidence</button>
+    <button class="btn" id="btnAcceptSelected" title="Accept suggestions for selected rows">Accept Selected</button>
+    <div class="sep"></div>
+    <select id="bulkGroupSelect" style="padding:6px 10px;border:1px solid var(--border-strong);border-radius:6px;font-size:0.8rem;min-width:160px;">
+        <option value="">Set Selected To&hellip;</option>
+        <?php foreach ($mappingOptions as $code => $label): ?>
+            <option value="<?= htmlspecialchars($code) ?>"><?= htmlspecialchars($label) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <button class="btn" id="btnBulkApply" title="Apply selected group to checked rows">Apply</button>
+    <div class="sep"></div>
+    <button class="btn btn-outline" id="btnReset" title="Reset all unsaved changes">&#8617; Reset</button>
+    <button class="btn btn-success" id="btnSave" title="Save only changed rows">&#128190; Save Changes</button>
+    <div class="sep"></div>
+    <button class="btn btn-outline" id="btnExport" title="Export mapping to Excel">&#128229; Export</button>
+    <button class="btn btn-outline" id="btnImport" title="Import mapping from Excel">&#128228; Import</button>
+    <span class="status-text" id="statusText">Ready</span>
+</div>
+
+<!-- Hidden form for import -->
+<form id="importForm" class="hidden-input" enctype="multipart/form-data">
     <?= csrfInput() ?>
-    <input type="hidden" name="mapping_data" id="mwMappingData" value="">
-    <input type="hidden" name="allow_override" value="1">
-    <input type="hidden" name="return_to" value="mapping_workbench">
+    <input type="hidden" name="action" value="validate">
+    <input type="file" name="file" id="importFile" accept=".xlsx,.xls">
 </form>
 
-<script src="https://cdn.jsdelivr.net/npm/handsontable@14/dist/handsontable.full.min.js"></script>
-<script>
-var mwOptions = <?= json_encode($mappingOptionsJson) ?>;
-var mwOptionsMap = {};
-mwOptions.forEach(function (o) { mwOptionsMap[o.id] = o.label; });
-
-var allData = <?= json_encode($gridData) ?>;
-var filteredData = allData.slice();
-var selectedLedger = null;
-var selectAllChecked = false;
-
-function statusDot(status) {
-    if (status === 'Mapped') return 'mapped';
-    if (status === 'Conflict') return 'conflict';
-    return 'pending';
-}
-
-function renderList(data) {
-    var body = document.getElementById('ledgerListBody');
-    if (data.length === 0) {
-        body.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128269;</div><div>No ledgers match your filter</div></div>';
-        document.getElementById('listCount').textContent = '0 of ' + allData.length;
-        return;
-    }
-    var html = '';
-    for (var i = 0; i < data.length; i++) {
-        var r = data[i];
-        var sel = selectedLedger === r.ledger_name ? ' selected' : '';
-        html += '<div class="ledger-row' + sel + '" data-idx="' + i + '">';
-        html += '<span class="status-dot ' + statusDot(r.status) + '"></span>';
-        html += '<span class="ledger-name">' + escHtml(r.ledger_name) + '</span>';
-        html += '<span class="ledger-parent">' + escHtml(r.parent_group) + '</span>';
-        html += '</div>';
-    }
-    body.innerHTML = html;
-    document.getElementById('listCount').textContent = 'Showing ' + data.length + ' of ' + allData.length;
-}
-
-function escHtml(s) {
-    if (!s) return '';
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function getNatureLabel(nature) {
-    var labels = { asset: 'Asset', liability: 'Liability', income: 'Income', expense: 'Expense' };
-    return labels[nature] || '';
-}
-
-function getNatureColour(nature) {
-    var colours = { asset: '#1565c0', liability: '#c62828', income: '#2e7d32', expense: '#e65100' };
-    return colours[nature] || '#616161';
-}
-
-function showDetailPanel(rowData) {
-    var panel = document.getElementById('detailPanel');
-    var isMapped = rowData.status === 'Mapped';
-    var isConflict = rowData.status === 'Conflict';
-    var badgeClass = isConflict ? 'conflict' : (isMapped ? 'mapped' : 'pending');
-    var badgeText = isConflict ? '&#9888; Conflict' : (isMapped ? '&#10003; Mapped' : '&#9203; Pending');
-    var natureLabel = rowData.pg_nature_label ? ' (' + rowData.pg_nature_label + ')' : '';
-
-    var html = '';
-    html += '<div class="panel-header">';
-    html += '<div><h3>' + escHtml(rowData.ledger_name) + '</h3>';
-    html += '<span class="pg">Parent Group: ' + escHtml(rowData.parent_group) + natureLabel + '</span></div>';
-    html += '<span class="badge ' + badgeClass + '">' + badgeText + '</span>';
-    html += '</div>';
-
-    // Conflict banner
-    if (isConflict) {
-        var pgNature = rowData.pg_nature_label || 'unknown';
-        var scNature = mwOptionsMap[rowData.schedule_code] || rowData.schedule_code;
-        html += '<div class="conflict-banner">';
-        html += '<span style="font-size:1.1rem;">&#9888;&#65039;</span>';
-        html += '<span>Parent group "' + escHtml(rowData.parent_group) + '" (' + pgNature + ') conflicts with selected schedule "' + escHtml(rowData.schedule_code) + '" (' + escHtml(scNature) + ').</span>';
-        html += '<button class="btn btn-sm btn-warning resolve-btn" onclick="resolveConflict(\'' + escJs(rowData.ledger_name) + '\')">Override</button>';
-        html += '</div>';
-    }
-
-    // Tally Hierarchy
-    if (rowData.tally_group_path) {
-        html += '<div class="hierarchy-card">';
-        html += '<div class="hierarchy-header"><span style="font-size:1rem;">&#128193;</span><span class="hierarchy-label">Tally Hierarchy</span></div>';
-        var parts = rowData.tally_group_path.split(' > ');
-        html += '<div class="hierarchy-path">';
-        for (var p = 0; p < parts.length; p++) {
-            if (p > 0) html += '<span class="hierarchy-sep"> → </span>';
-            html += '<span class="hierarchy-item' + (p === parts.length - 1 ? ' current' : '') + '">' + escHtml(parts[p]) + '</span>';
-        }
-        html += '</div>';
-        html += '</div>';
-    } else if (rowData.parent_group && rowData.parent_group !== '-') {
-        html += '<div class="hierarchy-card" style="border-style:dashed;">';
-        html += '<div class="hierarchy-header"><span style="font-size:1rem;">&#128193;</span><span class="hierarchy-label">Parent Group</span></div>';
-        html += '<div style="font-size:0.85rem;color:var(--muted);">Hierarchy not available — re-sync from Tally to enable drill-down.</div>';
-        html += '</div>';
-    }
-
-    // AI suggestion card
-    if (rowData.ai_suggestion && rowData.ai_confidence !== null) {
-        var pct = rowData.ai_confidence;
-        var aiLabel = mwOptionsMap[rowData.ai_suggestion] || rowData.ai_suggestion;
-        var riskColor = rowData.ai_risk === 'High' ? '#c62828' : (rowData.ai_risk === 'Medium' ? '#e65100' : '#2e7d32');
-        var riskBg = rowData.ai_risk === 'High' ? '#ffebee' : (rowData.ai_risk === 'Medium' ? '#fff3e0' : '#e8f5e9');
-        html += '<div class="ai-card">';
-        html += '<div class="ai-header"><span style="font-size:1.1rem;">&#129302;</span><span class="ai-label">AI Recommendation</span>';
-        html += '<span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:' + riskBg + ';color:' + riskColor + ';font-weight:600;">' + escHtml(rowData.ai_risk || 'Low') + ' Risk</span></div>';
-        html += '<div class="ai-conf">';
-        html += '<span style="font-weight:700;">' + escHtml(aiLabel) + '</span>';
-        html += '<div class="conf-bar"><div class="fill" style="width:' + pct + '%"></div></div>';
-        html += '<span style="font-size:0.8rem;color:var(--muted);">' + pct + '% confidence</span>';
-        html += '</div>';
-        html += '<div class="ai-reason">' + escHtml(rowData.ai_reason || '') + '</div>';
-        if (rowData.ai_method) {
-            html += '<div style="font-size:0.75rem;color:var(--muted);margin-top:4px;">Source: ' + escHtml(rowData.ai_method) + '</div>';
-        }
-        html += '<div class="ai-actions">';
-        html += '<button class="btn btn-sm btn-success" onclick="acceptAiSuggestion(\'' + escJs(rowData.ledger_name) + '\')">Accept</button>';
-        html += '</div>';
-        html += '</div>';
-    }
-
-    // Schedule select
-    html += '<div class="detail-row">';
-    html += '<label for="detailSchedule">Schedule Code</label>';
-    html += '<select id="detailSchedule" onchange="onScheduleChange(\'' + escJs(rowData.ledger_name) + '\')">';
-    html += '<option value="">-- Select --</option>';
-    for (var i = 0; i < mwOptions.length; i++) {
-        var sel = mwOptions[i].id === rowData.schedule_code ? ' selected' : '';
-        html += '<option value="' + mwOptions[i].id + '"' + sel + '>' + mwOptions[i].id + ' &mdash; ' + escHtml(mwOptions[i].label) + '</option>';
-    }
-    html += '</select>';
-    html += '</div>';
-
-    html += '<div class="detail-row">';
-    html += '<label>Schedule Label</label>';
-    html += '<input type="text" id="detailLabel" value="' + escHtml(rowData.schedule_label || '') + '" readonly>';
-    html += '</div>';
-
-    html += '<div class="detail-row override-check">';
-    html += '<input type="checkbox" id="detailOverride"' + (rowData.override_parent_group ? ' checked' : '') + '>';
-    html += '<label for="detailOverride">Override Parent Group Validation</label>';
-    html += '</div>';
-
-    html += '<div class="detail-actions">';
-    html += '<button class="btn" onclick="saveSingleMapping()">Save Mapping</button>';
-    html += '<button class="btn btn-outline" onclick="resetDetail()">&#8617; Reset</button>';
-    html += '</div>';
-
-    panel.innerHTML = html;
-
-    selectedLedger = rowData.ledger_name;
-    renderList(filteredData);
-}
-
-function escJs(s) {
-    if (!s) return '';
-    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, "&quot;");
-}
-
-function getRowByLedgerName(name, data) {
-    for (var i = 0; i < data.length; i++) {
-        if (data[i].ledger_name === name) return i;
-    }
-    return -1;
-}
-
-function onScheduleChange(ledgerName) {
-    var select = document.getElementById('detailSchedule');
-    var label = document.getElementById('detailLabel');
-    var code = select.value;
-    label.value = mwOptionsMap[code] || '';
-
-    var idx = getRowByLedgerName(ledgerName, allData);
-    if (idx >= 0) {
-        allData[idx].schedule_code = code;
-        allData[idx].schedule_label = label.value;
-        allData[idx].status = code ? 'Mapped' : 'Unmapped';
-        // Simplified conflict check
-        allData[idx]._conflict = false;
-        applyFilters();
-    }
-}
-
-function saveSingleMapping() {
-    var select = document.getElementById('detailSchedule');
-    var override = document.getElementById('detailOverride').checked ? 1 : 0;
-    if (!selectedLedger) return;
-    var mappingData = {};
-    mappingData[selectedLedger] = select.value;
-    document.getElementById('mwMappingData').value = JSON.stringify(mappingData);
-    // Add override info
-    var form = document.getElementById('mwForm');
-    var overrideInput = document.createElement('input');
-    overrideInput.type = 'hidden';
-    overrideInput.name = 'override_flags';
-    overrideInput.value = JSON.stringify((function() { var o = {}; o[selectedLedger] = override; return o; })());
-    form.appendChild(overrideInput);
-    form.submit();
-}
-
-function acceptAiSuggestion(ledgerName) {
-    var idx = getRowByLedgerName(ledgerName, allData);
-    if (idx < 0) return;
-    var suggestion = allData[idx].ai_suggestion;
-    if (!suggestion) return;
-    allData[idx].schedule_code = suggestion;
-    allData[idx].schedule_label = mwOptionsMap[suggestion] || '';
-    allData[idx].status = 'Mapped';
-    allData[idx]._conflict = false;
-    var fIdx = getRowByLedgerName(ledgerName, filteredData);
-    if (fIdx >= 0) {
-        filteredData[fIdx] = allData[idx];
-    }
-    applyFilters();
-    showDetailPanel(allData[idx]);
-    updateProgress();
-}
-
-function resolveConflict(ledgerName) {
-    var idx = getRowByLedgerName(ledgerName, allData);
-    if (idx < 0) return;
-    allData[idx].override_parent_group = 1;
-    allData[idx].status = 'Mapped';
-    allData[idx]._conflict = false;
-    var fIdx = getRowByLedgerName(ledgerName, filteredData);
-    if (fIdx >= 0) {
-        filteredData[fIdx] = allData[idx];
-    }
-    applyFilters();
-    showDetailPanel(allData[idx]);
-    updateProgress();
-}
-
-function resetDetail() {
-    if (!selectedLedger) return;
-    var idx = filteredData.findIndex(function (r) { return r.ledger_name === selectedLedger; });
-    if (idx < 0) return;
-    showDetailPanel(filteredData[idx]);
-}
-
-function updateProgress() {
-    var total = allData.length;
-    var mapped = 0, conflicts = 0;
-    for (var i = 0; i < allData.length; i++) {
-        if (allData[i].status === 'Mapped') mapped++;
-        else if (allData[i].status === 'Conflict') conflicts++;
-    }
-    var pct = total > 0 ? Math.round((mapped / total) * 100) : 0;
-    var progressFill = document.querySelector('.mw-progress .track .bar .fill');
-    if (progressFill) progressFill.style.width = pct + '%';
-    var labels = document.querySelector('.mw-progress .track .labels');
-    if (labels) {
-        labels.innerHTML = '<span>0%</span><span>' + mapped + ' Mapped</span><span>' + (total - mapped) + ' Remaining</span><span>100%</span>';
-    }
-    var stats = document.getElementById('progressStats');
-    if (stats) {
-        stats.innerHTML = '<span><span style="color:var(--success)">&#10003;</span> <strong>' + mapped + '</strong> Mapped</span>' +
-            '<span><span style="color:var(--danger)">&#9888;</span> <strong>' + conflicts + '</strong> Conflicts</span>' +
-            '<span><span style="color:var(--warning)">&#9203;</span> <strong>' + (total - mapped) + '</strong> Pending</span>';
-    }
-}
-
-function applyFilters() {
-    var search = (document.getElementById('mwSearch').value || '').toLowerCase().trim();
-    var statusFilter = document.getElementById('filterStatus').value;
-    var natureFilter = document.getElementById('filterNature').value;
-    var parentGroupFilter = document.getElementById('filterParentGroup').value;
-    var rootTypeFilter = document.getElementById('filterRootType').value;
-
-    filteredData = allData.filter(function (r) {
-        if (search && r.ledger_name.toLowerCase().indexOf(search) < 0 && r.parent_group.toLowerCase().indexOf(search) < 0) return false;
-        if (statusFilter && r.status !== statusFilter) return false;
-        if (natureFilter && r.pg_nature !== natureFilter) return false;
-        if (parentGroupFilter && r.parent_group !== parentGroupFilter) return false;
-        if (rootTypeFilter && r.tally_root_type !== rootTypeFilter) return false;
-        return true;
-    });
-
-    if (selectedLedger) {
-        var stillHere = filteredData.some(function (r) { return r.ledger_name === selectedLedger; });
-        if (!stillHere) {
-            selectedLedger = null;
-            document.getElementById('detailPanel').innerHTML = '<div class="empty-state"><div class="empty-icon">&#128203;</div><div>Select a ledger to view details</div></div>';
-        }
-    }
-
-    renderList(filteredData);
-    updateProgress();
-}
-
-// Event delegation for ledger row clicks
-document.getElementById('ledgerListBody').addEventListener('click', function (e) {
-    var row = e.target.closest('.ledger-row');
-    if (!row) return;
-    var idx = parseInt(row.getAttribute('data-idx'), 10);
-    if (isNaN(idx) || idx < 0 || idx >= filteredData.length) return;
-    selectedLedger = filteredData[idx].ledger_name;
-    showDetailPanel(filteredData[idx]);
-});
-
-// Search with debounce
-var searchTimer;
-document.getElementById('mwSearch').addEventListener('input', function () {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(applyFilters, 200);
-});
-
-document.getElementById('filterStatus').addEventListener('change', applyFilters);
-document.getElementById('filterNature').addEventListener('change', applyFilters);
-document.getElementById('filterParentGroup').addEventListener('change', applyFilters);
-document.getElementById('filterRootType').addEventListener('change', applyFilters);
-
-// Undo
-document.getElementById('undoMwBtn').addEventListener('click', function () {
-    allData = <?= json_encode($gridData) ?>;
-    selectedLedger = null;
-    applyFilters();
-    document.getElementById('detailPanel').innerHTML = '<div class="empty-state"><div class="empty-icon">&#128203;</div><div>Select a ledger to view details</div></div>';
-});
-
-// Select all
-document.getElementById('selectAllCheck').addEventListener('change', function () {
-    selectAllChecked = this.checked;
-    var rows = document.querySelectorAll('.ledger-row');
-    for (var i = 0; i < rows.length; i++) {
-        if (selectAllChecked) {
-            rows[i].style.backgroundColor = '#e8f0fe';
-        } else {
-            rows[i].style.backgroundColor = '';
-        }
-    }
-    document.getElementById('selectedCount').textContent = (selectAllChecked ? filteredData.length : 0) + ' Selected';
-    document.getElementById('bulkAssignBtn').disabled = !selectAllChecked;
-});
-
-// Bulk Assign — apply AI suggestion to all unmapped ledgers
-document.getElementById('bulkAssignBtn').addEventListener('click', function () {
-    if (!selectAllChecked) return;
-    var assigned = 0;
-    for (var i = 0; i < allData.length; i++) {
-        if (allData[i].ai_suggestion && allData[i].schedule_code !== allData[i].ai_suggestion) {
-            allData[i].schedule_code = allData[i].ai_suggestion;
-            allData[i].schedule_label = mwOptionsMap[allData[i].ai_suggestion] || '';
-            allData[i].status = 'Mapped';
-            allData[i]._conflict = false;
-            assigned++;
-        }
-    }
-    if (assigned > 0) {
-        filteredData = allData.slice();
-        renderList(filteredData);
-        updateProgress();
-        var counter = document.getElementById('selectedCount');
-        if (counter) counter.textContent = assigned + ' ledgers assigned';
-    }
-});
-
-// Save all
-document.getElementById('saveMwBtn').addEventListener('click', function () {
-    var mappingData = {};
-    for (var i = 0; i < allData.length; i++) {
-        if (allData[i].schedule_code) {
-            mappingData[allData[i].ledger_name] = allData[i].schedule_code;
-        }
-    }
-    document.getElementById('mwMappingData').value = JSON.stringify(mappingData);
-    document.getElementById('mwForm').submit();
-});
-
-// Init
-renderList(filteredData);
-</script>
+<div style="height:16px;"></div>
 
 <?= uiWorkspaceEnd() ?>
+
+<script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6/dist/js/tabulator.min.js"></script>
+<script>
+(function() {
+    'use strict';
+
+    var ebalBaseUrl = <?= json_encode(BASE_URL) ?>;
+    var csrfToken = <?= json_encode(csrfToken()) ?>;
+    var mappingOptions = <?= json_encode($mappingOptionsJson) ?>;
+    var allData = <?= json_encode($gridData) ?>;
+    var optionsMap = {};
+    var optionList = [];
+    mappingOptions.forEach(function(o) {
+        optionsMap[o.id] = o.label;
+        optionList.push({id: o.id, label: o.label});
+    });
+
+    var originalData = JSON.parse(JSON.stringify(allData));
+    var dirtyRows = {};
+    var currentFilter = 'all';
+    var table = null;
+
+    /* ---- Category lookup for filter ---- */
+    var bsCodes = ['share_capital','reserves','lt_borrowings','deferred_tax_liability','other_non_current_liabilities','long_term_provisions','st_borrowings','trade_payables','trade_payables_msme','other_financial_liabilities','other_current_liabilities','short_term_provisions','ppe','cwip','intangible_assets','investments_non_current','loans_non_current','deferred_tax_asset','other_non_current_assets','inventory','investments_current','receivables','cash','bank_balances_other','loans_current','other_current_assets'];
+    var plCodes = ['revenue','other_income','materials','purchase_stock','inventory_change','employee_cost','finance_cost','depreciation','other_expenses'];
+    var assetCodes = ['ppe','cwip','intangible_assets','investments_non_current','loans_non_current','deferred_tax_asset','other_non_current_assets','inventory','investments_current','receivables','cash','bank_balances_other','loans_current','other_current_assets'];
+    var liabilityCodes = ['share_capital','reserves','lt_borrowings','deferred_tax_liability','other_non_current_liabilities','long_term_provisions','st_borrowings','trade_payables','trade_payables_msme','other_financial_liabilities','other_current_liabilities','short_term_provisions'];
+    var incomeCodes = ['revenue','other_income'];
+    var expenseCodes = ['materials','purchase_stock','inventory_change','employee_cost','finance_cost','depreciation','other_expenses'];
+
+    function codeInCategory(code, list) { return list.indexOf(code) !== -1; }
+
+    function fmtMoney(v) {
+        if (v === null || v === undefined || v === '') return '';
+        return parseFloat(v).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    /* ---- Filter logic ---- */
+    function filterRow(row) {
+        if (currentFilter === 'all') return true;
+        var code = row.final_mapping || row.current_mapping || '';
+        switch (currentFilter) {
+            case 'unmapped': return !code || code === '';
+            case 'mapped': return code && code !== '';
+            case 'suggested': return row.suggested && row.suggested !== '' && (!code || code === '');
+            case 'high_conf': return row.suggested && (row.confidence || 0) >= 90 && (!code || code === '');
+            case 'low_conf': return row.suggested && (row.confidence || 0) > 0 && (row.confidence || 0) < 70 && (!code || code === '');
+            case 'review': return (!row.suggested || row.suggested === '' || (row.confidence || 0) < 70) && (!code || code === '');
+            case 'bs': return code && codeInCategory(code, bsCodes);
+            case 'pl': return code && codeInCategory(code, plCodes);
+            case 'asset': return code && codeInCategory(code, assetCodes);
+            case 'liability': return code && codeInCategory(code, liabilityCodes);
+            case 'income': return code && codeInCategory(code, incomeCodes);
+            case 'expense': return code && codeInCategory(code, expenseCodes);
+            default: return true;
+        }
+    }
+
+    function getFilteredData() {
+        var search = (document.getElementById('hotSearch').value || '').toLowerCase().trim();
+        return allData.filter(function(r) {
+            if (!filterRow(r)) return false;
+            if (search) {
+                var hay = ((r.ledger_name||'')+' '+(r.parent_group||'')+' '+(r.current_label||'')+' '+(r.suggested_label||'')+' '+(r.remarks||'')).toLowerCase();
+                if (hay.indexOf(search) === -1) return false;
+            }
+            return true;
+        });
+    }
+
+    /* ---- Stats update ---- */
+    function updateStats() {
+        var total=allData.length, mapped=0, unmapped=0, suggested=0, high=0, review=0, unsaved=Object.keys(dirtyRows).length;
+        for (var i=0;i<allData.length;i++) {
+            var d=allData[i], code=d.final_mapping||d.current_mapping||'';
+            if (code&&code!=='') { mapped++; }
+            else { unmapped++; if(d.suggested&&(d.confidence||0)>=90){suggested++;high++;}else if(d.suggested&&(d.confidence||0)>=70){suggested++;}else{review++;} }
+        }
+        document.getElementById('statTotal').textContent=total;
+        document.getElementById('statMapped').textContent=mapped;
+        document.getElementById('statUnmapped').textContent=unmapped;
+        document.getElementById('statSuggested').textContent=suggested;
+        document.getElementById('statHigh').textContent=high;
+        document.getElementById('statReview').textContent=review;
+        document.getElementById('statUnsaved').textContent=unsaved;
+    }
+
+    function showToast(msg,type) {
+        var t=document.createElement('div');
+        t.className='toast '+(type||'info');
+        t.textContent=msg;
+        document.body.appendChild(t);
+        setTimeout(function(){t.remove();},3500);
+    }
+
+    /* ---- Tabulator dropdown editor formatter ---- */
+    function finalMappingFormatter(cell) {
+        var val = cell.getValue();
+        if (val && optionsMap[val]) {
+            var parts = optionsMap[val].split(' (');
+            cell.getElement().style.color = '#1565c0';
+            return parts[0];
+        }
+        if (val) { cell.getElement().style.color = '#1565c0'; return val; }
+        cell.getElement().style.color = '#9e9e9e';
+        cell.getElement().style.fontStyle = 'italic';
+        return 'Select...';
+    }
+
+    function confidenceFormatter(cell) {
+        var v = parseInt(cell.getValue()) || 0;
+        var el = cell.getElement();
+        el.style.textAlign = 'center';
+        el.style.fontWeight = '600';
+        if (v >= 90) el.style.color = '#2e7d32';
+        else if (v >= 70) el.style.color = '#e65100';
+        else if (v > 0) el.style.color = '#c62828';
+        else el.style.color = '#9e9e9e';
+        return v + '%';
+    }
+
+    function statusFormatter(cell) {
+        var row = cell.getRow().getData();
+        var code = row.final_mapping || row.current_mapping || '';
+        var text = code ? 'Mapped' : 'Unmapped';
+        var el = cell.getElement();
+        el.style.textAlign = 'center';
+        el.style.fontWeight = '600';
+        el.style.fontSize = '0.78rem';
+        if (text === 'Mapped') { el.style.color = '#2e7d32'; el.style.background = '#e8f5e9'; }
+        else { el.style.color = '#c62828'; el.style.background = '#ffebee'; }
+        return text;
+    }
+
+    function moneyFormatter(cell) {
+        var v = cell.getValue();
+        if (v === null || v === undefined || v === '') return '';
+        return parseFloat(v).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+    }
+
+    /* ---- Row class function ---- */
+    function rowClass(row) {
+        var d = row.getData();
+        var code = d.final_mapping || d.current_mapping || '';
+        if (!code || code === '') {
+            if (d.suggested && (d.confidence || 0) < 70) return 'row-lowconf';
+            return 'row-unmapped';
+        }
+        return '';
+    }
+
+    /* ---- Initialize Tabulator ---- */
+    function initTable() {
+        var filtered = getFilteredData();
+        var selectOptions = {};
+        optionList.forEach(function(o) { selectOptions[o.label] = o.label; });
+
+        table = new Tabulator('#hot', {
+            data: filtered,
+            layout: 'fitDataFill',
+            height: Math.min(filtered.length * 35 + 50, 620),
+            selectable: true,
+            movableColumns: true,
+            resizable: true,
+            headerSortTristate: true,
+            rowClass: rowClass,
+            placeholder: 'No ledgers found',
+            columns: [
+                {title:'', formatter:'rowSelection', titleFormatter:'rowSelection', headerSort:false, width:40, hozAlign:'center', cellClick:function(e, cell){cell.getRow().toggleSelect();}},
+                {title:'Ledger Name', field:'ledger_name', width:220, frozen:true, headerTooltip:true},
+                {title:'Tally Group', field:'parent_group', width:160},
+                {title:'Opening Bal', field:'opening', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Debit Total', field:'total_dr', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Credit Total', field:'total_cr', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Closing Bal', field:'closing', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Dr/Cr', field:'drcr', width:50, hozAlign:'center'},
+                {title:'Current Mapping', field:'current_label', width:160},
+                {title:'Suggested', field:'suggested_label', width:180},
+                {title:'Source', field:'suggestion_source', width:110},
+                {title:'Conf %', field:'confidence', width:80, hozAlign:'center', formatter:confidenceFormatter, accessorDownload:function(v){return (v||0)+'%';}},
+                {title:'Final Mapping', field:'final_mapping', width:240, editor:'select', editorParams:{values:selectOptions}, formatter:finalMappingFormatter, cellEdited:function(cell){
+                    var row = cell.getRow().getData();
+                    var val = cell.getValue();
+                    var code = '';
+                    if (val) {
+                        for (var k=0;k<mappingOptions.length;k++) {
+                            if (mappingOptions[k].label===val||mappingOptions[k].code===val||mappingOptions[k].id===val) { code=mappingOptions[k].id; break; }
+                        }
+                        if (!code) code = val;
+                    }
+                    row.final_mapping = code;
+                    row.status = code ? 'Mapped' : 'Unmapped';
+                    if (code !== row.current_mapping) { dirtyRows[row.ledger_name] = true; }
+                    else { delete dirtyRows[row.ledger_name]; }
+                    table.updateData([{ledger_name:row.ledger_name, final_mapping:code}]);
+                    updateStats();
+                }},
+                {title:'Status', width:80, hozAlign:'center', formatter:statusFormatter, download:false},
+                {title:'Remarks', field:'remarks', width:160, editor:'input', cellEdited:function(cell){
+                    var row = cell.getRow().getData();
+                    row.remarks = cell.getValue() || '';
+                    dirtyRows[row.ledger_name] = true;
+                    updateStats();
+                }},
+            ],
+        });
+    }
+
+    function refreshGrid() {
+        if (table) { table.destroy(); }
+        initTable();
+    }
+
+    /* ---- Filter chip click ---- */
+    document.getElementById('filterChips').addEventListener('click', function(e) {
+        var chip = e.target.closest('.filter-chip');
+        if (!chip) return;
+        document.querySelectorAll('.filter-chip').forEach(function(c) { c.classList.remove('active'); });
+        chip.classList.add('active');
+        currentFilter = chip.getAttribute('data-filter');
+        refreshGrid();
+    });
+
+    /* ---- Search ---- */
+    var searchTimer;
+    document.getElementById('hotSearch').addEventListener('input', function() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(refreshGrid, 250);
+    });
+
+    /* ---- Accept all high confidence ---- */
+    document.getElementById('btnAcceptHigh').addEventListener('click', function() {
+        var count = 0;
+        for (var i=0;i<allData.length;i++) {
+            var d = allData[i];
+            if (d.suggested && (d.confidence||0)>=90 && d.final_mapping!==d.suggested) {
+                d.final_mapping = d.suggested;
+                d.status = 'Mapped';
+                dirtyRows[d.ledger_name] = true;
+                count++;
+            }
+        }
+        refreshGrid();
+        updateStats();
+        showToast(count+' ledgers auto-accepted (>= 90% confidence)', 'success');
+    });
+
+    /* ---- Accept selected ---- */
+    document.getElementById('btnAcceptSelected').addEventListener('click', function() {
+        if (!table) return;
+        var selected = table.getSelectedRows();
+        if (!selected.length) { showToast('Select rows first', 'error'); return; }
+        var count = 0;
+        selected.forEach(function(row) {
+            var d = row.getData();
+            if (d.suggested && d.suggested!=='' && d.final_mapping!==d.suggested) {
+                d.final_mapping = d.suggested;
+                d.status = 'Mapped';
+                dirtyRows[d.ledger_name] = true;
+                count++;
+            }
+        });
+        refreshGrid();
+        updateStats();
+        showToast(count+' selected ledgers accepted', 'success');
+    });
+
+    /* ---- Bulk apply group ---- */
+    document.getElementById('btnBulkApply').addEventListener('click', function() {
+        var groupCode = document.getElementById('bulkGroupSelect').value;
+        if (!groupCode) { showToast('Select a group first', 'error'); return; }
+        if (!table) return;
+        var selected = table.getSelectedRows();
+        if (!selected.length) { showToast('Select rows first', 'error'); return; }
+        var count = 0;
+        selected.forEach(function(row) {
+            var d = row.getData();
+            d.final_mapping = groupCode;
+            d.status = 'Mapped';
+            dirtyRows[d.ledger_name] = true;
+            count++;
+        });
+        refreshGrid();
+        updateStats();
+        showToast(count+' ledgers set to '+(optionsMap[groupCode]||groupCode), 'success');
+    });
+
+    /* ---- Reset ---- */
+    document.getElementById('btnReset').addEventListener('click', function() {
+        allData = JSON.parse(JSON.stringify(originalData));
+        dirtyRows = {};
+        refreshGrid();
+        updateStats();
+        showToast('All changes reset', 'info');
+    });
+
+    /* ---- Save via AJAX ---- */
+    document.getElementById('btnSave').addEventListener('click', function() {
+        var dirty = Object.keys(dirtyRows);
+        if (!dirty.length) { showToast('No changes to save', 'info'); return; }
+        var mappings = {};
+        dirty.forEach(function(name) {
+            for (var i=0;i<allData.length;i++) {
+                if (allData[i].ledger_name===name && allData[i].final_mapping && allData[i].final_mapping!=='') {
+                    mappings[name] = allData[i].final_mapping;
+                    break;
+                }
+            }
+        });
+        document.getElementById('statusText').textContent = 'Saving...';
+        document.getElementById('btnSave').disabled = true;
+        fetch(ebalBaseUrl+'data_console/ajax_mapping_save.php', {
+            method:'POST',
+            headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},
+            body: JSON.stringify({mappings:mappings,overrides:{},remember:{}}),
+        })
+        .then(function(r){return r.json();})
+        .then(function(resp){
+            document.getElementById('btnSave').disabled = false;
+            if (resp.redirect) {
+                showToast(resp.error || 'Session expired', 'error');
+                setTimeout(function(){ window.location.href = ebalBaseUrl + 'login.php'; }, 1500);
+                return;
+            }
+            if (resp.success) {
+                dirtyRows = {};
+                Object.keys(mappings).forEach(function(name){
+                    for(var i=0;i<allData.length;i++){
+                        if(allData[i].ledger_name===name){
+                            allData[i].current_mapping=mappings[name];
+                            allData[i].current_label=optionsMap[mappings[name]]||mappings[name];
+                            if(!allData[i].final_mapping||allData[i].final_mapping===''){allData[i].final_mapping=mappings[name];}
+                            break;
+                        }
+                    }
+                });
+                originalData = JSON.parse(JSON.stringify(allData));
+                updateStats(); refreshGrid();
+                var msg = resp.saved+' mappings saved.';
+                if(resp.pending>0) msg+=' '+resp.pending+' ledgers remaining.';
+                if(resp.mapping_complete) msg+=' All ledgers mapped!';
+                document.getElementById('statusText').textContent='Saved '+resp.saved+' rows';
+                showToast(msg,'success');
+            } else {
+                document.getElementById('statusText').textContent='Save failed';
+                showToast(resp.error||'Save failed','error');
+            }
+        })
+        .catch(function(){
+            document.getElementById('btnSave').disabled=false;
+            document.getElementById('statusText').textContent='Network error';
+            showToast('Network error. Please try again.','error');
+        });
+    });
+
+    /* ---- Export via fetch with CSRF header ---- */
+    document.getElementById('btnExport').addEventListener('click', function() {
+        document.getElementById('statusText').textContent = 'Exporting...';
+        fetch(ebalBaseUrl+'data_console/ajax_mapping_export.php?filter=all', {
+            method: 'GET',
+            headers: { 'X-CSRF-Token': csrfToken },
+        })
+        .then(function(r) {
+            if (!r.ok) return r.json().then(function(d){ throw new Error(d.error || 'Export failed'); });
+            return r.blob();
+        })
+        .then(function(blob) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'ledger_mapping_'+new Date().toISOString().slice(0,10)+'.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            document.getElementById('statusText').textContent = 'Export complete';
+        })
+        .catch(function(e) {
+            showToast(e.message || 'Export failed', 'error');
+            document.getElementById('statusText').textContent = 'Export failed';
+        });
+    });
+
+    /* ---- Import ---- */
+    document.getElementById('btnImport').addEventListener('click', function() {
+        document.getElementById('importFile').click();
+    });
+
+    document.getElementById('importFile').addEventListener('change', function() {
+        var file = this.files[0];
+        if (!file) return;
+        var fd = new FormData();
+        fd.append('file', file);
+        fd.append('action', 'validate');
+        document.getElementById('statusText').textContent = 'Validating import...';
+        fetch(ebalBaseUrl+'data_console/ajax_mapping_import.php', {
+            method:'POST',
+            headers:{'X-CSRF-Token':csrfToken},
+            body: fd,
+        })
+        .then(function(r){return r.json();})
+        .then(function(resp){
+            if (!resp.success) { showToast(resp.error||'Import failed','error'); document.getElementById('statusText').textContent='Import failed'; return; }
+            if (resp.invalid_count>0) {
+                if (confirm(resp.valid_count+' valid, '+resp.invalid_count+' invalid rows.\n\nSave only valid rows?')) { saveImportedRows(file); }
+            } else if (resp.valid_count>0) {
+                if (confirm(resp.valid_count+' rows to import. Save now?')) { saveImportedRows(file); }
+            } else { showToast('No valid rows found','error'); }
+        })
+        .catch(function(){showToast('Import failed: network error','error');});
+        document.getElementById('importFile').value='';
+    });
+
+    function saveImportedRows(file) {
+        var fd = new FormData();
+        fd.append('file', file);
+        fd.append('action', 'save');
+        document.getElementById('statusText').textContent = 'Importing...';
+        fetch(ebalBaseUrl+'data_console/ajax_mapping_import.php', {
+            method:'POST',
+            headers:{'X-CSRF-Token':csrfToken},
+            body: fd,
+        })
+        .then(function(r){return r.json();})
+        .then(function(resp){
+            if (resp.success) {
+                showToast(resp.saved+' mappings imported','success');
+                document.getElementById('statusText').textContent='Imported '+resp.saved+' rows';
+                setTimeout(function(){window.location.reload();},1500);
+            } else { showToast(resp.error||'Import failed','error'); document.getElementById('statusText').textContent='Import failed'; }
+        })
+        .catch(function(){showToast('Import failed: network error','error');});
+    }
+
+    /* ---- Init ---- */
+    initTable();
+    updateStats();
+
+})();
+</script>
 
 <?php
 unset($_SESSION['success'], $_SESSION['error']);

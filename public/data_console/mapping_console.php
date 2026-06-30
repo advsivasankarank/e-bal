@@ -200,6 +200,10 @@ try {
     $mappingLoadError = 'Mapping data could not be loaded. Basic fallback mode is active.';
 }
 
+/* $ledgers = unmapped ledgers only (for the classic form UI) */
+$ledgers = array_filter($allLedgers, function ($r) {
+    return empty($r['mapped_code']);
+});
 ?>
 
 <?= uiBreadcrumb([
@@ -252,7 +256,8 @@ try {
     </div>
 <?php endif; ?>
 
-<div class="card" style="margin-bottom:16px;">
+<div class="card" style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+    <a class="btn btn-success" href="<?= BASE_URL ?>data_console/mapping_workbench.php">&#128202; Open Bulk Mapping Workbench</a>
     <a class="btn" href="<?= BASE_URL ?>data_console/view_synced_ledgers.php">View Synced Ledgers</a>
 </div>
 
