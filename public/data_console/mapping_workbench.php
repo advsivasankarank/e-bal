@@ -1260,8 +1260,123 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         showToast('All changes reset', 'info');
     });
 
-    /* ---- Save via AJAX ---- */
-    document.getElementById('btnSave').addEventListener('click', function() {
+    /* ---- Risk detection for dirty rows ---- */
+    function detectRisksInDirtyRows() {
+        var dirty = Object.keys(dirtyRows);
+        var criticals = [];
+        var warnings = [];
+        var assetSchedules = ['ppe','inventory','receivables','cash','bank_balances_other','other_current_assets','investments_non_current','loans_non_current','intangible_assets','cwip','deferred_tax_asset','other_non_current_assets','investments_current','loans_current'];
+        var liabilitySchedules = ['trade_payables','lt_borrowings','st_borrowings','other_current_liabilities','short_term_provisions','share_capital','reserves','deferred_tax_liability','other_non_current_liabilities','long_term_provisions'];
+        var plVariants = ['profit & loss a/c','profit and loss a/c','profit & loss account','profit and loss account','p&l a/c','p and l a/c','surplus in statement of profit and loss'];
+        var bankOdVariants = ['bank od','od account','overdraft','cash credit','bank overdraft','current account'];
+
+        dirty.forEach(function(name) {
+            for (var i=0;i<allData.length;i++) {
+                var d = allData[i];
+                if (d.ledger_name !== name) continue;
+                var code = d.final_mapping || d.current_mapping || '';
+                var group = (d.parent_group||'').toLowerCase();
+                var closingCr = parseFloat(d.closing_cr)||0;
+                var closingDr = parseFloat(d.closing_dr)||0;
+                var riskLevel = 'none';
+                var riskReason = '';
+
+                // Critical: P&L A/c not mapped to reserves
+                if (plVariants.indexOf(group) !== -1 && code !== 'reserves') {
+                    riskLevel = 'critical';
+                    riskReason = 'Profit & Loss A/c should map to Reserves (Equity). Current: ' + (code||'Unmapped');
+                }
+                // Critical: Bank OD/CC credit mapped to cash
+                if (bankOdVariants.indexOf(group) !== -1 && closingCr > 0 && code === 'cash') {
+                    riskLevel = 'critical';
+                    riskReason = 'Bank OD/CC with credit balance should map to st_borrowings, not cash.';
+                }
+                // Critical: Patient advance credit mapped to receivables
+                if ((group === 'advance in patient' || group === 'patient advance') && closingCr > 0 && code === 'receivables') {
+                    riskLevel = 'critical';
+                    riskReason = 'Patient advance with credit balance is a liability, not a receivable.';
+                }
+                // Critical: Insurance patient credit mapped to receivables
+                if (group === 'insurance patient' && closingCr > 0 && code === 'receivables') {
+                    riskLevel = 'critical';
+                    riskReason = 'Insurance patient with credit balance is a liability, not a receivable.';
+                }
+                // Warning: Credit balance in asset schedule
+                if (riskLevel === 'none' && closingCr > 0 && assetSchedules.indexOf(code) !== -1) {
+                    riskLevel = 'warning';
+                    riskReason = 'Credit balance in asset schedule.';
+                }
+                // Warning: Debit balance in liability/equity schedule
+                if (riskLevel === 'none' && closingDr > 0 && liabilitySchedules.indexOf(code) !== -1) {
+                    riskLevel = 'warning';
+                    riskReason = 'Debit balance in liability/equity schedule.';
+                }
+
+                if (riskLevel === 'critical') criticals.push({name: d.ledger_name, group: d.parent_group, code: code, reason: riskReason});
+                else if (riskLevel === 'warning') warnings.push({name: d.ledger_name, group: d.parent_group, code: code, reason: riskReason});
+                break;
+            }
+        });
+        return {criticals: criticals, warnings: warnings};
+    }
+
+    /* ---- Show risk modal ---- */
+    function showRiskModal(title, items, type) {
+        var existing = document.getElementById('riskModal');
+        if (existing) existing.remove();
+
+        var modal = document.createElement('div');
+        modal.id = 'riskModal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+        var isCritical = type === 'critical';
+        var accentColor = isCritical ? '#dc2626' : '#e65100';
+        var icon = isCritical ? '&#9888;' : '&#9888;';
+        var btnClass = isCritical ? 'btn-danger' : 'btn-warning';
+
+        var html = '<div style="background:#fff;border-radius:12px;max-width:560px;width:90%;max-height:80vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">';
+        html += '<div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;">';
+        html += '<div style="display:flex;align-items:center;gap:10px;">';
+        html += '<span style="font-size:1.5rem;color:' + accentColor + ';">' + icon + '</span>';
+        html += '<h3 style="margin:0;font-size:1.1rem;color:#1f2937;">' + title + '</h3>';
+        html += '</div></div>';
+        html += '<div style="padding:16px 24px;">';
+        html += '<p style="font-size:0.9rem;color:#4b5563;margin-bottom:12px;">The following ledgers have mapping risks that should be reviewed before saving:</p>';
+        html += '<div style="max-height:300px;overflow-y:auto;">';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+        html += '<thead><tr style="border-bottom:2px solid #e5e7eb;background:#f9fafb;"><th style="text-align:left;padding:8px;">Ledger</th><th style="text-align:left;padding:8px;">Group</th><th style="text-align:left;padding:8px;">Schedule</th><th style="text-align:left;padding:8px;">Risk</th></tr></thead>';
+        html += '<tbody>';
+        items.forEach(function(item) {
+            html += '<tr style="border-bottom:1px solid #f3f4f6;">';
+            html += '<td style="padding:8px;font-weight:500;">' + escHtml(item.name) + '</td>';
+            html += '<td style="padding:8px;color:#6b7280;">' + escHtml(item.group) + '</td>';
+            html += '<td style="padding:8px;color:#6b7280;">' + escHtml(item.code) + '</td>';
+            html += '<td style="padding:8px;color:' + (isCritical ? '#dc2626' : '#e65100') + ';font-weight:500;">' + escHtml(item.reason) + '</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
+        html += '<div style="padding:16px 24px;border-top:1px solid #e5e7eb;display:flex;gap:10px;justify-content:flex-end;">';
+        html += '<button class="btn btn-outline" onclick="document.getElementById(\'riskModal\').remove()" style="padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:0.85rem;">Review Now</button>';
+        html += '<button class="btn ' + btnClass + '" id="riskModalConfirm" style="padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-size:0.85rem;color:#fff;background:' + accentColor + ';">Save Anyway</button>';
+        html += '</div></div>';
+        modal.innerHTML = html;
+        document.body.appendChild(modal);
+
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) modal.remove();
+        });
+        document.getElementById('riskModalConfirm').addEventListener('click', function() {
+            modal.remove();
+            executeSave();
+        });
+    }
+
+    function escHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function executeSave() {
         var dirty = Object.keys(dirtyRows);
         if (!dirty.length) { showToast('No changes to save', 'info'); return; }
         var mappings = {};
@@ -1317,6 +1432,24 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             document.getElementById('statusText').textContent='Network error';
             showToast('Network error. Please try again.','error');
         });
+    }
+
+    /* ---- Save via AJAX ---- */
+    document.getElementById('btnSave').addEventListener('click', function() {
+        var dirty = Object.keys(dirtyRows);
+        if (!dirty.length) { showToast('No changes to save', 'info'); return; }
+
+        var risks = detectRisksInDirtyRows();
+        if (risks.criticals.length > 0) {
+            showRiskModal('Critical Mapping Risks Detected', risks.criticals, 'critical');
+            return;
+        }
+        if (risks.warnings.length > 0) {
+            showRiskModal('Mapping Warnings', risks.warnings, 'warning');
+            return;
+        }
+
+        executeSave();
     });
 
     /* ---- Export via fetch with CSRF header ---- */
