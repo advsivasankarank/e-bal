@@ -16,6 +16,11 @@ if ($userId <= 0) {
     return;
 }
 
+if (!isset($pdo) || !($pdo instanceof PDO)) {
+    error_log('license_check.php: PDO not initialized when called from ' . ($_SERVER['SCRIPT_NAME'] ?? 'unknown'));
+    return;
+}
+
 if (isSuperAdmin($pdo, $userId)) {
     return;
 }
