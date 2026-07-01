@@ -864,6 +864,57 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
 <?= uiWorkspaceEnd() ?>
 
+<!-- Early Bridge Status Bootstrap — runs before heavy Tabulator init -->
+<script>
+(function() {
+    var url = window.ebalBridgeUrl || 'http://127.0.0.1:9123';
+    window.ebalBridgeUrl = url;
+
+    function updateDot(kind, status) {
+        var dots = document.querySelectorAll('.bc-dot[data-status-kind="' + kind + '"]');
+        var color = (status === 'online' || status === 'connected') ? 'green' : (status === 'waiting' ? 'yellow' : 'red');
+        for (var i = 0; i < dots.length; i++) {
+            dots[i].className = 'bc-dot bc-dot--' + color;
+        }
+    }
+
+    function updateLabel(kind, text) {
+        var vals = document.querySelectorAll('.bc-status-val[data-status-kind="' + kind + '"]');
+        for (var i = 0; i < vals.length; i++) {
+            vals[i].textContent = text;
+        }
+    }
+
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timeoutId = null;
+    if (controller) {
+        timeoutId = setTimeout(function() { controller.abort(); }, 4000);
+    }
+
+    fetch(url + '/health', { mode: 'cors', cache: 'no-store', signal: controller ? controller.signal : undefined })
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(data) {
+            if (timeoutId) clearTimeout(timeoutId);
+            var bridgeOk = !!(data && data.ok);
+            var tallyOk = !!(data && data.tally && data.tally !== 'unknown');
+            updateDot('bridge', bridgeOk ? 'online' : 'offline');
+            updateLabel('bridge', bridgeOk ? 'Online' : 'Offline');
+            updateDot('tally', tallyOk ? 'connected' : 'offline');
+            updateLabel('tally', tallyOk ? (data.tally === 'connected' ? 'Connected' : data.tally) : 'Offline');
+        })
+        .catch(function() {
+            if (timeoutId) clearTimeout(timeoutId);
+            updateDot('bridge', 'offline');
+            updateLabel('bridge', 'Offline');
+            updateDot('tally', 'offline');
+            updateLabel('tally', 'Offline');
+        });
+})();
+</script>
+
 <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6/dist/js/tabulator.min.js"></script>
 <script>
 (function() {
