@@ -42,10 +42,10 @@
 
   --topbar-h: clamp(48px, 5vh, 56px);
   --sidebar-w: 240px;
-  --sidebar-collapsed-w: 60px;
+  --sidebar-collapsed-w: 68px;
 
   --transition-fast: 0.15s ease;
-  --transition: 0.2s ease;
+  --transition: 0.25s ease;
 }
 
 /* ---- RESET ---- */
@@ -267,6 +267,79 @@ img { display: block; max-width: 100%; }
   width: var(--sidebar-collapsed-w);
 }
 
+/* Desktop hover-expand sidebar */
+@media (min-width: 1025px) {
+  .v2-sidebar {
+    width: var(--sidebar-collapsed-w);
+  }
+
+  .v2-sidebar .v2-nav-text {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    transition: opacity 0.2s ease, width 0.2s ease;
+  }
+
+  .v2-sidebar .v2-nav-label {
+    opacity: 0;
+    height: 0;
+    padding: 0;
+    overflow: hidden;
+    transition: opacity 0.2s ease, height 0.2s ease, padding 0.2s ease;
+  }
+
+  .v2-sidebar .v2-nav-item {
+    justify-content: center;
+    padding: 10px 8px;
+  }
+
+  .v2-sidebar .v2-nav-badge {
+    display: none;
+  }
+
+  .v2-sidebar .v2-nav-divider {
+    margin: 4px 8px;
+  }
+
+  .v2-sidebar:hover,
+  .v2-sidebar.hover-expand {
+    width: var(--sidebar-w);
+    box-shadow: var(--shadow-md);
+    overflow-y: auto;
+  }
+
+  .v2-sidebar:hover .v2-nav-text,
+  .v2-sidebar.hover-expand .v2-nav-text {
+    opacity: 1;
+    width: auto;
+    transition: opacity 0.15s ease 0.08s, width 0.15s ease 0.08s;
+  }
+
+  .v2-sidebar:hover .v2-nav-label,
+  .v2-sidebar.hover-expand .v2-nav-label {
+    opacity: 1;
+    height: auto;
+    padding: 16px 10px 4px;
+    transition: opacity 0.15s ease 0.08s, height 0.15s ease, padding 0.15s ease;
+  }
+
+  .v2-sidebar:hover .v2-nav-item,
+  .v2-sidebar.hover-expand .v2-nav-item {
+    justify-content: flex-start;
+    padding: 8px 10px;
+  }
+
+  .v2-sidebar:hover .v2-nav-badge,
+  .v2-sidebar.hover-expand .v2-nav-badge {
+    display: inline;
+  }
+
+  .v2-sidebar:hover .v2-nav-divider,
+  .v2-sidebar.hover-expand .v2-nav-divider {
+    margin: 6px 10px;
+  }
+}
+
 /* Nav area */
 .v2-sidebar-nav {
   flex: 1;
@@ -397,12 +470,27 @@ img { display: block; max-width: 100%; }
   color: #fff;
 }
 
+/* Disabled nav items */
+.v2-nav-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: default;
+}
+
 /* ---- MAIN CONTENT ---- */
 .v2-main {
   flex: 1;
-  margin-left: var(--sidebar-w);
+  margin-left: var(--sidebar-collapsed-w);
   min-height: calc(100vh - var(--topbar-h));
   transition: margin-left var(--transition);
+}
+
+/* Desktop hover expand: main adjusts when sidebar expands */
+@media (min-width: 1025px) {
+  .v2-sidebar:hover ~ .v2-main,
+  .v2-sidebar.hover-expand ~ .v2-main {
+    margin-left: var(--sidebar-w);
+  }
 }
 
 .v2-sidebar.collapsed ~ .v2-main {
@@ -2132,6 +2220,93 @@ img { display: block; max-width: 100%; }
 .v2-profile-trigger:focus:not(:focus-visible),
 .v2-notif-bell:focus:not(:focus-visible) {
   outline: none;
+}
+
+/* ---- RESPONSIVE: NEW UI PHASE 1 PAGES ---- */
+
+/* Gateway action cards */
+.gw-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .gw-action-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* FY Workspace cards */
+.fy-ws-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .fy-ws-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Entity Select grid */
+.entity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  .entity-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Form two-column layout */
+.form-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .form-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* FY Manager grid */
+.fy-mgr-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .fy-mgr-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Summary card responsive */
+.summary-bar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Amount right-align */
+.amt-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scroll wrapper for wide tables */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ---- PRINT ---- */

@@ -24,8 +24,15 @@
 
   /* ---- SIDEBAR STATE ---- */
 
+  var isHoverExpand = false;
+  var hoverTimer = null;
+
   function isMobile() {
     return window.matchMedia('(max-width: 768px)').matches;
+  }
+
+  function isDesktop() {
+    return window.matchMedia('(min-width: 1025px)').matches;
   }
 
   function isCollapsed() {
@@ -53,11 +60,11 @@
       } else if (stored === '0') {
         setCollapsed(false);
       } else {
-        /* First visit: collapse on tablet, expand on desktop */
-        setCollapsed(isMobile() || window.innerWidth <= 1024);
+        /* Default: collapsed for hover-expand on desktop */
+        setCollapsed(true);
       }
     } catch (e) {
-      setCollapsed(false);
+      setCollapsed(true);
     }
   }
 
@@ -77,6 +84,23 @@
   }
 
   toggle.addEventListener('click', handleToggle);
+
+  /* ---- HOVER EXPAND (Desktop) ---- */
+
+  if (isDesktop()) {
+    sidebar.addEventListener('mouseenter', function () {
+      if (isMobile()) return;
+      clearTimeout(hoverTimer);
+      sidebar.classList.add('hover-expand');
+    });
+
+    sidebar.addEventListener('mouseleave', function () {
+      if (isMobile()) return;
+      hoverTimer = setTimeout(function () {
+        sidebar.classList.remove('hover-expand');
+      }, 200);
+    });
+  }
 
   /* ---- MOBILE OVERLAY CLOSE ---- */
 

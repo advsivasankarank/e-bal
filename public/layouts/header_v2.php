@@ -75,12 +75,14 @@ $v2EntityLabel = $v2EntityMap[strtolower($v2CompanyCategory)] ?? ucfirst(str_rep
 $v2CurrentScript = basename($_SERVER['SCRIPT_NAME'] ?? '');
 $v2CurrentDir    = basename(dirname($_SERVER['SCRIPT_NAME'] ?? ''));
 
-$v2ActiveSection = 'entities';
-if ($v2CurrentScript === 'dashboard_company.php') {
-    $v2ActiveSection = 'entities';
-} elseif ($v2CurrentScript === 'my_assignments.php' || $v2CurrentScript === 'entity_home.php') {
-    $v2ActiveSection = 'assignments';
-} elseif ($v2CurrentDir === 'data' || $v2CurrentScript === 'data') {
+$v2ActiveSection = 'gateway';
+if ($v2CurrentScript === 'dashboard_company.php' || $v2CurrentScript === 'entity_select.php' || $v2CurrentScript === 'entity_create.php' || $v2CurrentScript === 'entity_edit.php') {
+    $v2ActiveSection = 'gateway';
+} elseif ($v2CurrentScript === 'fy_manager.php') {
+    $v2ActiveSection = 'fy_manager';
+} elseif ($v2CurrentScript === 'fy_workspace.php') {
+    $v2ActiveSection = 'workspace';
+} elseif ($v2CurrentDir === 'data' || $v2CurrentScript === 'data' || $v2CurrentDir === 'data_console') {
     $v2ActiveSection = 'data';
 } elseif ($v2CurrentDir === 'statements' || $v2CurrentScript === 'statements') {
     $v2ActiveSection = 'statements';
@@ -134,13 +136,17 @@ try {
 }
 
 /* ---- Sidebar nav definition ---- */
+$v2HasEntity = $v2CompanyId > 0;
+$v2HasFy = $v2FyId > 0;
+
 $v2NavItems = [
-    ['section' => 'entities',   'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>', 'label' => 'Entity Dashboard', 'href' => BASE_URL . 'dashboard_company.php'],
-    ['section' => 'assignments','icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>', 'label' => 'My Assignments', 'href' => BASE_URL . 'my_assignments.php'],
-    ['section' => 'data',        'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>', 'label' => 'Data Centre',     'href' => BASE_URL . 'data/'],
-    ['section' => 'statements',  'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>', 'label' => 'Financials',    'href' => BASE_URL . 'statements/financials.php'],
-    ['section' => 'review',      'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>', 'label' => 'Review',        'href' => BASE_URL . 'review/'],
-    ['section' => 'deliverables','icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>', 'label' => 'Deliverables',  'href' => BASE_URL . 'deliverables/'],
+    ['section' => 'gateway',     'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>', 'label' => 'e-Bal Gateway', 'href' => BASE_URL . 'dashboard_company.php'],
+    ['section' => 'fy_manager',  'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>', 'label' => 'FY Manager', 'href' => $v2HasEntity ? BASE_URL . 'fy_manager.php?entity_id=' . $v2CompanyId : '#', 'disabled' => !$v2HasEntity],
+    ['section' => 'workspace',   'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>', 'label' => 'FY Workspace', 'href' => ($v2HasEntity && $v2HasFy) ? BASE_URL . 'fy_workspace.php?entity_id=' . $v2CompanyId . '&fy_id=' . $v2FyId : '#', 'disabled' => !($v2HasEntity && $v2HasFy)],
+    ['section' => 'data',        'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>', 'label' => 'Data Centre', 'href' => ($v2HasEntity && $v2HasFy) ? BASE_URL . 'data/index.php?entity_id=' . $v2CompanyId . '&fy_id=' . $v2FyId : '#', 'disabled' => !($v2HasEntity && $v2HasFy)],
+    ['section' => 'statements',  'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>', 'label' => 'Financials', 'href' => ($v2HasEntity && $v2HasFy) ? BASE_URL . 'statements/financials.php?entity_id=' . $v2CompanyId . '&fy_id=' . $v2FyId : '#', 'disabled' => !($v2HasEntity && $v2HasFy)],
+    ['section' => 'review',      'icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>', 'label' => 'Review', 'href' => ($v2HasEntity && $v2HasFy) ? BASE_URL . 'review/index.php?entity_id=' . $v2CompanyId . '&fy_id=' . $v2FyId : '#', 'disabled' => !($v2HasEntity && $v2HasFy)],
+    ['section' => 'deliverables','icon' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>', 'label' => 'Deliverables', 'href' => ($v2HasEntity && $v2HasFy) ? BASE_URL . 'deliverables/index.php?entity_id=' . $v2CompanyId . '&fy_id=' . $v2FyId : '#', 'disabled' => !($v2HasEntity && $v2HasFy)],
 ];
 
 $v2FooterItems = [
@@ -411,9 +417,10 @@ $v2FooterItems = [
             <div class="v2-nav-label">Workspace</div>
 
             <?php foreach ($v2NavItems as $item): ?>
-                <a class="v2-nav-item <?= $v2ActiveSection === $item['section'] ? 'active' : '' ?>"
+                <a class="v2-nav-item <?= $v2ActiveSection === $item['section'] ? 'active' : '' ?> <?= !empty($item['disabled']) ? 'v2-nav-disabled' : '' ?>"
                    href="<?= $item['href'] ?>"
-                   title="<?= htmlspecialchars($item['label']) ?>">
+                   title="<?= htmlspecialchars($item['label'] . (!empty($item['disabled']) ? ' — Select Entity and Financial Year first' : '')) ?>"
+                   <?= !empty($item['disabled']) ? 'aria-disabled="true"' : '' ?>>
                     <span class="v2-nav-icon"><?= $item['icon'] ?></span>
                     <span class="v2-nav-text"><?= htmlspecialchars($item['label']) ?></span>
                 </a>
