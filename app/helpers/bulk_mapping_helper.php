@@ -413,6 +413,334 @@ function getEnhancedKeywordRules(): array
 }
 
 /**
+ * Group-to-schedule mapping rules for standard Tally parent groups.
+ * Returns [normalized_parent_group => ['schedule_code' => ..., 'confidence' => int, 'reason' => ...]]
+ *
+ * Standard groups get 90% confidence (reliable).
+ * Custom/healthcare groups get 75-85% (needs review).
+ */
+function getParentGroupMappingRules(): array
+{
+    return [
+        // ===== STANDARD TALLY GROUPS (90% confidence) =====
+        'bank accounts' => [
+            'schedule_code' => 'cash',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Bank Accounts → Cash and Cash Equivalents.',
+        ],
+        'cash in hand' => [
+            'schedule_code' => 'cash',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Cash-in-Hand → Cash and Cash Equivalents.',
+        ],
+        'sundry debtors' => [
+            'schedule_code' => 'receivables',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Sundry Debtors → Trade Receivables.',
+        ],
+        'sundry creditors' => [
+            'schedule_code' => 'trade_payables',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Sundry Creditors → Trade Payables.',
+        ],
+        'sales accounts' => [
+            'schedule_code' => 'revenue',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Sales Accounts → Revenue from Operations.',
+        ],
+        'purchase accounts' => [
+            'schedule_code' => 'materials',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Purchase Accounts → Cost of Materials Consumed.',
+        ],
+        'duties and taxes' => [
+            'schedule_code' => 'other_current_liabilities',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Duties & Taxes → Statutory Liabilities.',
+        ],
+        'fixed assets' => [
+            'schedule_code' => 'ppe',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Fixed Assets → Property, Plant and Equipment.',
+        ],
+        'capital account' => [
+            'schedule_code' => 'share_capital',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Capital Account → Share Capital.',
+        ],
+        'secured loans' => [
+            'schedule_code' => 'lt_borrowings',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Secured Loans → Long-Term Borrowings.',
+        ],
+        'unsecured loans' => [
+            'schedule_code' => 'lt_borrowings',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Unsecured Loans → Long-Term Borrowings.',
+        ],
+        'loans advances asset' => [
+            'schedule_code' => 'loans_current',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Loans & Advances (Asset) → Short-Term Loans and Advances.',
+        ],
+        'loans and advances (liability)' => [
+            'schedule_code' => 'st_borrowings',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Loans & Advances (Liability) → Short-Term Borrowings.',
+        ],
+        'deposits (asset)' => [
+            'schedule_code' => 'other_current_assets',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Deposits (Asset) → Other Current Assets.',
+        ],
+        'direct expenses' => [
+            'schedule_code' => 'materials',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Direct Expenses → Cost of Materials Consumed.',
+        ],
+        'indirect expenses' => [
+            'schedule_code' => 'other_expenses',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Indirect Expenses → Other Expenses.',
+        ],
+        'direct incomes' => [
+            'schedule_code' => 'revenue',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Direct Incomes → Revenue from Operations.',
+        ],
+        'indirect incomes' => [
+            'schedule_code' => 'other_income',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Indirect Incomes → Other Income.',
+        ],
+        'current liabilities' => [
+            'schedule_code' => 'other_current_liabilities',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Current Liabilities → Other Current Liabilities.',
+        ],
+        'current assets' => [
+            'schedule_code' => 'other_current_assets',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Current Assets → Other Current Assets.',
+        ],
+        'provisions' => [
+            'schedule_code' => 'short_term_provisions',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Provisions → Short-Term Provisions.',
+        ],
+        'stock in hand' => [
+            'schedule_code' => 'inventory',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Stock in Hand → Inventories.',
+        ],
+        'branch divisions' => [
+            'schedule_code' => 'other_current_assets',
+            'confidence' => 85,
+            'reason' => 'Standard Tally group: Branch Divisions → Other Current Assets.',
+        ],
+        'miscellaneous expenses' => [
+            'schedule_code' => 'other_expenses',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Miscellaneous Expenses → Other Expenses.',
+        ],
+        'service accounts' => [
+            'schedule_code' => 'revenue',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Service Accounts → Revenue from Operations.',
+        ],
+        'income (direct)' => [
+            'schedule_code' => 'revenue',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Income (Direct) → Revenue from Operations.',
+        ],
+        'income (indirect)' => [
+            'schedule_code' => 'other_income',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Income (Indirect) → Other Income.',
+        ],
+        'expense (direct)' => [
+            'schedule_code' => 'materials',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Expense (Direct) → Cost of Materials Consumed.',
+        ],
+        'expense (indirect)' => [
+            'schedule_code' => 'other_expenses',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Expense (Indirect) → Other Expenses.',
+        ],
+        'statutory duties' => [
+            'schedule_code' => 'other_current_liabilities',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Statutory Duties → Statutory Liabilities.',
+        ],
+        'statutory payments' => [
+            'schedule_code' => 'other_current_liabilities',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Statutory Payments → Statutory Liabilities.',
+        ],
+        'bank od accounts' => [
+            'schedule_code' => 'st_borrowings',
+            'confidence' => 90,
+            'reason' => 'Standard Tally group: Bank OD Accounts → Short-Term Borrowings.',
+        ],
+
+        // ===== CUSTOM / HEALTHCARE GROUPS (75-85% confidence) =====
+        'plant machinery and equipment' => [
+            'schedule_code' => 'ppe',
+            'confidence' => 85,
+            'reason' => 'Custom group: Plant & Machinery → Property, Plant and Equipment.',
+        ],
+        'furniture fittings' => [
+            'schedule_code' => 'ppe',
+            'confidence' => 85,
+            'reason' => 'Custom group: Furniture & Fittings → Property, Plant and Equipment.',
+        ],
+        'computer computer accessories' => [
+            'schedule_code' => 'ppe',
+            'confidence' => 85,
+            'reason' => 'Custom group: Computer & Accessories → Property, Plant and Equipment.',
+        ],
+        'lab equipment' => [
+            'schedule_code' => 'ppe',
+            'confidence' => 85,
+            'reason' => 'Custom group: Lab Equipment → Property, Plant and Equipment.',
+        ],
+        'fixed deposit' => [
+            'schedule_code' => 'bank_balances_other',
+            'confidence' => 85,
+            'reason' => 'Custom group: Fixed Deposit → Other Bank Balances.',
+        ],
+        'staff loan a\c' => [
+            'schedule_code' => 'loans_current',
+            'confidence' => 80,
+            'reason' => 'Custom group: Staff Loan → Short-Term Loans and Advances.',
+        ],
+        'tds professionals' => [
+            'schedule_code' => 'other_current_assets',
+            'confidence' => 85,
+            'reason' => 'Custom group: TDS-Professionals → Other Current Assets (TDS Receivable).',
+        ],
+        'tds contractor' => [
+            'schedule_code' => 'other_current_assets',
+            'confidence' => 85,
+            'reason' => 'Custom group: TDS-Contractor → Other Current Assets (TDS Receivable).',
+        ],
+        'doctors fees payable' => [
+            'schedule_code' => 'trade_payables',
+            'confidence' => 80,
+            'reason' => 'Custom group: Doctors Fees Payable → Trade Payables.',
+        ],
+        'professional fees' => [
+            'schedule_code' => 'other_expenses',
+            'confidence' => 85,
+            'reason' => 'Custom group: Professional Fees → Other Expenses.',
+        ],
+        'doctors fees' => [
+            'schedule_code' => 'other_expenses',
+            'confidence' => 80,
+            'reason' => 'Custom group: Doctors Fees → Other Expenses (Professional Fees).',
+        ],
+        'salary nursing' => [
+            'schedule_code' => 'employee_cost',
+            'confidence' => 85,
+            'reason' => 'Custom group: Salary Nursing → Employee Benefit Expenses.',
+        ],
+        'telephone charges' => [
+            'schedule_code' => 'other_expenses',
+            'confidence' => 85,
+            'reason' => 'Custom group: Telephone Charges → Other Expenses.',
+        ],
+        'insurance patient' => [
+            'schedule_code' => 'receivables',
+            'confidence' => 75,
+            'reason' => 'Custom healthcare group: Insurance Patient → Trade Receivables (insurance claims).',
+        ],
+        'advance in patient' => [
+            'schedule_code' => 'receivables',
+            'confidence' => 75,
+            'reason' => 'Custom healthcare group: Advance in Patient → Trade Receivables (patient advances).',
+        ],
+        'credit bill patient' => [
+            'schedule_code' => 'receivables',
+            'confidence' => 75,
+            'reason' => 'Custom healthcare group: Credit Bill Patient → Trade Receivables.',
+        ],
+        'mission smile' => [
+            'schedule_code' => 'other_current_assets',
+            'confidence' => 75,
+            'reason' => 'Custom healthcare group: Mission Smile → Other Current Assets (charitable programme).',
+        ],
+        'inpatient receipts' => [
+            'schedule_code' => 'revenue',
+            'confidence' => 80,
+            'reason' => 'Custom healthcare group: Inpatient Receipts → Revenue from Operations.',
+        ],
+        'out patient receipts' => [
+            'schedule_code' => 'revenue',
+            'confidence' => 80,
+            'reason' => 'Custom healthcare group: Out Patient Receipts → Revenue from Operations.',
+        ],
+        'patient care income' => [
+            'schedule_code' => 'revenue',
+            'confidence' => 80,
+            'reason' => 'Custom healthcare group: Patient Care Income → Revenue from Operations.',
+        ],
+        'tests procedures other receipts op' => [
+            'schedule_code' => 'revenue',
+            'confidence' => 80,
+            'reason' => 'Custom healthcare group: Tests/Procedures OP → Revenue from Operations.',
+        ],
+        'tests procedures other receipts ip' => [
+            'schedule_code' => 'revenue',
+            'confidence' => 80,
+            'reason' => 'Custom healthcare group: Tests/Procedures IP → Revenue from Operations.',
+        ],
+        "creditor's pharmacy purchase" => [
+            'schedule_code' => 'trade_payables',
+            'confidence' => 85,
+            'reason' => 'Custom group: Pharmacy Purchase Creditors → Trade Payables.',
+        ],
+        "creditor's repair maintenance" => [
+            'schedule_code' => 'trade_payables',
+            'confidence' => 85,
+            'reason' => 'Custom group: Repair & Maintenance Creditors → Trade Payables.',
+        ],
+        "creditor's lab purchase" => [
+            'schedule_code' => 'trade_payables',
+            'confidence' => 85,
+            'reason' => 'Custom group: Lab Purchase Creditors → Trade Payables.',
+        ],
+        "creditor's others" => [
+            'schedule_code' => 'trade_payables',
+            'confidence' => 80,
+            'reason' => 'Custom group: Other Creditors → Trade Payables.',
+        ],
+    ];
+}
+
+/**
+ * Check if a parent group matches any group mapping rule.
+ * Returns suggestion array or null.
+ */
+function matchParentGroupRule(string $parentGroup): ?array
+{
+    $rules = getParentGroupMappingRules();
+    $normalized = normalizeMappingText($parentGroup);
+
+    if (isset($rules[$normalized])) {
+        $rule = $rules[$normalized];
+        return [
+            'schedule_code' => $rule['schedule_code'],
+            'confidence' => $rule['confidence'],
+            'source' => 'parent_group_rule',
+            'reason' => $rule['reason'],
+        ];
+    }
+
+    return null;
+}
+
+/**
  * Run the unified suggestion pipeline for a single ledger.
  * Returns ['schedule_code' => ..., 'confidence' => int, 'source' => string, 'reason' => string]
  */
@@ -457,6 +785,12 @@ function suggestBulkMapping(
             'source' => 'global_master',
             'reason' => 'Matched global mapping master (used ' . $globalMaster[$normalized]['usage_count'] . ' times across companies).',
         ];
+    }
+
+    // 3b. Parent group rule match → 85-90%
+    $groupRule = matchParentGroupRule($parentGroup);
+    if ($groupRule) {
+        return $groupRule;
     }
 
     // 4. Hierarchy AI engine → variable confidence
