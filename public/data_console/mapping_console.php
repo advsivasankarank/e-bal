@@ -1,209 +1,26 @@
 <?php
-require_once '../../app/context_check.php';
-require_once '../../app/workflow_engine.php';
-require_once '../../config/database.php';
-require_once '../../app/engines/ai_mapping_engine.php';
-require_once '../../app/helpers/mapping_ai_helper.php';
-require_once '../../app/helpers/parent_group_validation_helper.php';
-require_once '../../app/helpers/hierarchy_ai_mapping.php';
+/**
+ * e-BAL V2 — Mapping Console (Legacy Redirect)
+ *
+ * This page redirects to the Bulk Mapping Workbench.
+ * The old mapping console has been superseded by mapping_workbench.php.
+ */
+$page_title = 'Mapping Console';
+require_once __DIR__ . '/layouts/header_v2.php';
 
-requireFullContext();
+$company_id = $_SESSION['company_id'] ?? 0;
+$fy_id      = $_SESSION['fy_id'] ?? 0;
+$companyName = $_SESSION['company_name'] ?? 'Not Selected';
+$fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 
-$company_id = $_SESSION['company_id'];
-$fy_id      = $_SESSION['fy_id'];
-$userId = (int) ($_SESSION['user_id'] ?? 0);
-ensureMappingAiSchema($pdo);
-
-$companyStmt = $pdo->prepare("SELECT category FROM companies WHERE id = ?");
-$companyStmt->execute([$company_id]);
-$companyCategory = strtolower((string) $companyStmt->fetchColumn());
-$mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
-$hierarchyEngine = null;
-$pageWarning = '';
-try {
-    $hierarchyEngine = new HierarchyAIMappingEngine($pdo, (int) $company_id, $companyCategory);
-} catch (Throwable $e) {
-    error_log('Mapping Console: hierarchy engine init failed: ' . $e->getMessage());
-    $pageWarning = 'Hierarchy AI mapping unavailable. Basic mapping mode active.';
+/* Build workbench URL with context */
+$workbenchUrl = BASE_URL . 'data_console/mapping_workbench.php';
+$params = [];
+if ($company_id > 0) $params['entity_id'] = $company_id;
+if ($fy_id > 0) $params['fy_id'] = $fy_id;
+if (!empty($params)) {
+    $workbenchUrl .= '?' . http_build_query($params);
 }
-$mappingOptions = $mappingEngine->getMappingOptions();
-asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
-
-$page_title = "Mapping Console";
-require_once __DIR__ . '/../layouts/header_v2.php';
-
-/* =========================
-   FETCH ALL LEDGERS (full data set for filtering)
-   ========================= */
-/* =========================
-   FETCH ALL LEDGERS (full data set for filtering)
-   Safe: wrapped in try/catch to prevent blank page
-   ========================= */
-$mappingLoadError = null;
-$allLedgers = [];
-$autoMappedCount = 0;
-$reviewCount = 0;
-$conflictCount = 0;
-$mappedCount = 0;
-
-try {
-    /* Check if hierarchy columns exist */
-    $hasHierarchyCols = false;
-    try {
-        $chkStmt = $pdo->query("SHOW COLUMNS FROM tally_ledger_master LIKE 'tally_group_path'");
-        $hasHierarchyCols = $chkStmt->rowCount() > 0;
-    } catch (Throwable $e) { /* table may not exist */ }
-
-    $allLedgersStmt = $pdo->prepare("
-        SELECT
-            t.ledger_name,
-            t.parent_group,
-            " . ($hasHierarchyCols ? "
-            COALESCE(tlm.primary_group, '') AS primary_group,
-            COALESCE(tlm.tally_group_path, '') AS tally_group_path,
-            COALESCE(tlm.tally_root_type, '') AS tally_root_type,
-            " : "
-            '' AS primary_group,
-            '' AS tally_group_path,
-            '' AS tally_root_type,
-            ") . "
-            lm.schedule_code AS mapped_code,
-            lm.confidence_score,
-            lm.mapping_source
-        FROM tally_ledger_master t
-        LEFT JOIN tally_ledger_master tlm 
-            ON tlm.company_id = t.company_id AND tlm.ledger_name = t.parent_group
-        LEFT JOIN ledger_mapping lm
-            ON lm.company_id = t.company_id
-            AND lm.ledger_name = t.ledger_name
-        WHERE t.company_id=?
-        ORDER BY t.ledger_name
-    ");
-    $allLedgersStmt->execute([$company_id]);
-    $allLedgers = $allLedgersStmt->fetchAll(PDO::FETCH_ASSOC);
-
-    /* =========================
-       AUTO-MAP: Apply AI mapping to unmapped ledgers
-       ========================= */
-    $autoMapStmt = $pdo->prepare("
-        INSERT INTO ledger_mapping
-        (company_id, ledger_name, schedule_code, mapping_source, confidence_score, mapping_reason, remember_scope, approved_by_user_id, approved_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE
-            schedule_code = VALUES(schedule_code),
-            mapping_source = VALUES(mapping_source),
-            confidence_score = VALUES(confidence_score),
-            mapping_reason = VALUES(mapping_reason),
-            remember_scope = VALUES(remember_scope),
-            approved_by_user_id = VALUES(approved_by_user_id),
-            approved_at = VALUES(approved_at)
-    ");
-
-    $autoMappedCount = 0;
-    $reviewCount = 0;
-    $conflictCount = 0;
-    $mappedCount = 0;
-
-    foreach ($allLedgers as &$row) {
-        $isMapped = !empty($row['mapped_code']);
-        $parentGroup = (string) ($row['parent_group'] ?? '');
-
-        if ($isMapped) {
-            $mappedCount++;
-            $row['status'] = 'mapped';
-            $row['ai_suggested_code'] = $row['mapped_code'];
-            $row['ai_suggested_label'] = $mappingEngine->getLabel($row['mapped_code']);
-            $row['ai_confidence'] = (int) ($row['confidence_score'] ?? 100);
-            $row['ai_reason'] = $row['mapping_source'] === 'manual' ? 'Manually mapped by user' : 'Auto-mapped by engine';
-            $row['ai_source'] = $row['mapping_source'] ?? 'manual';
-            $row['ai_conflict'] = false;
-            continue;
-        }
-
-        /* Run hierarchy-aware AI for unmapped ledgers */
-        $hierarchy = null;
-        $aiResult = null;
-        if ($hierarchyEngine) {
-            try {
-                $hierarchy = $hierarchyEngine->getLedgerHierarchy($row['ledger_name']);
-                $aiResult = $hierarchyEngine->mapLedger($row['ledger_name'], $parentGroup, $hierarchy);
-            } catch (Throwable $e) {
-                error_log('Mapping Console: AI mapping failed for ledger ' . $row['ledger_name'] . ': ' . $e->getMessage());
-                $hierarchy = null;
-                $aiResult = null;
-            }
-        }
-
-        /* Also run legacy engine for comparison */
-        try {
-            $legacyResult = $mappingEngine->mapLedger($row['ledger_name'], $parentGroup);
-            if ($legacyResult && (!$aiResult || ($legacyResult['confidence'] ?? 0) > ($aiResult['confidence'] ?? 0))) {
-                $aiResult = $legacyResult;
-            }
-        } catch (Throwable $e) {
-            $legacyResult = null;
-        }
-
-        $suggestedCode = $aiResult ? ($aiResult['suggested_head'] ?? $aiResult['head'] ?? '') : '';
-        $confidence = $aiResult ? (int) ($aiResult['confidence'] ?? 0) : 0;
-        $suggestedReason = $aiResult ? ($aiResult['reason'] ?? 'No reason available') : '';
-        $suggestedSource = $aiResult ? ($aiResult['source_basis'][0] ?? $aiResult['method'] ?? 'rule') : 'rule';
-        $hasConflict = $suggestedCode !== '' && !isScheduleCodeAllowedForParentGroup($parentGroup, $suggestedCode);
-
-        /* Auto-map high-confidence, low-risk, non-conflict suggestions */
-        if ($suggestedCode !== '' && $confidence >= 90 && !$hasConflict && ($aiResult['risk'] ?? 'Low') === 'Low') {
-            $autoMapStmt->execute([
-                $company_id,
-                $row['ledger_name'],
-                $suggestedCode,
-                'auto_' . $suggestedSource,
-                $confidence,
-                $suggestedReason,
-                null,
-                $userId > 0 ? $userId : null,
-            ]);
-            $autoMappedCount++;
-            $row['status'] = 'auto_mapped';
-            $row['ai_suggested_code'] = $suggestedCode;
-            $row['ai_suggested_label'] = $mappingEngine->getLabel($suggestedCode);
-            $row['ai_confidence'] = $confidence;
-            $row['ai_reason'] = $suggestedReason;
-            $row['ai_source'] = $suggestedSource;
-            $row['ai_conflict'] = $hasConflict;
-            continue;
-        }
-
-        /* Review-required ledgers */
-        $reviewCount++;
-        $row['status'] = 'review_required';
-        $row['ai_suggested_code'] = $suggestedCode;
-        $row['ai_suggested_label'] = $suggestedCode !== '' ? $mappingEngine->getLabel($suggestedCode) : 'No confident match';
-        $row['ai_confidence'] = $confidence;
-        $row['ai_reason'] = $suggestedReason;
-        $row['ai_source'] = $suggestedSource;
-        $row['ai_conflict'] = $hasConflict;
-    }
-    unset($row);
-
-    if ($autoMappedCount > 0) {
-        $_SESSION['success'] = $autoMappedCount . ' ledgers were auto-mapped using Tally hierarchy.';
-    }
-
-    /* Count conflicts */
-    $conflictCount = 0;
-    foreach ($allLedgers as $r) {
-        if (!empty($r['ai_conflict'])) $conflictCount++;
-    }
-
-} catch (Throwable $e) {
-    error_log('Mapping Console: data load failed: ' . $e->getMessage());
-    $mappingLoadError = 'Mapping data could not be loaded. Basic fallback mode is active.';
-}
-
-/* $ledgers = unmapped ledgers only (for the classic form UI) */
-$ledgers = array_filter($allLedgers, function ($r) {
-    return empty($r['mapped_code']);
-});
 ?>
 
 <?= uiBreadcrumb([
@@ -211,232 +28,41 @@ $ledgers = array_filter($allLedgers, function ($r) {
     ['label' => 'Mapping Console'],
 ]) ?>
 
-<?= uiPageHero('Mapping Console', 'Only unmatched or review-required ledgers are shown here. The mapper applies company learning, global learning, keyword rules, and parent-group controls before asking for manual review.') ?>
-
-<?php if (!empty($pageWarning)): ?>
-    <?= uiAlert($pageWarning, 'warning') ?>
-<?php endif; ?>
-
-<?php if (!empty($mappingLoadError)): ?>
-    <?= uiAlert($mappingLoadError, 'warning') ?>
-<?php endif; ?>
-
-<?= uiContextCard([
-    'company' => $_SESSION['company_name'] ?? 'Not Selected',
-    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
-]) ?>
+<?= uiPageHero('Mapping Console', 'Ledger mapping has moved to the Bulk Mapping Workbench.') ?>
 
 <?= uiWorkspaceStart() ?>
 
-<div class="summary-bar">
-    <div class="summary-card">
-        <div class="summary-number"><?= (int) $autoMappedCount ?></div>
-        <div class="summary-label">Auto Mapped</div>
+<div style="max-width:640px;margin:0 auto;text-align:center;padding:40px 20px;">
+    <div style="font-size:3rem;margin-bottom:16px;">🗂️</div>
+    <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:8px;color:var(--text);">Mapping has moved to Bulk Mapping Workbench</h2>
+    <p style="font-size:0.9rem;color:var(--muted);margin-bottom:24px;line-height:1.6;">
+        The legacy mapping console has been replaced by the new <strong>Bulk Mapping Workbench</strong>
+        which provides an Excel-like interface with DR/CR columns, Schedule III Group Mapping,
+        AI suggestions, and bulk save capabilities.
+    </p>
+
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:24px;">
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;">Current Context</div>
+        <div style="font-size:0.95rem;font-weight:600;"><?= htmlspecialchars($companyName) ?></div>
+        <div style="font-size:0.85rem;color:var(--muted);">FY <?= htmlspecialchars($fyName) ?></div>
     </div>
-    <div class="summary-card">
-        <div class="summary-number"><?= (int) $reviewCount ?></div>
-        <div class="summary-label">Needs Review</div>
-    </div>
-    <div class="summary-card">
-        <div class="summary-number"><?= (int) $conflictCount ?></div>
-        <div class="summary-label">Conflicts</div>
-    </div>
-</div>
 
-<?php if (empty($ledgers)): ?>
-    <div class="card" style="margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-        <div>
-            <strong>Action Completed</strong><br>
-            Mapping is already completed for this company. Do you want to continue to trial balance fetch, or go back and re-sync ledgers?
-        </div>
-        <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php?bridge=1">Continue</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/tally_console.php">Re-sync Ledgers</a>
-        </div>
-    </div>
-<?php endif; ?>
+    <a href="<?= htmlspecialchars($workbenchUrl) ?>" class="v2-btn v2-btn--primary" style="display:inline-flex;align-items:center;gap:8px;padding:14px 32px;font-size:1rem;">
+        Open Bulk Mapping Workbench →
+    </a>
 
-<div class="card" style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-    <a class="btn btn-success" href="<?= BASE_URL ?>data_console/mapping_workbench.php">&#128202; Open Bulk Mapping Workbench</a>
-    <a class="btn" href="<?= BASE_URL ?>data_console/view_synced_ledgers.php">View Synced Ledgers</a>
-</div>
-
-<?php if ($autoMappedCount > 0): ?>
-    <div class="success-box"><p><?= htmlspecialchars($autoMappedCount . ' ledgers were auto-mapped by the backend engine.') ?></p></div>
-<?php endif; ?>
-
-<?php if (!empty($_SESSION['success'])): ?>
-    <div class="success-box"><p><?= htmlspecialchars($_SESSION['success']) ?></p></div>
-<?php endif; ?>
-
-<?php if (!empty($_SESSION['error'])): ?>
-    <div class="error-box"><p><?= htmlspecialchars($_SESSION['error']) ?></p></div>
-<?php endif; ?>
-
-<?php if (!empty($_SESSION['mapping_parent_group_conflicts'])): ?>
-    <div class="error-box" style="margin-bottom:16px;">
-        <p>Parent group validation conflict detected. A ledger under Assets, Liabilities, Income, or Expenses cannot be saved into a note head of a different accounting nature.</p>
-        <ul style="margin:8px 0 0 18px;">
-            <?php foreach (array_slice($_SESSION['mapping_parent_group_conflicts'], 0, 8) as $conflict): ?>
-                <li><?= htmlspecialchars($conflict['ledger_name'] . ' [' . ($conflict['parent_group'] !== '' ? $conflict['parent_group'] : 'No Parent Group') . '] -> ' . $conflict['schedule_code']) ?></li>
-            <?php endforeach; ?>
+    <div style="margin-top:24px;font-size:0.8rem;color:var(--muted);">
+        <p>Features available in the new workbench:</p>
+        <ul style="text-align:left;display:inline-block;margin-top:8px;line-height:1.8;">
+            <li>Excel-like ledger grid with DR/CR columns</li>
+            <li>Schedule III Group Mapping panel</li>
+            <li>AI-powered mapping suggestions</li>
+            <li>Risk warnings for DR/CR mismatches</li>
+            <li>Bulk accept and save functionality</li>
+            <li>Export/Import from Excel</li>
         </ul>
     </div>
-<?php endif; ?>
-
-<form method="post" action="mapping_save.php">
-<?= csrfInput() ?>
-
-<?php if (!empty($ledgers)): ?>
-<div class="card" style="margin-bottom:16px;">
-    <strong>Bulk Match</strong><br>
-    Select the ledgers that belong to a common group, choose the required schedule head, and click <strong>Match Selected</strong>. Use the remember scope when you want the system to learn future decisions.
-    <div style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-        <label style="display:flex; align-items:center; gap:8px;">
-            <input type="checkbox" id="select_all_ledgers">
-            <span>Select All</span>
-        </label>
-        <select id="bulk_mapping_code">
-            <option value="">Select Head</option>
-            <?php foreach ($mappingOptions as $optionCode => $optionLabel): ?>
-                <option value="<?= htmlspecialchars($optionCode) ?>"><?= htmlspecialchars($optionLabel) ?></option>
-            <?php endforeach; ?>
-        </select>
-        <button type="button" class="btn" onclick="applyBulkMapping()">Match Selected</button>
-    </div>
 </div>
-<?php endif; ?>
-
-<table border="1" cellpadding="8" cellspacing="0" width="100%">
-    <tr>
-        <th>Select</th>
-        <th>Ledger</th>
-        <th>Parent Group</th>
-        <th>Suggested Head</th>
-        <th>Confidence</th>
-        <th>AI Reason</th>
-        <th>Select Head</th>
-        <th>Remember</th>
-    </tr>
-
-<?php foreach ($ledgers as $row): 
-    $suggestedCode = $row['ai_suggested_code'] ?? '';
-    $suggestedLabel = $row['ai_suggested_label'] ?? 'No confident match';
-    $selectedCode = $row['mapped_code'] ?: $suggestedCode;
-?>
-
-<tr>
-    <td>
-        <input type="checkbox" class="ledger-selector">
-    </td>
-    <td><?= htmlspecialchars($row['ledger_name']) ?></td>
-    <td><?= htmlspecialchars($row['parent_group'] ?: '-') ?></td>
-    <td>
-        <?= htmlspecialchars($suggestedLabel) ?>
-        <?php if (!empty($row['ai_conflict'])): ?>
-            <div style="color:#b42318; font-size:12px; margin-top:4px;">Parent-group conflict</div>
-        <?php endif; ?>
-    </td>
-    <td style="text-align:center;">
-        <strong><?= (int) ($row['ai_confidence'] ?? 0) ?>%</strong><br>
-        <span style="font-size:12px; color:#667085;"><?= htmlspecialchars(ucwords(str_replace('_', ' ', (string) ($row['ai_source'] ?? 'ai')))) ?></span>
-    </td>
-    <td style="max-width:280px;">
-        <div style="white-space:normal; color:#344054;"><?= htmlspecialchars((string) ($row['ai_reason'] ?? 'No explanation')) ?></div>
-    </td>
-
-    <td>
-        <select name="mapping[<?= htmlspecialchars($row['ledger_name']) ?>]" class="mapping-select" required>
-            <option value="">Select</option>
-            <?php foreach ($mappingOptions as $optionCode => $optionLabel): ?>
-                <option value="<?= htmlspecialchars($optionCode) ?>" <?= $selectedCode === $optionCode ? "selected" : "" ?>>
-                    <?= htmlspecialchars($optionLabel) ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
-    </td>
-    <td>
-        <select name="remember_scope[<?= htmlspecialchars($row['ledger_name']) ?>]" class="remember-select">
-            <option value="">Do Not Learn</option>
-            <option value="company">Remember for this company</option>
-            <option value="global">Remember globally</option>
-        </select>
-    </td>
-</tr>
-
-<?php endforeach; ?>
-
-</table>
-
-<?php if (empty($ledgers)): ?>
-    <div class="card" style="margin-top:16px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-        <div>
-            All imported ledgers are mapped for this company. The mapping step is complete. Continue directly to the live trial balance fetch stage.
-        </div>
-        <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <a class="btn" href="<?= BASE_URL ?>data_console/view_synced_ledgers.php">View Synced Ledgers</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/tally_connect.php?bridge=1">Continue: Fetch Trial Balance</a>
-            <a class="btn" href="<?= BASE_URL ?>data_console/tally_console.php">Re-sync Ledgers</a>
-        </div>
-    </div>
-<?php endif; ?>
-
-<br>
-
-<div style="margin-bottom:12px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-    <label style="display:flex; align-items:center; gap:8px;">
-        <input type="checkbox" name="allow_override" value="1">
-        Allow parent group override
-    </label>
-    <span style="color:#667085; font-size:12px;">Use only when you intentionally want to keep a ledger under a different accounting nature.</span>
-</div>
-
-<button type="submit" class="btn">Save Mapping</button>
-
-</form>
-
-<?php if (!empty($ledgers)): ?>
-<script>
-const selectAllLedgers = document.getElementById('select_all_ledgers');
-
-if (selectAllLedgers) {
-    selectAllLedgers.addEventListener('change', function () {
-        document.querySelectorAll('.ledger-selector').forEach(function (checkbox) {
-            checkbox.checked = selectAllLedgers.checked;
-        });
-    });
-}
-
-function applyBulkMapping() {
-    const selectedCode = document.getElementById('bulk_mapping_code').value;
-
-    if (!selectedCode) {
-        alert('Select a schedule head first.');
-        return;
-    }
-
-    const checkedRows = document.querySelectorAll('.ledger-selector:checked');
-
-    if (checkedRows.length === 0) {
-        alert('Select at least one ledger to match.');
-        return;
-    }
-
-    checkedRows.forEach(function (checkbox) {
-        const row = checkbox.closest('tr');
-        const mappingSelect = row.querySelector('.mapping-select');
-
-        if (mappingSelect) {
-            mappingSelect.value = selectedCode;
-        }
-    });
-}
-</script>
-<?php endif; ?>
-
-<?php
-unset($_SESSION['success'], $_SESSION['error'], $_SESSION['mapping_parent_group_conflicts']);
-?>
 
 <?= uiWorkspaceEnd() ?>
 

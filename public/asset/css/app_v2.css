@@ -1653,6 +1653,98 @@ img { display: block; max-width: 100%; }
   border-top: none;
 }
 
+/* ---- Workflow Tiles (Horizontal Layout) ---- */
+.v2-dw-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1200px) {
+  .v2-dw-tiles { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .v2-dw-tiles { grid-template-columns: 1fr; }
+}
+
+.v2-dw-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: clamp(16px, 2vw, 22px);
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  cursor: pointer;
+}
+
+.v2-dw-tile:hover {
+  border-color: var(--brand);
+  box-shadow: var(--shadow);
+}
+
+.v2-dw-tile-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.v2-dw-tile-icon {
+  font-size: 1.8rem;
+  flex-shrink: 0;
+}
+
+.v2-dw-tile-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.v2-dw-tile-info h3 {
+  font-size: clamp(0.95rem, 1.1vw, 1.05rem);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.v2-dw-tile-desc {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.v2-dw-tile-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.v2-dw-tile-metric-num {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--brand);
+}
+
+.v2-dw-tile-metric-lbl {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.v2-dw-tile-detail {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.v2-dw-tile-action {
+  margin-top: auto;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--brand);
+}
+
 /* ---- RESPONSIVE ---- */
 
 /* Large screens (2560+) */

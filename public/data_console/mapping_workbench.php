@@ -13,6 +13,12 @@ requireFullContext();
 $company_id = $_SESSION['company_id'];
 $fy_id      = $_SESSION['fy_id'];
 $userId = (int) ($_SESSION['user_id'] ?? 0);
+
+if ($company_id <= 0 || $fy_id <= 0) {
+    header('Location: ' . BASE_URL . 'data_console/tally_console.php');
+    exit;
+}
+
 ensureMappingAiSchema($pdo);
 ensureLedgerMappingOverrideColumn($pdo);
 
@@ -70,39 +76,67 @@ $ledgerStmt = $pdo->prepare("
 $ledgerStmt->execute([$company_id]);
 $allLedgers = $ledgerStmt->fetchAll(PDO::FETCH_ASSOC);
 
-/* Load trial balance amounts */
-$tbStmt = $pdo->prepare("
-    SELECT ledger_name,
-           opening_amount,
-           amount AS closing_amount,
-           dr_cr,
-           parent_group
-    FROM tally_ledgers
-    WHERE company_id = ? AND fy_id = ?
-");
-$tbStmt->execute([$company_id, $fy_id]);
+/* Load trial balance amounts - handle missing columns gracefully */
 $tbData = [];
-while ($row = $tbStmt->fetch(PDO::FETCH_ASSOC)) {
-    $tbData[$row['ledger_name']] = $row;
+try {
+    $tbColumns = $pdo->query("SHOW COLUMNS FROM tally_ledgers")->fetchAll(PDO::FETCH_COLUMN);
+    $hasOpeningDebit = in_array('opening_debit', $tbColumns);
+    $hasOpeningCredit = in_array('opening_credit', $tbColumns);
+    $hasClosingDebit = in_array('closing_debit', $tbColumns);
+    $hasClosingCredit = in_array('closing_credit', $tbColumns);
+
+    if ($hasOpeningDebit && $hasOpeningCredit && $hasClosingDebit && $hasClosingCredit) {
+        /* New DR/CR columns exist */
+        $tbStmt = $pdo->prepare("
+            SELECT ledger_name,
+                   opening_debit, opening_credit,
+                   closing_debit, closing_credit,
+                   dr_cr,
+                   parent_group
+            FROM tally_ledgers
+            WHERE company_id = ? AND fy_id = ?
+        ");
+        $tbStmt->execute([$company_id, $fy_id]);
+        while ($row = $tbStmt->fetch(PDO::FETCH_ASSOC)) {
+            $tbData[$row['ledger_name']] = $row;
+        }
+    } else {
+        /* Fallback: old single amount column */
+        $tbStmt = $pdo->prepare("
+            SELECT ledger_name,
+                   opening_amount,
+                   amount AS closing_amount,
+                   dr_cr,
+                   parent_group
+            FROM tally_ledgers
+            WHERE company_id = ? AND fy_id = ?
+        ");
+        $tbStmt->execute([$company_id, $fy_id]);
+        while ($row = $tbStmt->fetch(PDO::FETCH_ASSOC)) {
+            $tbData[$row['ledger_name']] = $row;
+        }
+    }
+} catch (Throwable $e) {
+    error_log('Mapping Workbench: TB load failed: ' . $e->getMessage());
 }
 
-/* Compute debits/credits from voucher_entries */
-$veStmt = $pdo->prepare("
-    SELECT ledger_name,
-           SUM(CASE WHEN dr_cr = 'DR' THEN amount ELSE 0 END) AS total_dr,
-           SUM(CASE WHEN dr_cr = 'CR' THEN amount ELSE 0 END) AS total_cr
-    FROM voucher_entries
-    WHERE company_id = ? AND fy_id = ?
-    GROUP BY ledger_name
-");
+/* Compute debits/credits from voucher_entries (graceful fallback) */
 $veData = [];
 try {
+    $veStmt = $pdo->prepare("
+        SELECT ledger_name,
+               SUM(CASE WHEN dr_cr = 'DR' THEN amount ELSE 0 END) AS total_dr,
+               SUM(CASE WHEN dr_cr = 'CR' THEN amount ELSE 0 END) AS total_cr
+        FROM voucher_entries
+        WHERE company_id = ? AND fy_id = ?
+        GROUP BY ledger_name
+    ");
     $veStmt->execute([$company_id, $fy_id]);
     while ($row = $veStmt->fetch(PDO::FETCH_ASSOC)) {
         $veData[$row['ledger_name']] = $row;
     }
 } catch (Throwable $e) {
-    /* voucher_entries may not exist */
+    /* voucher_entries may not exist — use tally_ledgers as fallback */
 }
 
 /* Build grid data with suggestions */
@@ -119,7 +153,7 @@ foreach ($allLedgers as $row) {
 }
 
 $gridData = [];
-$stats = ['total' => 0, 'mapped' => 0, 'unmapped' => 0, 'auto_suggested' => 0, 'high_confidence' => 0, 'manual_review' => 0];
+$stats = ['total' => 0, 'mapped' => 0, 'unmapped' => 0, 'auto_suggested' => 0, 'high_confidence' => 0, 'manual_review' => 0, 'risk' => 0];
 
 foreach ($allLedgers as $row) {
     $name = $row['ledger_name'];
@@ -130,11 +164,40 @@ foreach ($allLedgers as $row) {
     $tb = $tbData[$name] ?? null;
     $ve = $veData[$name] ?? null;
 
-    $opening = $tb ? (float) $tb['opening_amount'] : 0;
-    $closing = $tb ? (float) $tb['closing_amount'] : 0;
-    $drcr = $tb ? ($tb['dr_cr'] ?? '') : '';
-    $totalDr = $ve ? (float) $ve['total_dr'] : 0;
-    $totalCr = $ve ? (float) $ve['total_cr'] : 0;
+    /* Compute DR/CR amounts from tally_ledgers (preferred) or voucher_entries (fallback) */
+    $openingDr = 0; $openingCr = 0;
+    $closingDr = 0; $closingCr = 0;
+    $drcr = '';
+
+    if ($tb) {
+        if (isset($tb['opening_debit'])) {
+            /* New DR/CR columns */
+            $openingDr = (float) $tb['opening_debit'];
+            $openingCr = (float) $tb['opening_credit'];
+            $closingDr = (float) $tb['closing_debit'];
+            $closingCr = (float) $tb['closing_credit'];
+        } else {
+            /* Fallback: use old amount + dr_cr */
+            $closingAmount = (float) ($tb['closing_amount'] ?? $tb['amount'] ?? 0);
+            $openingAmount = (float) ($tb['opening_amount'] ?? 0);
+            $drcr = $tb['dr_cr'] ?? '';
+            if ($drcr === 'DR') {
+                $closingDr = abs($closingAmount);
+                $openingDr = abs($openingAmount);
+            } else {
+                $closingCr = abs($closingAmount);
+                $openingCr = abs($openingAmount);
+            }
+        }
+        $drcr = $tb['dr_cr'] ?? ($closingDr > $closingCr ? 'DR' : ($closingCr > $closingDr ? 'CR' : ''));
+    }
+
+    if ($ve) {
+        $closingDr = max($closingDr, (float) $ve['total_dr']);
+        $closingCr = max($closingCr, (float) $ve['total_cr']);
+    }
+
+    $netBalance = $closingDr - $closingCr;
 
     /* Get suggestion */
     $suggestion = suggestBulkMapping(
@@ -148,14 +211,68 @@ foreach ($allLedgers as $row) {
 
     $status = $isMapped ? 'Mapped' : 'Unmapped';
 
+    /* ---- DR/CR Risk Detection ---- */
+    $riskLevel = 'none';
+    $riskReason = '';
+
+    $scheduleCode = $suggestion['schedule_code'] ?? '';
+    $assetSchedules = ['ppe', 'inventory', 'receivables', 'cash', 'bank_balances_other', 'other_current_assets', 'investments_non_current', 'loans_non_current', 'intangible_assets', 'cwip', 'deferred_tax_asset', 'other_non_current_assets', 'investments_current', 'loans_current'];
+    $liabilitySchedules = ['trade_payables', 'lt_borrowings', 'st_borrowings', 'other_current_liabilities', 'short_term_provisions', 'share_capital', 'reserves', 'deferred_tax_liability', 'other_non_current_liabilities', 'long_term_provisions'];
+
+    /* Critical: P&L A/c not mapped to reserves */
+    $plVariants = ['profit & loss a/c', 'profit and loss a/c', 'profit & loss account', 'profit and loss account', 'p&l a/c', 'p and l a/c', 'surplus in statement of profit and loss'];
+    if (in_array(strtolower($group), $plVariants) && $scheduleCode !== 'reserves') {
+        $riskLevel = 'critical';
+        $riskReason = 'Profit & Loss A/c should map to Reserves (Equity). Current mapping: ' . ($scheduleCode ?: 'Unmapped');
+    }
+
+    /* Critical: Bank OD / CC with credit balance mapped to cash */
+    $bankOdVariants = ['bank od', 'od account', 'overdraft', 'cash credit', 'bank overdraft', 'current account'];
+    if (in_array(strtolower($group), $bankOdVariants) && $closingCr > 0 && $scheduleCode === 'cash') {
+        $riskLevel = 'critical';
+        $riskReason = 'Bank OD/CC with credit balance should map to st_borrowings, not cash.';
+    }
+
+    /* Critical: Patient advance credit mapped to receivables */
+    $patientAdvanceVariants = ['advance in patient', 'patient advance'];
+    if (in_array(strtolower($group), $patientAdvanceVariants) && $closingCr > 0 && $scheduleCode === 'receivables') {
+        $riskLevel = 'critical';
+        $riskReason = 'Patient advance with credit balance is a liability, not a receivable.';
+    }
+
+    /* Critical: Insurance patient credit mapped to receivables */
+    if (strtolower($group) === 'insurance patient' && $closingCr > 0 && $scheduleCode === 'receivables') {
+        $riskLevel = 'critical';
+        $riskReason = 'Insurance patient with credit balance is a liability, not a receivable.';
+    }
+
+    /* Warning: Credit balance in asset schedule */
+    if ($riskLevel === 'none' && $closingCr > 0 && in_array($scheduleCode, $assetSchedules)) {
+        $riskLevel = 'warning';
+        $riskReason = 'Credit balance in asset schedule.';
+    }
+
+    /* Warning: Debit balance in liability/equity schedule */
+    if ($riskLevel === 'none' && $closingDr > 0 && in_array($scheduleCode, $liabilitySchedules)) {
+        $riskLevel = 'warning';
+        $riskReason = 'Debit balance in liability/equity schedule.';
+    }
+
+    /* Review: Nil balance */
+    if ($riskLevel === 'none' && $closingDr === 0 && $closingCr === 0 && !$isMapped) {
+        $riskLevel = 'review';
+        $riskReason = 'Nil balance, unclear mapping.';
+    }
+
     $gridData[] = [
         'id' => $name,
         'ledger_name' => $name,
         'parent_group' => $group,
-        'opening' => $opening,
-        'total_dr' => $totalDr,
-        'total_cr' => $totalCr,
-        'closing' => $closing,
+        'opening_dr' => $openingDr,
+        'opening_cr' => $openingCr,
+        'closing_dr' => $closingDr,
+        'closing_cr' => $closingCr,
+        'net_balance' => $netBalance,
         'drcr' => $drcr,
         'current_mapping' => $mappedCode,
         'current_label' => $scheduleLabel,
@@ -166,6 +283,8 @@ foreach ($allLedgers as $row) {
         'final_mapping' => $mappedCode,
         'status' => $status,
         'remarks' => '',
+        'risk_level' => $riskLevel,
+        'risk_reason' => $riskReason,
     ];
 
     $stats['total']++;
@@ -182,9 +301,90 @@ foreach ($allLedgers as $row) {
             $stats['manual_review']++;
         }
     }
+    if ($riskLevel === 'critical' || $riskLevel === 'warning') {
+        $stats['risk']++;
+    }
 }
 
 $pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
+
+/* Parent group counts for filter */
+$parentGroupCounts = [];
+$parentGroupData = [];
+foreach ($gridData as $row) {
+    $pg = $row['parent_group'] ?: '(none)';
+    if (!isset($parentGroupCounts[$pg])) {
+        $parentGroupCounts[$pg] = 0;
+        $parentGroupData[$pg] = [
+            'count' => 0,
+            'opening_dr' => 0, 'opening_cr' => 0,
+            'closing_dr' => 0, 'closing_cr' => 0,
+            'net_balance' => 0,
+        ];
+    }
+    $parentGroupCounts[$pg]++;
+    $parentGroupData[$pg]['opening_dr'] += $row['opening_dr'];
+    $parentGroupData[$pg]['opening_cr'] += $row['opening_cr'];
+    $parentGroupData[$pg]['closing_dr'] += $row['closing_dr'];
+    $parentGroupData[$pg]['closing_cr'] += $row['closing_cr'];
+    $parentGroupData[$pg]['net_balance'] += $row['net_balance'];
+}
+arsort($parentGroupCounts);
+$topParentGroups = array_slice($parentGroupCounts, 0, 25, true);
+
+/* Build Schedule III Group Mapping panel data */
+$groupMappingData = [];
+foreach ($parentGroupCounts as $pg => $cnt) {
+    $pgData = $parentGroupData[$pg];
+    $netBal = $pgData['net_balance'];
+    $drcr = $pgData['closing_dr'] > $pgData['closing_cr'] ? 'DR' : ($pgData['closing_cr'] > $pgData['closing_dr'] ? 'CR' : '');
+
+    /* Get dominant existing mapping */
+    $dominantMapping = '';
+    $mappingCounts = [];
+    foreach ($gridData as $row) {
+        if ($row['parent_group'] === $pg && !empty($row['current_mapping'])) {
+            $mc = $row['current_mapping'];
+            $mappingCounts[$mc] = ($mappingCounts[$mc] ?? 0) + 1;
+        }
+    }
+    if (!empty($mappingCounts)) {
+        arsort($mappingCounts);
+        $dominantMapping = array_key_first($mappingCounts);
+    }
+
+    /* Get suggested mapping from parent group rules */
+    $suggested = matchParentGroupRule($pg);
+    $suggestedCode = $suggested ? $suggested['schedule_code'] : '';
+    $confidence = $suggested ? $suggested['confidence'] : 0;
+
+    /* Risk count: ledgers with credit balance in asset group or debit in liability group */
+    $riskCount = 0;
+    foreach ($gridData as $row) {
+        if ($row['parent_group'] !== $pg) continue;
+        if ($row['closing_cr'] > 0 && in_array($suggestedCode, ['ppe', 'inventory', 'receivables', 'cash', 'bank_balances_other', 'other_current_assets', 'investments_non_current', 'loans_non_current', 'intangible_assets', 'cwip', 'deferred_tax_asset', 'other_non_current_assets', 'investments_current', 'loans_current'])) {
+            $riskCount++;
+        }
+        if ($row['closing_dr'] > 0 && in_array($suggestedCode, ['trade_payables', 'lt_borrowings', 'st_borrowings', 'other_current_liabilities', 'short_term_provisions', 'share_capital', 'reserves', 'deferred_tax_liability', 'other_non_current_liabilities', 'long_term_provisions'])) {
+            $riskCount++;
+        }
+    }
+
+    $groupMappingData[] = [
+        'parent_group' => $pg,
+        'ledger_count' => $cnt,
+        'opening_dr' => $pgData['opening_dr'],
+        'opening_cr' => $pgData['opening_cr'],
+        'closing_dr' => $pgData['closing_dr'],
+        'closing_cr' => $pgData['closing_cr'],
+        'net_balance' => $pgData['net_balance'],
+        'drcr' => $drcr,
+        'dominant_mapping' => $dominantMapping,
+        'suggested_code' => $suggestedCode,
+        'confidence' => $confidence,
+        'risk_count' => $riskCount,
+    ];
+}
 
 /* Mapping options as JSON for JS */
 $mappingOptionsJson = [];
@@ -375,6 +575,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     <div class="wb-card high"><div class="num" id="statHigh"><?= $stats['high_confidence'] ?></div><div class="lbl">High Confidence</div></div>
     <div class="wb-card review"><div class="num" id="statReview"><?= $stats['manual_review'] ?></div><div class="lbl">Manual Review</div></div>
     <div class="wb-card unsaved"><div class="num" id="statUnsaved">0</div><div class="lbl">Unsaved Changes</div></div>
+    <div class="wb-card" style="border-color:var(--danger);"><div class="num" id="statRisk" style="color:var(--danger);">0</div><div class="lbl">Risk Issues</div></div>
 </div>
 
 <!-- Toolbar: Search + Filter Chips -->
@@ -397,7 +598,97 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         <span class="filter-chip" data-filter="liability">Liabilities</span>
         <span class="filter-chip" data-filter="income">Income</span>
         <span class="filter-chip" data-filter="expense">Expenses</span>
+        <span class="filter-chip" data-filter="risky">⚠️ Risky</span>
+        <span class="filter-chip" data-filter="critical">🔴 Critical</span>
+        <span class="filter-chip" data-filter="credit_in_asset">Credit in Asset</span>
+        <span class="filter-chip" data-filter="debit_in_liability">Debit in Liability</span>
+        <span class="filter-chip" data-filter="manual_review">Manual Review</span>
+        <span class="filter-chip" data-filter="parent_group" id="parentGroupToggle" title="Filter by parent group">&#128193; By Group</span>
     </div>
+</div>
+
+<!-- Parent Group Filter Panel (hidden by default) -->
+<div id="parentGroupPanel" style="display:none;background:var(--panel-strong);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:12px;box-shadow:var(--shadow-sm);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <strong style="font-size:0.9rem;">Filter by Parent Group</strong>
+        <button class="btn btn-sm" onclick="document.getElementById('parentGroupPanel').style.display='none'" style="padding:4px 10px;font-size:0.75rem;">Close</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;" id="parentGroupChips">
+        <?php foreach ($topParentGroups as $pg => $cnt): ?>
+        <span class="filter-chip" data-pg="<?= htmlspecialchars($pg) ?>" title="<?= htmlspecialchars($pg) ?>: <?= $cnt ?> ledgers">
+            <?= htmlspecialchars($pg) ?> (<?= $cnt ?>)
+        </span>
+        <?php endforeach; ?>
+    </div>
+    <?php if (count($parentGroupCounts) > 25): ?>
+    <div style="margin-top:8px;font-size:0.75rem;color:var(--muted);">
+        Showing top 25 of <?= count($parentGroupCounts) ?> groups. Use search to find others.
+    </div>
+    <?php endif; ?>
+</div>
+
+<!-- Schedule III Group Mapping Panel -->
+<div style="background:var(--panel-strong);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:12px;box-shadow:var(--shadow-sm);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <strong style="font-size:0.9rem;">Schedule III Group Mapping</strong>
+        <span style="font-size:0.75rem;color:var(--muted);">Tag parent groups to Schedule III heads</span>
+    </div>
+    <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+            <thead>
+                <tr style="border-bottom:2px solid var(--border);">
+                    <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Parent Group</th>
+                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Count</th>
+                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Opening Dr</th>
+                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Opening Cr</th>
+                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Closing Dr</th>
+                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Closing Cr</th>
+                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Net Balance</th>
+                    <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Dr/Cr</th>
+                    <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Existing</th>
+                    <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Suggested</th>
+                    <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Conf</th>
+                    <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Risk</th>
+                    <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Schedule III</th>
+                    <th style="text-align:center;padding:6px 8px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach (array_slice($groupMappingData, 0, 30) as $gm): ?>
+                <tr style="border-bottom:1px solid var(--border);" data-pg="<?= htmlspecialchars($gm['parent_group']) ?>">
+                    <td style="padding:6px 8px;font-weight:500;white-space:nowrap;"><?= htmlspecialchars($gm['parent_group']) ?></td>
+                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['ledger_count']) ?></td>
+                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['opening_dr'], 2) ?></td>
+                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['opening_cr'], 2) ?></td>
+                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['closing_dr'], 2) ?></td>
+                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['closing_cr'], 2) ?></td>
+                    <td style="padding:6px 8px;text-align:right;font-weight:600;<?= $gm['net_balance'] < 0 ? 'color:var(--danger)' : '' ?>"><?= number_format($gm['net_balance'], 2) ?></td>
+                    <td style="padding:6px 8px;text-align:center;font-weight:600;"><?= $gm['drcr'] ?: '—' ?></td>
+                    <td style="padding:6px 8px;"><?= $gm['dominant_mapping'] ? htmlspecialchars($gm['dominant_mapping']) : '<span style="color:var(--muted);">—</span>' ?></td>
+                    <td style="padding:6px 8px;"><?= $gm['suggested_code'] ? htmlspecialchars($gm['suggested_code']) : '<span style="color:var(--muted);">—</span>' ?></td>
+                    <td style="padding:6px 8px;text-align:center;font-weight:600;<?= $gm['confidence'] >= 90 ? 'color:var(--success)' : ($gm['confidence'] >= 70 ? 'color:var(--warning)' : 'color:var(--danger)') ?>"><?= $gm['confidence'] ?>%</td>
+                    <td style="padding:6px 8px;text-align:center;"><?= $gm['risk_count'] > 0 ? '<span style="color:var(--danger);font-weight:600;">' . $gm['risk_count'] . '</span>' : '<span style="color:var(--success);">0</span>' ?></td>
+                    <td style="padding:6px 8px;">
+                        <select class="gm-select" data-pg="<?= htmlspecialchars($gm['parent_group']) ?>" style="padding:4px 8px;border:1px solid var(--border-strong);border-radius:4px;font-size:0.78rem;min-width:140px;">
+                            <option value="">Select...</option>
+                            <?php foreach ($mappingOptions as $code => $label): ?>
+                                <option value="<?= htmlspecialchars($code) ?>" <?= $gm['suggested_code'] === $code ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                    <td style="padding:6px 8px;">
+                        <button class="btn btn-sm gm-apply-btn" data-pg="<?= htmlspecialchars($gm['parent_group']) ?>" style="padding:4px 10px;font-size:0.72rem;">Apply</button>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php if (count($groupMappingData) > 30): ?>
+    <div style="margin-top:8px;font-size:0.75rem;color:var(--muted);">
+        Showing top 30 of <?= count($groupMappingData) ?> groups. Use grid search for others.
+    </div>
+    <?php endif; ?>
 </div>
 
 <!-- Handsontable Grid -->
@@ -408,6 +699,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 <!-- Action Bar -->
 <div class="wb-actions">
     <button class="btn btn-success" id="btnAcceptHigh" title="Accept all suggestions with confidence >= 90%">Accept High Confidence</button>
+    <button class="btn" id="btnAcceptGroup" title="Accept parent group rule suggestions for visible rows" style="background:#7c3aed;color:#fff;border-color:#7c3aed;">Accept Group Suggestions</button>
     <button class="btn" id="btnAcceptSelected" title="Accept suggestions for selected rows">Accept Selected</button>
     <div class="sep"></div>
     <select id="bulkGroupSelect" style="padding:6px 10px;border:1px solid var(--border-strong);border-radius:6px;font-size:0.8rem;min-width:160px;">
@@ -475,8 +767,13 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
     /* ---- Filter logic ---- */
     function filterRow(row) {
-        if (currentFilter === 'all') return true;
+        if (currentFilter === 'all' && !currentParentGroup) return true;
         var code = row.final_mapping || row.current_mapping || '';
+
+        /* Parent group filter (applies alongside status filter) */
+        if (currentParentGroup && row.parent_group !== currentParentGroup) return false;
+
+        if (currentFilter === 'all') return true;
         switch (currentFilter) {
             case 'unmapped': return !code || code === '';
             case 'mapped': return code && code !== '';
@@ -490,6 +787,11 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             case 'liability': return code && codeInCategory(code, liabilityCodes);
             case 'income': return code && codeInCategory(code, incomeCodes);
             case 'expense': return code && codeInCategory(code, expenseCodes);
+            case 'risky': return row.risk_level && row.risk_level !== 'none';
+            case 'critical': return row.risk_level === 'critical';
+            case 'credit_in_asset': return row.risk_reason && row.risk_reason.indexOf('Credit balance in asset') !== -1;
+            case 'debit_in_liability': return row.risk_reason && row.risk_reason.indexOf('Debit balance in liability') !== -1;
+            case 'manual_review': return row.risk_level === 'review' || (row.risk_level === 'none' && (!row.suggested || row.suggested === '') && (!code || code === ''));
             default: return true;
         }
     }
@@ -508,11 +810,12 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
     /* ---- Stats update ---- */
     function updateStats() {
-        var total=allData.length, mapped=0, unmapped=0, suggested=0, high=0, review=0, unsaved=Object.keys(dirtyRows).length;
+        var total=allData.length, mapped=0, unmapped=0, suggested=0, high=0, review=0, unsaved=Object.keys(dirtyRows).length, risk=0;
         for (var i=0;i<allData.length;i++) {
             var d=allData[i], code=d.final_mapping||d.current_mapping||'';
             if (code&&code!=='') { mapped++; }
             else { unmapped++; if(d.suggested&&(d.confidence||0)>=90){suggested++;high++;}else if(d.suggested&&(d.confidence||0)>=70){suggested++;}else{review++;} }
+            if (d.risk_level==='critical'||d.risk_level==='warning') { risk++; }
         }
         document.getElementById('statTotal').textContent=total;
         document.getElementById('statMapped').textContent=mapped;
@@ -521,6 +824,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         document.getElementById('statHigh').textContent=high;
         document.getElementById('statReview').textContent=review;
         document.getElementById('statUnsaved').textContent=unsaved;
+        document.getElementById('statRisk').textContent=risk;
     }
 
     function showToast(msg,type) {
@@ -606,11 +910,12 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             columns: [
                 {title:'', formatter:'rowSelection', titleFormatter:'rowSelection', headerSort:false, width:40, hozAlign:'center', cellClick:function(e, cell){cell.getRow().toggleSelect();}},
                 {title:'Ledger Name', field:'ledger_name', width:220, frozen:true, headerTooltip:true},
-                {title:'Tally Group', field:'parent_group', width:160},
-                {title:'Opening Bal', field:'opening', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
-                {title:'Debit Total', field:'total_dr', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
-                {title:'Credit Total', field:'total_cr', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
-                {title:'Closing Bal', field:'closing', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Parent Group', field:'parent_group', width:160},
+                {title:'Opening Dr', field:'opening_dr', width:100, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Opening Cr', field:'opening_cr', width:100, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Closing Dr', field:'closing_dr', width:100, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Closing Cr', field:'closing_cr', width:100, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Net Balance', field:'net_balance', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
                 {title:'Dr/Cr', field:'drcr', width:50, hozAlign:'center'},
                 {title:'Current Mapping', field:'current_label', width:160},
                 {title:'Suggested', field:'suggested_label', width:180},
@@ -634,6 +939,21 @@ require_once __DIR__ . '/../layouts/header_v2.php';
                     updateStats();
                 }},
                 {title:'Status', width:80, hozAlign:'center', formatter:statusFormatter, download:false},
+                {title:'Risk', field:'risk_level', width:60, hozAlign:'center', formatter:function(cell){
+                    var v = cell.getValue();
+                    var el = cell.getElement();
+                    el.style.textAlign = 'center';
+                    el.style.fontWeight = '600';
+                    el.style.fontSize = '0.75rem';
+                    if (v === 'critical') { el.style.color = '#dc2626'; return '🔴'; }
+                    if (v === 'warning') { el.style.color = '#e65100'; return '⚠️'; }
+                    if (v === 'review') { el.style.color = '#d97706'; return '👁️'; }
+                    el.style.color = '#2e7d32';
+                    return '✓';
+                }, cellMouseOver:function(e, cell){
+                    var row = cell.getRow().getData();
+                    if (row.risk_reason) cell.getElement().title = row.risk_reason;
+                }},
                 {title:'Remarks', field:'remarks', width:160, editor:'input', cellEdited:function(cell){
                     var row = cell.getRow().getData();
                     row.remarks = cell.getValue() || '';
@@ -653,9 +973,37 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     document.getElementById('filterChips').addEventListener('click', function(e) {
         var chip = e.target.closest('.filter-chip');
         if (!chip) return;
-        document.querySelectorAll('.filter-chip').forEach(function(c) { c.classList.remove('active'); });
+        var filter = chip.getAttribute('data-filter');
+        if (filter === 'parent_group') {
+            document.getElementById('parentGroupPanel').style.display =
+                document.getElementById('parentGroupPanel').style.display === 'none' ? 'block' : 'none';
+            return;
+        }
+        document.querySelectorAll('#filterChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
         chip.classList.add('active');
-        currentFilter = chip.getAttribute('data-filter');
+        currentFilter = filter;
+        currentParentGroup = '';
+        refreshGrid();
+    });
+
+    /* ---- Parent group chip click ---- */
+    var currentParentGroup = '';
+    document.getElementById('parentGroupChips').addEventListener('click', function(e) {
+        var chip = e.target.closest('.filter-chip');
+        if (!chip) return;
+        var pg = chip.getAttribute('data-pg');
+        if (currentParentGroup === pg) {
+            currentParentGroup = '';
+            chip.classList.remove('active');
+        } else {
+            document.querySelectorAll('#parentGroupChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
+            chip.classList.add('active');
+            currentParentGroup = pg;
+        }
+        /* Reset status filter to 'all' when filtering by group */
+        document.querySelectorAll('#filterChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
+        document.querySelector('#filterChips .filter-chip[data-filter="all"]').classList.add('active');
+        currentFilter = 'all';
         refreshGrid();
     });
 
@@ -681,6 +1029,26 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         refreshGrid();
         updateStats();
         showToast(count+' ledgers auto-accepted (>= 90% confidence)', 'success');
+    });
+
+    /* ---- Accept group suggestions (visible rows only) ---- */
+    document.getElementById('btnAcceptGroup').addEventListener('click', function() {
+        if (!table) return;
+        var rows = table.getRows();
+        var count = 0;
+        rows.forEach(function(row) {
+            var d = row.getData();
+            if (d.suggested && d.suggested !== '' && d.final_mapping !== d.suggested &&
+                (d.suggestion_source === 'parent_group_rule' || d.suggestion_source === 'group_rule')) {
+                d.final_mapping = d.suggested;
+                d.status = 'Mapped';
+                dirtyRows[d.ledger_name] = true;
+                count++;
+            }
+        });
+        refreshGrid();
+        updateStats();
+        showToast(count + ' group suggestions applied to visible rows', 'success');
     });
 
     /* ---- Accept selected ---- */
@@ -873,6 +1241,31 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     /* ---- Init ---- */
     initTable();
     updateStats();
+
+    /* ---- Schedule III Group Mapping: Apply buttons ---- */
+    document.querySelectorAll('.gm-apply-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var pg = this.getAttribute('data-pg');
+            var select = document.querySelector('.gm-select[data-pg="' + pg + '"]');
+            if (!select || !select.value) {
+                showToast('Select a Schedule III head first', 'error');
+                return;
+            }
+            var scheduleCode = select.value;
+            var count = 0;
+            for (var i = 0; i < allData.length; i++) {
+                if (allData[i].parent_group === pg && allData[i].final_mapping !== scheduleCode) {
+                    allData[i].final_mapping = scheduleCode;
+                    allData[i].status = 'Mapped';
+                    dirtyRows[allData[i].ledger_name] = true;
+                    count++;
+                }
+            }
+            refreshGrid();
+            updateStats();
+            showToast(count + ' ledgers under "' + pg + '" mapped to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
+        });
+    });
 
 })();
 </script>

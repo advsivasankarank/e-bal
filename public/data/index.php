@@ -88,7 +88,7 @@ try {
     $v2TotalLedgers = 0;
 }
 
-/* ---- Define sub-sections ---- */
+/* ---- Define sub-sections as workflow tiles ---- */
 $v2SubSections = [
     [
         'key'   => 'import',
@@ -100,17 +100,21 @@ $v2SubSections = [
         'detail' => !empty($v2Ws['ledger_fetched'])
             ? $v2TotalLedgers . ' ledgers imported'
             : 'No ledgers imported yet',
+        'metric' => $v2TotalLedgers,
+        'metricLabel' => 'Ledgers',
     ],
     [
         'key'   => 'mapping',
         'icon'  => '🗂️',
-        'label' => 'Mapping',
+        'label' => 'Ledger Mapping',
         'desc'  => 'Map ledgers to Schedule III codes with AI assistance',
         'href'  => BASE_URL . 'data_console/mapping_workbench.php',
         'status' => !empty($v2Ws['mapping_completed']) ? 'complete' : ($v2Mapped > 0 ? 'partial' : 'pending'),
         'detail' => !empty($v2Ws['mapping_completed'])
             ? 'Mapping complete'
-            : ($v2Mapped > 0 ? $v2Mapped . ' ledgers mapped, ' . $v2Unmapped . ' pending' : 'Mapping not started'),
+            : ($v2Mapped > 0 ? $v2Mapped . ' mapped, ' . $v2Unmapped . ' pending' : 'Not started'),
+        'metric' => $v2Mapped,
+        'metricLabel' => 'Mapped',
     ],
     [
         'key'   => 'trial_balance',
@@ -121,7 +125,9 @@ $v2SubSections = [
         'status' => !empty($v2Ws['tally_fetched']) ? 'complete' : 'pending',
         'detail' => !empty($v2Ws['tally_fetched'])
             ? 'Trial balance loaded'
-            : 'Trial balance not loaded',
+            : 'Not loaded yet',
+        'metric' => $v2TotalLedgers,
+        'metricLabel' => 'Entries',
     ],
     [
         'key'   => 'reconciliation',
@@ -133,8 +139,10 @@ $v2SubSections = [
             ? (!empty($v2Ws['verified']) ? 'complete' : 'available')
             : 'pending',
         'detail' => !empty($v2Ws['tally_fetched']) && !empty($v2Ws['mapping_completed'])
-            ? (!empty($v2Ws['verified']) ? 'Reconciliation complete' : 'Ready to reconcile')
+            ? (!empty($v2Ws['verified']) ? 'Complete' : 'Ready to reconcile')
             : 'Complete data steps first',
+        'metric' => '',
+        'metricLabel' => '',
     ],
 ];
 
@@ -188,44 +196,31 @@ foreach ($v2SubSections as $ss) {
     </div>
 </div>
 
-<!-- Sub-section Tabs -->
-<div class="v2-dw-tabs" id="dw-tabs">
+<!-- Workflow Tiles (Horizontal) -->
+<div class="v2-dw-tiles">
     <?php foreach ($v2SubSections as $idx => $ss): ?>
-        <button class="v2-dw-tab <?= $idx === 0 ? 'active' : '' ?>" data-tab="<?= $ss['key'] ?>">
-            <span class="v2-dw-tab-icon"><?= $ss['icon'] ?></span>
-            <span class="v2-dw-tab-label"><?= htmlspecialchars($ss['label']) ?></span>
-            <span class="v2-dw-tab-status v2-dw-tab-<?= $ss['status'] ?>">
-                <?= $ss['status'] === 'complete' ? '✓' : ($ss['status'] === 'partial' ? '◐' : ($ss['status'] === 'available' ? '→' : '○')) ?>
-            </span>
-        </button>
-    <?php endforeach; ?>
-</div>
-
-<!-- Sub-section Content -->
-<div class="v2-dw-panels">
-    <?php foreach ($v2SubSections as $idx => $ss): ?>
-        <div class="v2-dw-panel <?= $idx === 0 ? 'active' : '' ?>" data-panel="<?= $ss['key'] ?>">
-            <div class="v2-dw-panel-header">
-                <div class="v2-dw-panel-icon"><?= $ss['icon'] ?></div>
-                <div class="v2-dw-panel-info">
-                    <h2><?= htmlspecialchars($ss['label']) ?></h2>
-                    <p><?= htmlspecialchars($ss['desc']) ?></p>
-                </div>
-                <div class="v2-dw-panel-status">
+        <a href="<?= $ss['href'] ?>" class="v2-dw-tile" data-tile="<?= $ss['key'] ?>">
+            <div class="v2-dw-tile-header">
+                <div class="v2-dw-tile-icon"><?= $ss['icon'] ?></div>
+                <div class="v2-dw-tile-info">
+                    <h3><?= htmlspecialchars($ss['label']) ?></h3>
                     <span class="v2-dw-badge v2-dw-badge-<?= $ss['status'] ?>">
-                        <?= $ss['status'] === 'complete' ? 'Complete' : ($ss['status'] === 'partial' ? 'In Progress' : ($ss['status'] === 'available' ? 'Available' : 'Not Started')) ?>
+                        <?= $ss['status'] === 'complete' ? '✓ Complete' : ($ss['status'] === 'partial' ? '◐ In Progress' : ($ss['status'] === 'available' ? '→ Available' : '○ Not Started')) ?>
                     </span>
                 </div>
             </div>
-            <div class="v2-dw-panel-detail">
-                <span class="v2-dw-panel-detail-text"><?= htmlspecialchars($ss['detail']) ?></span>
+            <p class="v2-dw-tile-desc"><?= htmlspecialchars($ss['desc']) ?></p>
+            <?php if (!empty($ss['metric'])): ?>
+                <div class="v2-dw-tile-metric">
+                    <span class="v2-dw-tile-metric-num"><?= number_format($ss['metric']) ?></span>
+                    <span class="v2-dw-tile-metric-lbl"><?= htmlspecialchars($ss['metricLabel']) ?></span>
+                </div>
+            <?php endif; ?>
+            <div class="v2-dw-tile-detail"><?= htmlspecialchars($ss['detail']) ?></div>
+            <div class="v2-dw-tile-action">
+                <?= $ss['status'] === 'complete' ? 'Review' : ($ss['status'] === 'partial' ? 'Continue' : ($ss['status'] === 'available' ? 'Open' : 'Start')) ?> →
             </div>
-            <div class="v2-dw-panel-action">
-                <a href="<?= $ss['href'] ?>" class="v2-btn v2-btn-primary">
-                    <?= $ss['status'] === 'complete' ? 'Review' : ($ss['status'] === 'partial' ? 'Continue' : ($ss['status'] === 'available' ? 'Open' : 'Start')) ?> →
-                </a>
-            </div>
-        </div>
+        </a>
     <?php endforeach; ?>
 </div>
 
@@ -235,29 +230,12 @@ foreach ($v2SubSections as $ss) {
 
 <script>
 (function() {
-    var tabs = document.querySelectorAll('.v2-dw-tab');
-    var panelsContainer = document.querySelector('.v2-dw-panels');
-    var panels = document.querySelectorAll('.v2-dw-panel');
-
-    /* Show panels container on first tab click */
-    for (var i = 0; i < tabs.length; i++) {
-        tabs[i].addEventListener('click', function() {
-            var target = this.getAttribute('data-tab');
-
-            if (panelsContainer) panelsContainer.style.display = 'block';
-
-            for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove('active');
-            for (var k = 0; k < panels.length; k++) panels[k].classList.remove('active');
-
-            this.classList.add('active');
-            var panel = document.querySelector('[data-panel="' + target + '"]');
-            if (panel) panel.classList.add('active');
+    /* Tiles are direct links — no tab switching needed */
+    var tiles = document.querySelectorAll('.v2-dw-tile');
+    for (var i = 0; i < tiles.length; i++) {
+        tiles[i].addEventListener('click', function(e) {
+            /* Allow default link navigation */
         });
-    }
-
-    /* Auto-show first tab panel on load */
-    if (panelsContainer && tabs.length > 0) {
-        panelsContainer.style.display = 'block';
     }
 })();
 </script>
