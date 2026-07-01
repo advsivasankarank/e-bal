@@ -590,8 +590,8 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     margin-bottom: 10px;
     flex-wrap: wrap;
     position: sticky;
-    top: 0;
-    z-index: 100;
+    top: var(--topbar-h, 56px);
+    z-index: 50;
     background: var(--panel-strong);
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
@@ -636,12 +636,13 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
+    margin-bottom: 4px;
 }
 .filter-chip {
-    padding: 6px 12px;
+    padding: 5px 10px;
     border: 1px solid var(--border-strong);
     border-radius: 999px;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     background: var(--panel-strong);
     cursor: pointer;
     transition: all 0.15s;
@@ -664,7 +665,8 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     box-shadow: var(--shadow-sm);
     position: sticky;
     bottom: 0;
-    z-index: 100;
+    z-index: 40;
+    border-bottom: 2px solid var(--brand);
 }
 .wb-actions .btn { min-height: 34px; padding: 0 14px; font-size: 0.8rem; }
 .wb-actions .sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
@@ -673,10 +675,24 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 .hot-container {
     border: 1px solid var(--border);
     border-radius: 10px;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: var(--shadow-sm);
-    height: calc(100vh - 320px);
     min-height: 400px;
+    position: relative;
+}
+.hot-container .tabulator {
+    overflow: visible;
+}
+.hot-container .tabulator-tableholder {
+    overflow: visible;
+}
+
+.recon-grid-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 80px;
 }
 
 #hotSearch {
@@ -723,6 +739,11 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 }
 
 .hidden-input { display: none; }
+
+/* Ensure page doesn't scroll horizontally, only grid does */
+body { overflow-x: hidden; }
+.v2-content { overflow: visible; max-width: 100%; }
+.v2-main { overflow: visible; }
 </style>
 
 <?= uiBreadcrumb([
@@ -823,9 +844,11 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     <div id="groupMappingBody" style="overflow-x:auto;"></div>
 </div>
 
-<!-- Handsontable Grid -->
-<div class="hot-container">
-    <div id="hot"></div>
+<!-- Grid with horizontal scroll -->
+<div class="recon-grid-wrap">
+    <div class="hot-container">
+        <div id="hot"></div>
+    </div>
 </div>
 
 <!-- Action Bar -->
@@ -1040,8 +1063,8 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
         table = new Tabulator('#hot', {
             data: filtered,
-            layout: 'fitDataFill',
-            height: 'calc(100vh - 320px)',
+            layout: 'fitDataStretch',
+            height: 'calc(100vh - 280px)',
             selectable: true,
             movableColumns: true,
             resizable: true,
@@ -1052,16 +1075,16 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             paginationSize: 250,
             paginationSizeSelector: [100, 250, 500, 1000, true],
             columns: [
-                {title:'', formatter:'rowSelection', titleFormatter:'rowSelection', headerSort:false, width:40, hozAlign:'center', cellClick:function(e, cell){cell.getRow().toggleSelect();}},
-                {title:'Ledger Name', field:'ledger_name', width:220, frozen:true, headerTooltip:true},
-                {title:'Parent Group', field:'parent_group', width:160},
-                {title:'Net Balance', field:'net_balance', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
-                {title:'Dr/Cr', field:'drcr', width:50, hozAlign:'center'},
-                {title:'Current Mapping', field:'current_label', width:160},
-                {title:'Suggested', field:'suggested_label', width:180},
-                {title:'Source', field:'suggestion_source', width:110},
-                {title:'Conf %', field:'confidence', width:80, hozAlign:'center', formatter:confidenceFormatter, accessorDownload:function(v){return (v||0)+'%';}},
-                {title:'Final Mapping', field:'final_mapping', width:240, editor:'select', editorParams:{values:selectOptions}, formatter:finalMappingFormatter, cellEdited:function(cell){
+                {title:'', formatter:'rowSelection', titleFormatter:'rowSelection', headerSort:false, width:45, hozAlign:'center', cellClick:function(e, cell){cell.getRow().toggleSelect();}},
+                {title:'Ledger Name', field:'ledger_name', width:240, minWidth:200, frozen:true, headerTooltip:true},
+                {title:'Parent Group', field:'parent_group', width:180, minWidth:140},
+                {title:'Net Balance', field:'net_balance', width:130, minWidth:100, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
+                {title:'Dr/Cr', field:'drcr', width:70, minWidth:50, hozAlign:'center'},
+                {title:'Current Mapping', field:'current_label', width:180, minWidth:140},
+                {title:'Suggested', field:'suggested_label', width:220, minWidth:160},
+                {title:'Source', field:'suggestion_source', width:120, minWidth:90},
+                {title:'Conf %', field:'confidence', width:90, minWidth:70, hozAlign:'center', formatter:confidenceFormatter, accessorDownload:function(v){return (v||0)+'%';}},
+                {title:'Final Mapping', field:'final_mapping', width:260, minWidth:200, editor:'select', editorParams:{values:selectOptions}, formatter:finalMappingFormatter, cellEdited:function(cell){
                     var row = cell.getRow().getData();
                     var val = cell.getValue();
                     var code = '';
@@ -1079,7 +1102,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
                     updateStats();
                 }},
                 {title:'Status', width:80, hozAlign:'center', formatter:statusFormatter, download:false},
-                {title:'Risk', field:'risk_level', width:60, hozAlign:'center', formatter:function(cell){
+                {title:'Risk', field:'risk_level', width:90, minWidth:70, hozAlign:'center', formatter:function(cell){
                     var v = cell.getValue();
                     var el = cell.getElement();
                     el.style.textAlign = 'center';
@@ -1094,7 +1117,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
                     var row = cell.getRow().getData();
                     if (row.risk_reason) cell.getElement().title = row.risk_reason;
                 }},
-                {title:'Remarks', field:'remarks', width:160, editor:'input', cellEdited:function(cell){
+                {title:'Remarks', field:'remarks', width:220, minWidth:160, editor:'input', cellEdited:function(cell){
                     var row = cell.getRow().getData();
                     row.remarks = cell.getValue() || '';
                     dirtyRows[row.ledger_name] = true;
