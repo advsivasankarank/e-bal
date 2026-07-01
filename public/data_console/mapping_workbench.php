@@ -1,4 +1,34 @@
 <?php
+/**
+ * e-BAL — Ledger Mapping Workbench
+ *
+ * Excel-like workspace for bulk ledger mapping.
+ * Handles missing voucher_entries table gracefully.
+ * Shows user-friendly error on failure instead of 500.
+ */
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+set_exception_handler(function (\Throwable $e) {
+    http_response_code(500);
+    error_log('Mapping Workbench FATAL: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    echo '<!DOCTYPE html><html><head><title>Error</title></head><body>';
+    echo '<h1>Mapping Workbench Error</h1>';
+    echo '<p>The mapping workbench encountered an error. Please try again or contact support.</p>';
+    echo '<p><small>' . htmlspecialchars($e->getMessage()) . '</small></p>';
+    echo '<p><a href="' . (defined('BASE_URL') ? BASE_URL : '/') . '">Return to Dashboard</a></p>';
+    echo '</body></html>';
+    exit;
+});
+
+set_error_handler(function (int $errno, string $errstr, string $errfile, int $errline) {
+    if (error_reporting() & $errno) {
+        error_log("Mapping Workbench ERROR [$errno]: $errstr in $errfile:$errline");
+    }
+    return false;
+});
+
 require_once '../../app/context_check.php';
 require_once '../../app/workflow_engine.php';
 require_once '../../config/database.php';
@@ -154,6 +184,15 @@ foreach ($allLedgers as $row) {
 
 $gridData = [];
 $stats = ['total' => 0, 'mapped' => 0, 'unmapped' => 0, 'auto_suggested' => 0, 'high_confidence' => 0, 'manual_review' => 0, 'risk' => 0];
+$processingError = null;
+
+try {
+/* Safety: limit processing for very large datasets */
+$maxLedgers = 20000;
+if (count($allLedgers) > $maxLedgers) {
+    $processingError = 'Dataset too large (' . count($allLedgers) . ' ledgers). Processing first ' . number_format($maxLedgers) . ' only.';
+    $allLedgers = array_slice($allLedgers, 0, $maxLedgers);
+}
 
 foreach ($allLedgers as $row) {
     $name = $row['ledger_name'];
@@ -199,12 +238,17 @@ foreach ($allLedgers as $row) {
 
     $netBalance = $closingDr - $closingCr;
 
-    /* Get suggestion */
-    $suggestion = suggestBulkMapping(
-        $name, $group, $currentMappings,
-        $previousFyMappings, $globalMaster, $keywordRules,
-        $hierarchyEngine, $mappingEngine
-    );
+    /* Get suggestion with safety fallback */
+    $suggestion = ['schedule_code' => '', 'confidence' => 0, 'source' => 'none', 'reason' => 'Suggestion generation failed.'];
+    try {
+        $suggestion = suggestBulkMapping(
+            $name, $group, $currentMappings,
+            $previousFyMappings, $globalMaster, $keywordRules,
+            $hierarchyEngine, $mappingEngine
+        );
+    } catch (\Throwable $e) {
+        /* Fallback: no suggestion */
+    }
 
     $scheduleLabel = $mappedCode !== '' ? $mappingEngine->getLabel($mappedCode) : '';
     $suggestedLabel = $suggestion['schedule_code'] !== '' ? $mappingEngine->getLabel($suggestion['schedule_code']) : '';
@@ -305,6 +349,10 @@ foreach ($allLedgers as $row) {
         $stats['risk']++;
     }
 }
+} catch (\Throwable $e) {
+    $processingError = $e->getMessage();
+    error_log('Mapping Workbench processing error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+}
 
 $pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
@@ -334,6 +382,7 @@ $topParentGroups = array_slice($parentGroupCounts, 0, 25, true);
 
 /* Build Schedule III Group Mapping panel data */
 $groupMappingData = [];
+try {
 foreach ($parentGroupCounts as $pg => $cnt) {
     $pgData = $parentGroupData[$pg];
     $netBal = $pgData['net_balance'];
@@ -350,7 +399,7 @@ foreach ($parentGroupCounts as $pg => $cnt) {
     }
     if (!empty($mappingCounts)) {
         arsort($mappingCounts);
-        $dominantMapping = array_key_first($mappingCounts);
+        $dominantMapping = reset(array_keys($mappingCounts));
     }
 
     /* Get suggested mapping from parent group rules */
@@ -384,6 +433,10 @@ foreach ($parentGroupCounts as $pg => $cnt) {
         'confidence' => $confidence,
         'risk_count' => $riskCount,
     ];
+}
+} catch (\Throwable $e) {
+    error_log('Mapping Workbench: Group mapping panel error: ' . $e->getMessage());
+    $groupMappingData = [];
 }
 
 /* Mapping options as JSON for JS */
@@ -562,6 +615,9 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 <?php endif; ?>
 <?php if (!empty($_SESSION['error'])): ?>
     <div class="error-box"><p><?= htmlspecialchars($_SESSION['error']) ?></p></div>
+<?php endif; ?>
+<?php if (!empty($processingError)): ?>
+    <div class="error-box"><p><strong>Processing Warning:</strong> <?= htmlspecialchars($processingError) ?>. Some data may be incomplete.</p></div>
 <?php endif; ?>
 
 <?= uiWorkspaceStart() ?>
