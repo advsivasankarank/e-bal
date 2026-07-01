@@ -78,7 +78,28 @@ try {
     $hasHierarchyCols = $chkStmt->rowCount() > 0;
 } catch (Throwable $e) { /* ignore */ }
 
-/* Load all ledgers with mapping, amounts, and suggestions */
+/* ---- Determine TB-impact ledgers for default view ---- */
+$tbImpactLedgerNames = [];
+try {
+    $tbImpactStmt = $pdo->prepare("SELECT DISTINCT ledger_name FROM tally_ledgers WHERE company_id = ? AND fy_id = ?");
+    $tbImpactStmt->execute([$company_id, $fy_id]);
+    $tbImpactLedgerNames = $tbImpactStmt->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) {
+    /* If TB query fails, we'll load all ledgers */
+}
+
+$tbImpactCount = count($tbImpactLedgerNames);
+$totalLedgerCount = 0;
+try {
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM tally_ledger_master WHERE company_id = ?");
+    $countStmt->execute([$company_id]);
+    $totalLedgerCount = (int) $countStmt->fetchColumn();
+} catch (Throwable $e) { /* ignore */ }
+
+/* Default to TB-impact view if TB has fewer ledgers */
+$defaultViewTbImpact = ($tbImpactCount > 0 && $tbImpactCount < $totalLedgerCount);
+
+/* ---- Load ledgers based on view mode ---- */
 $ledgerStmt = $pdo->prepare("
     SELECT
         t.ledger_name,
@@ -186,15 +207,33 @@ $gridData = [];
 $stats = ['total' => 0, 'mapped' => 0, 'unmapped' => 0, 'auto_suggested' => 0, 'high_confidence' => 0, 'manual_review' => 0, 'risk' => 0];
 $processingError = null;
 
+/* Performance timing */
+$timeStart = microtime(true);
+$timeQuery = 0;
+$timeSuggestions = 0;
+
+/* Filter to TB-impact ledgers by default for performance */
+$processingLedgers = $allLedgers;
+if ($defaultViewTbImpact && !empty($tbImpactLedgerNames)) {
+    $tbImpactSet = array_flip($tbImpactLedgerNames);
+    $processingLedgers = array_filter($allLedgers, function ($row) use ($tbImpactSet) {
+        return isset($tbImpactSet[$row['ledger_name']]);
+    });
+    $processingLedgers = array_values($processingLedgers);
+    $processingError = 'Showing TB-impact ledgers only (' . count($processingLedgers) . ' of ' . count($allLedgers) . '). Switch to "All Ledger Master" to view all.';
+}
+
 try {
 /* Safety: limit processing for very large datasets */
 $maxLedgers = 20000;
-if (count($allLedgers) > $maxLedgers) {
-    $processingError = 'Dataset too large (' . count($allLedgers) . ' ledgers). Processing first ' . number_format($maxLedgers) . ' only.';
-    $allLedgers = array_slice($allLedgers, 0, $maxLedgers);
+if (count($processingLedgers) > $maxLedgers) {
+    $processingError = 'Dataset too large (' . count($processingLedgers) . ' ledgers). Processing first ' . number_format($maxLedgers) . ' only.';
+    $processingLedgers = array_slice($processingLedgers, 0, $maxLedgers);
 }
 
-foreach ($allLedgers as $row) {
+$timeQuery = round((microtime(true) - $timeStart) * 1000);
+
+foreach ($processingLedgers as $row) {
     $name = $row['ledger_name'];
     $group = $row['parent_group'] ?? '';
     $mappedCode = $row['mapped_code'] ?? '';
@@ -308,6 +347,8 @@ foreach ($allLedgers as $row) {
         $riskReason = 'Nil balance, unclear mapping.';
     }
 
+    $hasTb = isset($tbData[$name]) || isset($veData[$name]);
+
     $gridData[] = [
         'id' => $name,
         'ledger_name' => $name,
@@ -329,6 +370,7 @@ foreach ($allLedgers as $row) {
         'remarks' => '',
         'risk_level' => $riskLevel,
         'risk_reason' => $riskReason,
+        'has_tb' => $hasTb,
     ];
 
     $stats['total']++;
@@ -354,28 +396,62 @@ foreach ($allLedgers as $row) {
     error_log('Mapping Workbench processing error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
 }
 
+$timeSuggestions = round((microtime(true) - $timeStart - ($timeQuery / 1000)) * 1000);
+$timeTotal = round((microtime(true) - $timeStart) * 1000);
+error_log("Mapping Workbench timing: query={$timeQuery}ms, suggestions={$timeSuggestions}ms, total={$timeTotal}ms, ledgers=" . count($processingLedgers));
+
 $pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
-/* Parent group counts for filter */
+/* ---- Parent group counts via SQL aggregation (fast) ---- */
 $parentGroupCounts = [];
 $parentGroupData = [];
-foreach ($gridData as $row) {
-    $pg = $row['parent_group'] ?: '(none)';
-    if (!isset($parentGroupCounts[$pg])) {
-        $parentGroupCounts[$pg] = 0;
+try {
+    $pgStmt = $pdo->prepare("
+        SELECT
+            COALESCE(tlm.parent_group, t.parent_group) AS parent_group,
+            COUNT(*) AS ledger_count,
+            SUM(CASE WHEN tb.dr_cr = 'DR' THEN tb.amount ELSE 0 END) AS closing_dr,
+            SUM(CASE WHEN tb.dr_cr = 'CR' THEN tb.amount ELSE 0 END) AS closing_cr
+        FROM tally_ledger_master t
+        LEFT JOIN tally_ledger_master tlm ON tlm.company_id = t.company_id AND tlm.ledger_name = t.parent_group
+        LEFT JOIN tally_ledgers tb ON tb.company_id = t.company_id AND tb.ledger_name = t.ledger_name AND tb.fy_id = ?
+        WHERE t.company_id = ?
+        GROUP BY COALESCE(tlm.parent_group, t.parent_group)
+        ORDER BY ledger_count DESC
+    ");
+    $pgStmt->execute([$fy_id, $company_id]);
+    while ($pgRow = $pgStmt->fetch(PDO::FETCH_ASSOC)) {
+        $pg = $pgRow['parent_group'] ?: '(none)';
+        $parentGroupCounts[$pg] = (int) $pgRow['ledger_count'];
         $parentGroupData[$pg] = [
-            'count' => 0,
-            'opening_dr' => 0, 'opening_cr' => 0,
-            'closing_dr' => 0, 'closing_cr' => 0,
-            'net_balance' => 0,
+            'count' => (int) $pgRow['ledger_count'],
+            'opening_dr' => 0,
+            'opening_cr' => 0,
+            'closing_dr' => (float) ($pgRow['closing_dr'] ?? 0),
+            'closing_cr' => (float) ($pgRow['closing_cr'] ?? 0),
+            'net_balance' => (float) (($pgRow['closing_dr'] ?? 0) - ($pgRow['closing_cr'] ?? 0)),
         ];
     }
-    $parentGroupCounts[$pg]++;
-    $parentGroupData[$pg]['opening_dr'] += $row['opening_dr'];
-    $parentGroupData[$pg]['opening_cr'] += $row['opening_cr'];
-    $parentGroupData[$pg]['closing_dr'] += $row['closing_dr'];
-    $parentGroupData[$pg]['closing_cr'] += $row['closing_cr'];
-    $parentGroupData[$pg]['net_balance'] += $row['net_balance'];
+} catch (Throwable $e) {
+    /* Fallback: build from gridData if SQL fails */
+    foreach ($gridData as $row) {
+        $pg = $row['parent_group'] ?: '(none)';
+        if (!isset($parentGroupCounts[$pg])) {
+            $parentGroupCounts[$pg] = 0;
+            $parentGroupData[$pg] = [
+                'count' => 0,
+                'opening_dr' => 0, 'opening_cr' => 0,
+                'closing_dr' => 0, 'closing_cr' => 0,
+                'net_balance' => 0,
+            ];
+        }
+        $parentGroupCounts[$pg]++;
+        $parentGroupData[$pg]['opening_dr'] += $row['opening_dr'];
+        $parentGroupData[$pg]['opening_cr'] += $row['opening_cr'];
+        $parentGroupData[$pg]['closing_dr'] += $row['closing_dr'];
+        $parentGroupData[$pg]['closing_cr'] += $row['closing_cr'];
+        $parentGroupData[$pg]['net_balance'] += $row['net_balance'];
+    }
 }
 arsort($parentGroupCounts);
 $topParentGroups = array_slice($parentGroupCounts, 0, 25, true);
@@ -624,7 +700,8 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
 <!-- Summary Cards -->
 <div class="wb-summary" id="wbSummary">
-    <div class="wb-card total"><div class="num" id="statTotal"><?= $stats['total'] ?></div><div class="lbl">Total Ledgers</div></div>
+    <div class="wb-card total"><div class="num" id="statTotal"><?= $stats['total'] ?></div><div class="lbl">Showing</div></div>
+    <div class="wb-card" style="border-color:var(--info);"><div class="num" id="statTbImpact" style="color:var(--info);"><?= number_format($tbImpactCount) ?></div><div class="lbl">TB Impact</div></div>
     <div class="wb-card mapped"><div class="num" id="statMapped"><?= $stats['mapped'] ?></div><div class="lbl">Mapped</div></div>
     <div class="wb-card unmapped"><div class="num" id="statUnmapped"><?= $stats['unmapped'] ?></div><div class="lbl">Unmapped</div></div>
     <div class="wb-card suggested"><div class="num" id="statSuggested"><?= $stats['auto_suggested'] ?></div><div class="lbl">Auto-Suggested</div></div>
@@ -639,6 +716,10 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     <div class="search-box">
         <span class="s-icon">&#128269;</span>
         <input type="text" id="hotSearch" placeholder="Search ledger, group, schedule&hellip;">
+    </div>
+    <div class="filter-chips" id="viewChips" style="margin-bottom:4px;">
+        <span class="filter-chip active" data-view="tb_impact" title="Only ledgers with Trial Balance data (fastest load)">TB Impact (<?= number_format($tbImpactCount) ?>)</span>
+        <span class="filter-chip" data-view="all" title="All ledgers in master (may be slow for large datasets)">All Master (<?= number_format($totalLedgerCount) ?>)</span>
     </div>
     <div class="filter-chips" id="filterChips">
         <span class="filter-chip active" data-filter="all">All</span>
@@ -794,6 +875,9 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     var csrfToken = <?= json_encode(csrfToken()) ?>;
     var mappingOptions = <?= json_encode($mappingOptionsJson) ?>;
     var allData = <?= json_encode($gridData) ?>;
+    var tbImpactCount = <?= (int) $tbImpactCount ?>;
+    var totalCount = <?= (int) $totalLedgerCount ?>;
+    var defaultView = <?= $defaultViewTbImpact ? "'tb_impact'" : "'all'" ?>;
     var optionsMap = {};
     var optionList = [];
     mappingOptions.forEach(function(o) {
@@ -1024,6 +1108,26 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         if (table) { table.destroy(); }
         initTable();
     }
+
+    /* ---- View mode chip click ---- */
+    document.getElementById('viewChips').addEventListener('click', function(e) {
+        var chip = e.target.closest('.filter-chip');
+        if (!chip) return;
+        var view = chip.getAttribute('data-view');
+        document.querySelectorAll('#viewChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
+        chip.classList.add('active');
+
+        if (view === 'tb_impact') {
+            allData = originalData.filter(function(r) {
+                return r.has_tb === true;
+            });
+        } else {
+            allData = originalData.slice();
+        }
+        dirtyRows = {};
+        refreshGrid();
+        updateStats();
+    });
 
     /* ---- Filter chip click ---- */
     document.getElementById('filterChips').addEventListener('click', function(e) {
