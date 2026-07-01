@@ -39,11 +39,14 @@ $entityLabelMap = [
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $mode === 'archive') {
     requireCsrfToken();
     $archiveId = (int) ($_POST['entity_id'] ?? 0);
-    if ($archiveId > 0) {
-        /* Soft archive: set category to archived (or use a flag) */
-        /* For now, we use a simple approach - the entity remains but is marked */
-        /* In production, you'd add an archived_at column or similar */
-        $_SESSION['success'] = 'Entity archived successfully.';
+    if ($archiveId > 0 && canArchiveEntity($pdo, $archiveId)) {
+        if (archiveEntity($pdo, $archiveId)) {
+            $_SESSION['success'] = 'Entity archived successfully.';
+        } else {
+            $_SESSION['error'] = 'Failed to archive entity.';
+        }
+    } else {
+        $_SESSION['error'] = 'You do not have permission to archive this entity.';
     }
     header("Location: " . BASE_URL . "entity_select.php?mode=archive");
     exit;
@@ -136,9 +139,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $mode === 'archive') {
 <?php
     $confirmId = (int) ($_GET['id'] ?? 0);
     $confirmEntity = null;
-    if ($confirmId > 0) {
-        $stmt = $pdo->prepare("SELECT id, name FROM companies WHERE id = ? AND owner_user_id = ?");
-        $stmt->execute([$confirmId, $ownerId]);
+    if ($confirmId > 0 && canArchiveEntity($pdo, $confirmId)) {
+        $stmt = $pdo->prepare("SELECT id, name FROM companies WHERE id = ?");
+        $stmt->execute([$confirmId]);
         $confirmEntity = $stmt->fetch(PDO::FETCH_ASSOC);
     }
     if ($confirmEntity):

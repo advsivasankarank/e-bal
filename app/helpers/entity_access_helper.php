@@ -98,13 +98,18 @@ function getAccessibleEntities(PDO $pdo, array $options = []): array
     $includeArchived = !empty($options['include_archived']);
     $ownerId = getResolvedOwnerId($pdo);
 
+    ensureArchivedAtColumn($pdo);
+
+    $archivedClause = $includeArchived ? '' : ' AND c.archived_at IS NULL';
+
     /* Superadmin (ownerId == 0): see all companies */
     if ($ownerId === 0) {
         $sql = "SELECT c.id, c.name, c.category, c.pan, c.cin, c.llp_code,
-                       c.profile_completeness, c.created_at, c.updated_at,
+                       c.profile_completeness, c.created_at, c.updated_at, c.archived_at,
                        (SELECT COUNT(*) FROM financial_years fy WHERE fy.company_id = c.id) AS fy_count,
                        (SELECT COUNT(*) FROM workflow_status ws WHERE ws.company_id = c.id AND ws.tally_fetched = 1) AS has_data
                 FROM companies c
+                WHERE 1=1 {$archivedClause}
                 ORDER BY c.name ASC";
         $stmt = $pdo->query($sql);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -115,11 +120,11 @@ function getAccessibleEntities(PDO $pdo, array $options = []): array
     /* They are only visible to superadmin. This prevents cross-tenant leakage. */
     $stmt = $pdo->prepare("
         SELECT c.id, c.name, c.category, c.pan, c.cin, c.llp_code,
-               c.profile_completeness, c.created_at, c.updated_at,
+               c.profile_completeness, c.created_at, c.updated_at, c.archived_at,
                (SELECT COUNT(*) FROM financial_years fy WHERE fy.company_id = c.id) AS fy_count,
                (SELECT COUNT(*) FROM workflow_status ws WHERE ws.company_id = c.id AND ws.tally_fetched = 1) AS has_data
         FROM companies c
-        WHERE c.owner_user_id = ?
+        WHERE c.owner_user_id = ? {$archivedClause}
         ORDER BY c.name ASC
     ");
     $stmt->execute([$ownerId]);
@@ -188,6 +193,49 @@ function canCreateEntity(PDO $pdo): bool
 
     /* Superadmin and admin can create */
     return in_array($role, ['superadmin', 'admin'], true);
+}
+
+/**
+ * Ensure the archived_at column exists on companies table (idempotent).
+ */
+function ensureArchivedAtColumn(PDO $pdo): void
+{
+    try {
+        $stmt = $pdo->query("SHOW COLUMNS FROM companies LIKE 'archived_at'");
+        if ($stmt->rowCount() === 0) {
+            $pdo->exec("ALTER TABLE companies ADD COLUMN archived_at DATETIME NULL DEFAULT NULL AFTER updated_at");
+        }
+    } catch (\Throwable $e) {
+        error_log('ensureArchivedAtColumn failed: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Archive an entity (soft archive — sets archived_at timestamp).
+ */
+function archiveEntity(PDO $pdo, int $entityId): bool
+{
+    if ($entityId <= 0) return false;
+
+    ensureArchivedAtColumn($pdo);
+
+    $stmt = $pdo->prepare("UPDATE companies SET archived_at = NOW() WHERE id = ?");
+    $stmt->execute([$entityId]);
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * Unarchive an entity (clears archived_at).
+ */
+function unarchiveEntity(PDO $pdo, int $entityId): bool
+{
+    if ($entityId <= 0) return false;
+
+    ensureArchivedAtColumn($pdo);
+
+    $stmt = $pdo->prepare("UPDATE companies SET archived_at = NULL WHERE id = ?");
+    $stmt->execute([$entityId]);
+    return $stmt->rowCount() > 0;
 }
 
 /**

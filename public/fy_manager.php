@@ -49,17 +49,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['fy_action'] ?? '') === 'cr
         if ($dupStmt->fetch()) {
             $_SESSION['error'] = 'This Financial Year already exists for this entity.';
         } else {
-            $fyStartVal = $fyStart !== '' ? $fyStart : null;
-            $fyEndVal = $fyEnd !== '' ? $fyEnd : null;
-            $newFyId = ensureFinancialYearRecord($pdo, $entityId, $fyLabel, $fyStartVal, $fyEndVal);
+            try {
+                $result = ensureFinancialYearRecord($pdo, $entityId, $fyLabel);
+                $newFyId = is_array($result) ? (int) ($result['id'] ?? 0) : (int) $result;
 
-            $_SESSION['company_id'] = $entityId;
-            $_SESSION['company_name'] = $entity['name'];
-            $_SESSION['fy_id'] = $newFyId;
-            $_SESSION['fy_name'] = $fyLabel;
+                if ($newFyId <= 0) {
+                    $_SESSION['error'] = 'Financial Year was created, but workspace could not be opened. Please open it from the FY list.';
+                    header("Location: " . BASE_URL . "fy_manager.php?entity_id=" . $entityId);
+                    exit;
+                }
 
-            header("Location: " . BASE_URL . "fy_workspace.php?entity_id=" . $entityId . "&fy_id=" . $newFyId);
-            exit;
+                $_SESSION['company_id'] = $entityId;
+                $_SESSION['company_name'] = $entity['name'];
+                $_SESSION['fy_id'] = $newFyId;
+                $_SESSION['fy_name'] = $fyLabel;
+
+                header("Location: " . BASE_URL . "fy_workspace.php?entity_id=" . $entityId . "&fy_id=" . $newFyId);
+                exit;
+            } catch (\Throwable $e) {
+                error_log('FY create failed: ' . $e->getMessage());
+                $_SESSION['error'] = 'Financial Year was created, but workspace could not be opened. Please open it from the FY list.';
+                header("Location: " . BASE_URL . "fy_manager.php?entity_id=" . $entityId);
+                exit;
+            }
         }
     }
     header("Location: " . BASE_URL . "fy_manager.php?entity_id=" . $entityId);
