@@ -561,9 +561,17 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     text-align: center;
     box-shadow: var(--shadow-sm);
     cursor: default;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, background 0.15s;
 }
 .wb-card:hover { border-color: var(--brand); }
+.wb-card[data-filter] { cursor: pointer; }
+.wb-card[data-filter]:hover { background: #e8f0fe; }
+.wb-card.active-tile { background: var(--brand); border-color: var(--brand); }
+.wb-card.active-tile .num { color: #fff !important; }
+.wb-card.active-tile .lbl { color: rgba(255,255,255,0.85); }
+.wb-card.active-tile[data-filter="unmapped"] .num { color: #fff !important; }
+.wb-card.active-tile[data-filter="risky"] .num { color: #fff !important; }
+.wb-card.active-tile[data-filter="critical"] .num { color: #fff !important; }
 .wb-card .num { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
 .wb-card .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
 .wb-card.total .num { color: var(--text); }
@@ -597,6 +605,24 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 .wb-toolbar .search-box .s-icon {
     position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
     color: var(--muted); font-size: 0.85rem; pointer-events: none;
+}
+.wb-toolbar .search-mode {
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    font-size: 0.82rem;
+    background: var(--panel-strong);
+    color: var(--text);
+    min-width: 150px;
+}
+.wb-toolbar .pg-filter {
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    font-size: 0.82rem;
+    background: var(--panel-strong);
+    color: var(--text);
+    min-width: 180px;
 }
 
 .filter-chips {
@@ -700,22 +726,32 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
 <!-- Summary Cards -->
 <div class="wb-summary" id="wbSummary">
-    <div class="wb-card total"><div class="num" id="statTotal"><?= $stats['total'] ?></div><div class="lbl">Showing</div></div>
-    <div class="wb-card" style="border-color:var(--info);"><div class="num" id="statTbImpact" style="color:var(--info);"><?= number_format($tbImpactCount) ?></div><div class="lbl">TB Impact</div></div>
-    <div class="wb-card mapped"><div class="num" id="statMapped"><?= $stats['mapped'] ?></div><div class="lbl">Mapped</div></div>
-    <div class="wb-card unmapped"><div class="num" id="statUnmapped"><?= $stats['unmapped'] ?></div><div class="lbl">Unmapped</div></div>
-    <div class="wb-card suggested"><div class="num" id="statSuggested"><?= $stats['auto_suggested'] ?></div><div class="lbl">Auto-Suggested</div></div>
-    <div class="wb-card high"><div class="num" id="statHigh"><?= $stats['high_confidence'] ?></div><div class="lbl">High Confidence</div></div>
-    <div class="wb-card review"><div class="num" id="statReview"><?= $stats['manual_review'] ?></div><div class="lbl">Manual Review</div></div>
-    <div class="wb-card unsaved"><div class="num" id="statUnsaved">0</div><div class="lbl">Unsaved Changes</div></div>
-    <div class="wb-card" style="border-color:var(--danger);"><div class="num" id="statRisk" style="color:var(--danger);">0</div><div class="lbl">Risk Issues</div></div>
+    <div class="wb-card total active-tile" data-filter="all"><div class="num" id="statTotal"><?= $stats['total'] ?></div><div class="lbl">Showing</div></div>
+    <div class="wb-card" style="border-color:var(--info);" data-filter="tb_impact"><div class="num" id="statTbImpact" style="color:var(--info);"><?= number_format($tbImpactCount) ?></div><div class="lbl">TB Impact</div></div>
+    <div class="wb-card mapped" data-filter="mapped"><div class="num" id="statMapped"><?= $stats['mapped'] ?></div><div class="lbl">Mapped</div></div>
+    <div class="wb-card unmapped" data-filter="unmapped"><div class="num" id="statUnmapped"><?= $stats['unmapped'] ?></div><div class="lbl">Unmapped</div></div>
+    <div class="wb-card suggested" data-filter="suggested"><div class="num" id="statSuggested"><?= $stats['auto_suggested'] ?></div><div class="lbl">Auto-Suggested</div></div>
+    <div class="wb-card high" data-filter="high_conf"><div class="num" id="statHigh"><?= $stats['high_confidence'] ?></div><div class="lbl">High Confidence</div></div>
+    <div class="wb-card review" data-filter="manual_review"><div class="num" id="statReview"><?= $stats['manual_review'] ?></div><div class="lbl">Manual Review</div></div>
+    <div class="wb-card unsaved" data-filter="unsaved"><div class="num" id="statUnsaved">0</div><div class="lbl">Unsaved Changes</div></div>
+    <div class="wb-card" style="border-color:var(--danger);" data-filter="risky"><div class="num" id="statRisk" style="color:var(--danger);">0</div><div class="lbl">Risk Issues</div></div>
 </div>
 
 <!-- Toolbar: Search + Filter Chips -->
 <div class="wb-toolbar">
+    <select class="search-mode" id="searchMode" title="Search mode">
+        <option value="all">Search All</option>
+        <option value="ledger_name">Search Ledger Name</option>
+        <option value="parent_group">Search Parent Group</option>
+        <option value="schedule">Search Schedule</option>
+        <option value="remarks">Search Remarks</option>
+    </select>
+    <select class="pg-filter" id="pgFilter" title="Filter by parent group">
+        <option value="">All Parent Groups</option>
+    </select>
     <div class="search-box">
         <span class="s-icon">&#128269;</span>
-        <input type="text" id="hotSearch" placeholder="Search ledger, group, schedule&hellip;">
+        <input type="text" id="hotSearch" placeholder="Search ledger, parent group, schedule, remarks&hellip;">
     </div>
     <div class="filter-chips" id="viewChips" style="margin-bottom:4px;">
         <span class="filter-chip active" data-view="tb_impact" title="Only ledgers with Trial Balance data (fastest load)">TB Impact (<?= number_format($tbImpactCount) ?>)</span>
@@ -740,92 +776,16 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         <span class="filter-chip" data-filter="credit_in_asset">Credit in Asset</span>
         <span class="filter-chip" data-filter="debit_in_liability">Debit in Liability</span>
         <span class="filter-chip" data-filter="manual_review">Manual Review</span>
-        <span class="filter-chip" data-filter="parent_group" id="parentGroupToggle" title="Filter by parent group">&#128193; By Group</span>
     </div>
-</div>
-
-<!-- Parent Group Filter Panel (hidden by default) -->
-<div id="parentGroupPanel" style="display:none;background:var(--panel-strong);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:12px;box-shadow:var(--shadow-sm);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <strong style="font-size:0.9rem;">Filter by Parent Group</strong>
-        <button class="btn btn-sm" onclick="document.getElementById('parentGroupPanel').style.display='none'" style="padding:4px 10px;font-size:0.75rem;">Close</button>
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;" id="parentGroupChips">
-        <?php foreach ($topParentGroups as $pg => $cnt): ?>
-        <span class="filter-chip" data-pg="<?= htmlspecialchars($pg) ?>" title="<?= htmlspecialchars($pg) ?>: <?= $cnt ?> ledgers">
-            <?= htmlspecialchars($pg) ?> (<?= $cnt ?>)
-        </span>
-        <?php endforeach; ?>
-    </div>
-    <?php if (count($parentGroupCounts) > 25): ?>
-    <div style="margin-top:8px;font-size:0.75rem;color:var(--muted);">
-        Showing top 25 of <?= count($parentGroupCounts) ?> groups. Use search to find others.
-    </div>
-    <?php endif; ?>
 </div>
 
 <!-- Schedule III Group Mapping Panel -->
-<div style="background:var(--panel-strong);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:12px;box-shadow:var(--shadow-sm);">
+<div id="groupMappingPanel" style="background:var(--panel-strong);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:12px;box-shadow:var(--shadow-sm);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <strong style="font-size:0.9rem;">Schedule III Group Mapping</strong>
-        <span style="font-size:0.75rem;color:var(--muted);">Tag parent groups to Schedule III heads</span>
+        <span id="groupPanelInfo" style="font-size:0.75rem;color:var(--muted);">Tag parent groups to Schedule III heads</span>
     </div>
-    <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
-            <thead>
-                <tr style="border-bottom:2px solid var(--border);">
-                    <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Parent Group</th>
-                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Count</th>
-                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Opening Dr</th>
-                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Opening Cr</th>
-                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Closing Dr</th>
-                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Closing Cr</th>
-                    <th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Net Balance</th>
-                    <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Dr/Cr</th>
-                    <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Existing</th>
-                    <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Suggested</th>
-                    <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Conf</th>
-                    <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Risk</th>
-                    <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Schedule III</th>
-                    <th style="text-align:center;padding:6px 8px;"></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach (array_slice($groupMappingData, 0, 30) as $gm): ?>
-                <tr style="border-bottom:1px solid var(--border);" data-pg="<?= htmlspecialchars($gm['parent_group']) ?>">
-                    <td style="padding:6px 8px;font-weight:500;white-space:nowrap;"><?= htmlspecialchars($gm['parent_group']) ?></td>
-                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['ledger_count']) ?></td>
-                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['opening_dr'], 2) ?></td>
-                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['opening_cr'], 2) ?></td>
-                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['closing_dr'], 2) ?></td>
-                    <td style="padding:6px 8px;text-align:right;"><?= number_format($gm['closing_cr'], 2) ?></td>
-                    <td style="padding:6px 8px;text-align:right;font-weight:600;<?= $gm['net_balance'] < 0 ? 'color:var(--danger)' : '' ?>"><?= number_format($gm['net_balance'], 2) ?></td>
-                    <td style="padding:6px 8px;text-align:center;font-weight:600;"><?= $gm['drcr'] ?: '—' ?></td>
-                    <td style="padding:6px 8px;"><?= $gm['dominant_mapping'] ? htmlspecialchars($gm['dominant_mapping']) : '<span style="color:var(--muted);">—</span>' ?></td>
-                    <td style="padding:6px 8px;"><?= $gm['suggested_code'] ? htmlspecialchars($gm['suggested_code']) : '<span style="color:var(--muted);">—</span>' ?></td>
-                    <td style="padding:6px 8px;text-align:center;font-weight:600;<?= $gm['confidence'] >= 90 ? 'color:var(--success)' : ($gm['confidence'] >= 70 ? 'color:var(--warning)' : 'color:var(--danger)') ?>"><?= $gm['confidence'] ?>%</td>
-                    <td style="padding:6px 8px;text-align:center;"><?= $gm['risk_count'] > 0 ? '<span style="color:var(--danger);font-weight:600;">' . $gm['risk_count'] . '</span>' : '<span style="color:var(--success);">0</span>' ?></td>
-                    <td style="padding:6px 8px;">
-                        <select class="gm-select" data-pg="<?= htmlspecialchars($gm['parent_group']) ?>" style="padding:4px 8px;border:1px solid var(--border-strong);border-radius:4px;font-size:0.78rem;min-width:140px;">
-                            <option value="">Select...</option>
-                            <?php foreach ($mappingOptions as $code => $label): ?>
-                                <option value="<?= htmlspecialchars($code) ?>" <?= $gm['suggested_code'] === $code ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </td>
-                    <td style="padding:6px 8px;">
-                        <button class="btn btn-sm gm-apply-btn" data-pg="<?= htmlspecialchars($gm['parent_group']) ?>" style="padding:4px 10px;font-size:0.72rem;">Apply</button>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-    <?php if (count($groupMappingData) > 30): ?>
-    <div style="margin-top:8px;font-size:0.75rem;color:var(--muted);">
-        Showing top 30 of <?= count($groupMappingData) ?> groups. Use grid search for others.
-    </div>
-    <?php endif; ?>
+    <div id="groupMappingBody" style="overflow-x:auto;"></div>
 </div>
 
 <!-- Handsontable Grid -->
@@ -888,6 +848,8 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     var originalData = JSON.parse(JSON.stringify(allData));
     var dirtyRows = {};
     var currentFilter = 'all';
+    var currentParentGroup = '';
+    var searchMode = 'all';
     var table = null;
 
     /* ---- Category lookup for filter ---- */
@@ -907,13 +869,8 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
     /* ---- Filter logic ---- */
     function filterRow(row) {
-        if (currentFilter === 'all' && !currentParentGroup) return true;
-        var code = row.final_mapping || row.current_mapping || '';
-
-        /* Parent group filter (applies alongside status filter) */
-        if (currentParentGroup && row.parent_group !== currentParentGroup) return false;
-
         if (currentFilter === 'all') return true;
+        var code = row.final_mapping || row.current_mapping || '';
         switch (currentFilter) {
             case 'unmapped': return !code || code === '';
             case 'mapped': return code && code !== '';
@@ -938,10 +895,19 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
     function getFilteredData() {
         var search = (document.getElementById('hotSearch').value || '').toLowerCase().trim();
+        var pgFilter = document.getElementById('pgFilter').value || '';
         return allData.filter(function(r) {
             if (!filterRow(r)) return false;
+            if (pgFilter && r.parent_group !== pgFilter) return false;
             if (search) {
-                var hay = ((r.ledger_name||'')+' '+(r.parent_group||'')+' '+(r.current_label||'')+' '+(r.suggested_label||'')+' '+(r.remarks||'')).toLowerCase();
+                var hay = '';
+                switch (searchMode) {
+                    case 'ledger_name': hay = (r.ledger_name||'').toLowerCase(); break;
+                    case 'parent_group': hay = (r.parent_group||'').toLowerCase(); break;
+                    case 'schedule': hay = ((r.current_label||'')+' '+(r.suggested_label||'')).toLowerCase(); break;
+                    case 'remarks': hay = (r.remarks||'').toLowerCase(); break;
+                    default: hay = ((r.ledger_name||'')+' '+(r.parent_group||'')+' '+(r.current_label||'')+' '+(r.suggested_label||'')+' '+(r.remarks||'')).toLowerCase();
+                }
                 if (hay.indexOf(search) === -1) return false;
             }
             return true;
@@ -1051,10 +1017,6 @@ require_once __DIR__ . '/../layouts/header_v2.php';
                 {title:'', formatter:'rowSelection', titleFormatter:'rowSelection', headerSort:false, width:40, hozAlign:'center', cellClick:function(e, cell){cell.getRow().toggleSelect();}},
                 {title:'Ledger Name', field:'ledger_name', width:220, frozen:true, headerTooltip:true},
                 {title:'Parent Group', field:'parent_group', width:160},
-                {title:'Opening Dr', field:'opening_dr', width:100, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
-                {title:'Opening Cr', field:'opening_cr', width:100, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
-                {title:'Closing Dr', field:'closing_dr', width:100, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
-                {title:'Closing Cr', field:'closing_cr', width:100, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
                 {title:'Net Balance', field:'net_balance', width:110, hozAlign:'right', formatter:moneyFormatter, accessorDownload:moneyFormatter},
                 {title:'Dr/Cr', field:'drcr', width:50, hozAlign:'center'},
                 {title:'Current Mapping', field:'current_label', width:160},
@@ -1107,6 +1069,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     function refreshGrid() {
         if (table) { table.destroy(); }
         initTable();
+        refreshGroupPanel();
     }
 
     /* ---- View mode chip click ---- */
@@ -1125,8 +1088,9 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             allData = originalData.slice();
         }
         dirtyRows = {};
+        populateParentGroupDropdown();
         refreshGrid();
-        updateStats();
+        highlightActiveTile();
     });
 
     /* ---- Filter chip click ---- */
@@ -1134,45 +1098,211 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         var chip = e.target.closest('.filter-chip');
         if (!chip) return;
         var filter = chip.getAttribute('data-filter');
-        if (filter === 'parent_group') {
-            document.getElementById('parentGroupPanel').style.display =
-                document.getElementById('parentGroupPanel').style.display === 'none' ? 'block' : 'none';
-            return;
-        }
         document.querySelectorAll('#filterChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
         chip.classList.add('active');
         currentFilter = filter;
-        currentParentGroup = '';
         refreshGrid();
-    });
-
-    /* ---- Parent group chip click ---- */
-    var currentParentGroup = '';
-    document.getElementById('parentGroupChips').addEventListener('click', function(e) {
-        var chip = e.target.closest('.filter-chip');
-        if (!chip) return;
-        var pg = chip.getAttribute('data-pg');
-        if (currentParentGroup === pg) {
-            currentParentGroup = '';
-            chip.classList.remove('active');
-        } else {
-            document.querySelectorAll('#parentGroupChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
-            chip.classList.add('active');
-            currentParentGroup = pg;
-        }
-        /* Reset status filter to 'all' when filtering by group */
-        document.querySelectorAll('#filterChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
-        document.querySelector('#filterChips .filter-chip[data-filter="all"]').classList.add('active');
-        currentFilter = 'all';
-        refreshGrid();
+        refreshGroupPanel();
+        highlightActiveTile();
     });
 
     /* ---- Search ---- */
     var searchTimer;
     document.getElementById('hotSearch').addEventListener('input', function() {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(refreshGrid, 250);
+        searchTimer = setTimeout(function() { refreshGrid(); refreshGroupPanel(); }, 250);
     });
+
+    /* ---- Search mode selector ---- */
+    var searchModeMap = {
+        'all': 'Search ledger, parent group, schedule, remarks\u2026',
+        'ledger_name': 'Search ledger name\u2026',
+        'parent_group': 'Search parent group\u2026',
+        'schedule': 'Search schedule or mapping\u2026',
+        'remarks': 'Search remarks\u2026',
+    };
+    document.getElementById('searchMode').addEventListener('change', function() {
+        searchMode = this.value;
+        document.getElementById('hotSearch').placeholder = searchModeMap[searchMode] || searchModeMap['all'];
+        refreshGrid();
+    });
+
+    /* ---- Parent group dropdown filter ---- */
+    function populateParentGroupDropdown() {
+        var pgCounts = {};
+        allData.forEach(function(r) {
+            var pg = r.parent_group || '';
+            if (!pg) return;
+            pgCounts[pg] = (pgCounts[pg] || 0) + 1;
+        });
+        var sorted = Object.keys(pgCounts).sort(function(a, b) { return pgCounts[b] - pgCounts[a]; });
+        var sel = document.getElementById('pgFilter');
+        var current = sel.value;
+        sel.innerHTML = '<option value="">All Parent Groups (' + allData.length + ')</option>';
+        sorted.forEach(function(pg) {
+            var opt = document.createElement('option');
+            opt.value = pg;
+            opt.textContent = pg + ' (' + pgCounts[pg] + ')';
+            sel.appendChild(opt);
+        });
+        if (current && pgCounts[current]) sel.value = current;
+    }
+    document.getElementById('pgFilter').addEventListener('change', function() {
+        currentParentGroup = this.value;
+        refreshGrid();
+        refreshGroupPanel();
+    });
+
+    /* ---- KPI tile click ---- */
+    document.getElementById('wbSummary').addEventListener('click', function(e) {
+        var card = e.target.closest('.wb-card[data-filter]');
+        if (!card) return;
+        var filter = card.getAttribute('data-filter');
+        if (filter === 'unsaved') return;
+        if (filter === 'tb_impact') {
+            /* Switch to TB impact view */
+            document.querySelectorAll('#viewChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
+            document.querySelector('#viewChips .filter-chip[data-view="tb_impact"]').classList.add('active');
+            allData = originalData.filter(function(r) { return r.has_tb === true; });
+            dirtyRows = {};
+        } else if (filter === 'all') {
+            document.querySelectorAll('#viewChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
+            document.querySelector('#viewChips .filter-chip[data-view="all"]').classList.add('active');
+            allData = originalData.slice();
+            dirtyRows = {};
+        }
+        currentFilter = (filter === 'all' || filter === 'tb_impact') ? 'all' : filter;
+        /* Update filter chips */
+        document.querySelectorAll('#filterChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
+        var targetChip = document.querySelector('#filterChips .filter-chip[data-filter="' + currentFilter + '"]');
+        if (targetChip) targetChip.classList.add('active');
+        else document.querySelector('#filterChips .filter-chip[data-filter="all"]').classList.add('active');
+        refreshGrid();
+        refreshGroupPanel();
+        highlightActiveTile();
+    });
+
+    function highlightActiveTile() {
+        document.querySelectorAll('#wbSummary .wb-card').forEach(function(c) { c.classList.remove('active-tile'); });
+        var target = document.querySelector('#wbSummary .wb-card[data-filter="' + currentFilter + '"]');
+        if (target) target.classList.add('active-tile');
+        else document.querySelector('#wbSummary .wb-card[data-filter="all"]').classList.add('active-tile');
+    }
+
+    /* ---- Dynamic group panel builder ---- */
+    function refreshGroupPanel() {
+        var filtered = getFilteredData();
+        var pgData = {};
+        filtered.forEach(function(r) {
+            var pg = r.parent_group || '';
+            if (!pg) return;
+            if (!pgData[pg]) pgData[pg] = { count: 0, mapped: 0, unmapped: 0, closing_dr: 0, closing_cr: 0, dominant: {}, risk: 0, suggested: null, confidence: 0 };
+            var d = pgData[pg];
+            d.count++;
+            var code = r.final_mapping || r.current_mapping || '';
+            if (code) { d.mapped++; } else { d.unmapped++; }
+            d.closing_dr += parseFloat(r.closing_dr) || 0;
+            d.closing_cr += parseFloat(r.closing_cr) || 0;
+            if (r.risk_level === 'critical' || r.risk_level === 'warning') d.risk++;
+            if (r.suggestion_source === 'parent_group_rule' && r.suggested) {
+                d.suggested = r.suggested;
+                d.confidence = r.confidence || 0;
+            }
+            if (code) { d.dominant[code] = (d.dominant[code] || 0) + 1; }
+        });
+        var sorted = Object.keys(pgData).sort(function(a, b) { return pgData[b].count - pgData[a].count; });
+        var body = document.getElementById('groupMappingBody');
+        var info = document.getElementById('groupPanelInfo');
+        if (sorted.length === 0) {
+            body.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:0.82rem;">No parent groups in current filter.</div>';
+            info.textContent = '0 groups';
+            return;
+        }
+        var html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;"><thead><tr style="border-bottom:2px solid var(--border);">';
+        html += '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Parent Group</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Total</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Unmapped</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Closing Dr</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Closing Cr</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Net Balance</th>';
+        html += '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Suggested</th>';
+        html += '<th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Conf</th>';
+        html += '<th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Risk</th>';
+        html += '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Schedule III</th>';
+        html += '<th style="text-align:center;padding:6px 8px;"></th>';
+        html += '</tr></thead><tbody>';
+        var showMax = Math.min(sorted.length, 30);
+        for (var i = 0; i < showMax; i++) {
+            var pg = sorted[i], d = pgData[pg];
+            var netBal = d.closing_dr - d.closing_cr;
+            var netColor = netBal < 0 ? 'color:var(--danger)' : '';
+            var dominantCode = '';
+            var maxCount = 0;
+            Object.keys(d.dominant).forEach(function(k) { if (d.dominant[k] > maxCount) { maxCount = d.dominant[k]; dominantCode = k; } });
+            var dominantLabel = dominantCode ? (optionsMap[dominantCode] || dominantCode) : '';
+            var suggestedLabel = d.suggested ? (optionsMap[d.suggested] || d.suggested) : '';
+            var confClass = d.confidence >= 90 ? 'color:var(--success)' : (d.confidence >= 70 ? 'color:var(--warning)' : 'color:var(--danger)');
+            html += '<tr style="border-bottom:1px solid var(--border);" data-pg="' + escHtml(pg) + '">';
+            html += '<td style="padding:6px 8px;font-weight:500;white-space:nowrap;">' + escHtml(pg) + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;">' + d.count + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:' + (d.unmapped > 0 ? 'var(--danger)' : 'var(--success)') + ';">' + d.unmapped + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;">' + fmtMoney(d.closing_dr) + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;">' + fmtMoney(d.closing_cr) + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;font-weight:600;' + netColor + '">' + fmtMoney(netBal) + '</td>';
+            html += '<td style="padding:6px 8px;">' + (dominantLabel || '<span style="color:var(--muted);">\u2014</span>') + '</td>';
+            html += '<td style="padding:6px 8px;text-align:center;font-weight:600;' + confClass + '">' + d.confidence + '%</td>';
+            html += '<td style="padding:6px 8px;text-align:center;">' + (d.risk > 0 ? '<span style="color:var(--danger);font-weight:600;">' + d.risk + '</span>' : '<span style="color:var(--success);">0</span>') + '</td>';
+            html += '<td style="padding:6px 8px;"><select class="gm-select" data-pg="' + escHtml(pg) + '" style="padding:4px 8px;border:1px solid var(--border-strong);border-radius:4px;font-size:0.78rem;min-width:140px;"><option value="">Select...</option>';
+            mappingOptions.forEach(function(o) {
+                var sel = (o.id === d.suggested) ? ' selected' : '';
+                html += '<option value="' + escHtml(o.id) + '"' + sel + '>' + escHtml(o.label) + '</option>';
+            });
+            html += '</select></td>';
+            html += '<td style="padding:6px 8px;"><button class="btn btn-sm gm-apply-btn" data-pg="' + escHtml(pg) + '" style="padding:4px 10px;font-size:0.72rem;">Apply</button></td>';
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        if (sorted.length > 30) {
+            html += '<div style="margin-top:8px;font-size:0.75rem;color:var(--muted);">Showing 30 of ' + sorted.length + ' groups.</div>';
+        }
+        body.innerHTML = html;
+        info.textContent = sorted.length + ' groups from ' + filtered.length + ' ledgers';
+        bindGroupApplyButtons();
+    }
+
+    function bindGroupApplyButtons() {
+        document.querySelectorAll('.gm-apply-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var pg = this.getAttribute('data-pg');
+                var select = document.querySelector('.gm-select[data-pg="' + pg + '"]');
+                if (!select || !select.value) {
+                    showToast('Select a Schedule III head first', 'error');
+                    return;
+                }
+                var scheduleCode = select.value;
+                var count = 0;
+                var filtered = getFilteredData();
+                var filteredNames = {};
+                filtered.forEach(function(r) { filteredNames[r.ledger_name] = true; });
+                for (var i = 0; i < allData.length; i++) {
+                    if (allData[i].parent_group !== pg) continue;
+                    if (!filteredNames[allData[i].ledger_name]) continue;
+                    var existingCode = allData[i].final_mapping || allData[i].current_mapping || '';
+                    if (existingCode && existingCode !== '') continue;
+                    if (allData[i].final_mapping !== scheduleCode) {
+                        allData[i].final_mapping = scheduleCode;
+                        allData[i].status = 'Mapped';
+                        dirtyRows[allData[i].ledger_name] = true;
+                        count++;
+                    }
+                }
+                refreshGrid();
+                updateStats();
+                refreshGroupPanel();
+                showToast(count + ' unmapped ledgers under "' + pg + '" mapped to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
+            });
+        });
+    }
 
     /* ---- Accept all high confidence ---- */
     document.getElementById('btnAcceptHigh').addEventListener('click', function() {
@@ -1208,6 +1338,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         });
         refreshGrid();
         updateStats();
+        refreshGroupPanel();
         showToast(count + ' group suggestions applied to visible rows', 'success');
     });
 
@@ -1255,6 +1386,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     document.getElementById('btnReset').addEventListener('click', function() {
         allData = JSON.parse(JSON.stringify(originalData));
         dirtyRows = {};
+        populateParentGroupDropdown();
         refreshGrid();
         updateStats();
         showToast('All changes reset', 'info');
@@ -1416,7 +1548,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
                     }
                 });
                 originalData = JSON.parse(JSON.stringify(allData));
-                updateStats(); refreshGrid();
+                updateStats(); refreshGrid(); refreshGroupPanel(); populateParentGroupDropdown();
                 var msg = resp.saved+' mappings saved.';
                 if(resp.pending>0) msg+=' '+resp.pending+' ledgers remaining.';
                 if(resp.mapping_complete) msg+=' All ledgers mapped!';
@@ -1532,33 +1664,10 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     }
 
     /* ---- Init ---- */
+    populateParentGroupDropdown();
     initTable();
     updateStats();
-
-    /* ---- Schedule III Group Mapping: Apply buttons ---- */
-    document.querySelectorAll('.gm-apply-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var pg = this.getAttribute('data-pg');
-            var select = document.querySelector('.gm-select[data-pg="' + pg + '"]');
-            if (!select || !select.value) {
-                showToast('Select a Schedule III head first', 'error');
-                return;
-            }
-            var scheduleCode = select.value;
-            var count = 0;
-            for (var i = 0; i < allData.length; i++) {
-                if (allData[i].parent_group === pg && allData[i].final_mapping !== scheduleCode) {
-                    allData[i].final_mapping = scheduleCode;
-                    allData[i].status = 'Mapped';
-                    dirtyRows[allData[i].ledger_name] = true;
-                    count++;
-                }
-            }
-            refreshGrid();
-            updateStats();
-            showToast(count + ' ledgers under "' + pg + '" mapped to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
-        });
-    });
+    refreshGroupPanel();
 
 })();
 </script>
