@@ -5,11 +5,14 @@
  * After entity selection, user must select/create/copy FY before entering workspace.
  */
 $page_title = 'Financial Year Manager';
-require_once __DIR__ . '/layouts/header_v2.php';
+
+/* ---- Early bootstrap (before any HTML output) ---- */
+require_once __DIR__ . '/../app/context_check.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../app/helpers/entity_access_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/../app/helpers/financial_year_helper.php';
-require_once __DIR__ . '/../app/helpers/entity_access_helper.php';
 
 $userId  = (int) ($_SESSION['user_id'] ?? 0);
 $entityId = (int) ($_GET['entity_id'] ?? 0);
@@ -18,7 +21,7 @@ if ($entityId <= 0) {
     $entityId = (int) ($_POST['entity_id'] ?? 0);
 }
 
-/* ---- Validate entity access ---- */
+/* ---- Validate entity access BEFORE header output ---- */
 validateEntityAccessOrRedirect($pdo, $entityId, 'view');
 
 $stmt = $pdo->prepare("SELECT id, name, category, pan, cin, llp_code FROM companies WHERE id = ?");
@@ -123,6 +126,9 @@ $entityLabelMap = [
 $catKey = strtolower(str_replace(['-', ' '], '_', $entity['category'] ?? ''));
 $entLabel = $entityLabelMap[$catKey] ?? ucfirst($entity['category'] ?? '');
 $identifier = $entity['cin'] ?? $entity['llp_code'] ?? $entity['pan'] ?? '';
+
+/* ---- Include header AFTER entity validation ---- */
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
 <?= uiBreadcrumb([
