@@ -14,7 +14,7 @@ set_exception_handler(function (\Throwable $e) {
     http_response_code(500);
     error_log('Mapping Workbench FATAL: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
     echo '<!DOCTYPE html><html><head><title>Error</title></head><body>';
-    echo '<h1>Mapping Workbench Error</h1>';
+    echo '<h1>ReconHub Error</h1>';
     echo '<p>The mapping workbench encountered an error. Please try again or contact support.</p>';
     echo '<p><small>' . htmlspecialchars($e->getMessage()) . '</small></p>';
     echo '<p><a href="' . (defined('BASE_URL') ? BASE_URL : '/') . '">Return to Dashboard</a></p>';
@@ -397,10 +397,6 @@ foreach ($processingLedgers as $row) {
 }
 
 $timeSuggestions = round((microtime(true) - $timeStart - ($timeQuery / 1000)) * 1000);
-$timeTotal = round((microtime(true) - $timeStart) * 1000);
-error_log("Mapping Workbench timing: query={$timeQuery}ms, suggestions={$timeSuggestions}ms, total={$timeTotal}ms, ledgers=" . count($processingLedgers));
-
-$pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
 /* ---- Parent group counts via SQL aggregation (fast) ---- */
 $parentGroupCounts = [];
@@ -521,7 +517,12 @@ foreach ($mappingOptions as $code => $label) {
     $mappingOptionsJson[] = ['id' => $code, 'label' => $label . ' (' . $code . ')', 'code' => $code, 'fullLabel' => $label];
 }
 
-$page_title = "Ledger Mapping Workbench";
+$timeTotal = round((microtime(true) - $timeStart) * 1000);
+error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}ms, total={$timeTotal}ms, ledgers=" . count($processingLedgers));
+
+$pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
+
+$page_title = "ReconHub";
 $showSidebar = true;
 require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
@@ -549,15 +550,15 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 <style>
 .wb-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
 }
 .wb-card {
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
+    border-radius: 8px;
+    padding: 10px 12px;
     text-align: center;
     box-shadow: var(--shadow-sm);
     cursor: default;
@@ -585,9 +586,15 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 .wb-toolbar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 10px;
     flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--panel-strong);
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
 }
 .wb-toolbar .search-box {
     position: relative;
@@ -648,13 +655,16 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 14px;
+    padding: 8px 14px;
     background: var(--panel-strong);
     border: 1px solid var(--border);
     border-radius: 10px;
-    margin-top: 12px;
+    margin-top: 8px;
     flex-wrap: wrap;
     box-shadow: var(--shadow-sm);
+    position: sticky;
+    bottom: 0;
+    z-index: 100;
 }
 .wb-actions .btn { min-height: 34px; padding: 0 14px; font-size: 0.8rem; }
 .wb-actions .sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
@@ -665,12 +675,31 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     border-radius: 10px;
     overflow: hidden;
     box-shadow: var(--shadow-sm);
+    height: calc(100vh - 320px);
+    min-height: 400px;
 }
 
 #hotSearch {
     display: inline-block;
     min-width: 140px;
 }
+
+.recon-context-strip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 14px;
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+    color: var(--text);
+    flex-wrap: wrap;
+}
+.recon-context-strip .rcs-sep { color: var(--muted); }
+.recon-context-strip .rcs-label { color: var(--muted); font-weight: 400; }
+.recon-context-strip .rcs-value { font-weight: 600; }
 
 .toast {
     position: fixed;
@@ -698,19 +727,25 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
 <?= uiBreadcrumb([
     ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
-    ['label' => 'Ledger Mapping Workbench'],
+    ['label' => 'ReconHub'],
 ]) ?>
 
-<?= uiPageHero('Ledger Mapping Workbench', 'Excel-like workspace for bulk ledger mapping. Edit cells inline, use keyboard navigation, and save only changed rows.') ?>
+<?= uiPageHero('ReconHub', 'Ledger mapping, Schedule III group tagging, risk review and reconciliation readiness workspace.') ?>
 
 <?php if (!empty($pageWarning)): ?>
     <?= uiAlert($pageWarning, 'warning') ?>
 <?php endif; ?>
 
-<?= uiContextCard([
-    'company' => $_SESSION['company_name'] ?? 'Not Selected',
-    'fy' => $_SESSION['fy_name'] ?? 'Not Selected',
-]) ?>
+<!-- Compact Context Strip -->
+<div class="recon-context-strip">
+    <span class="rcs-label">Entity:</span> <span class="rcs-value"><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></span>
+    <span class="rcs-sep">|</span>
+    <span class="rcs-label">FY:</span> <span class="rcs-value"><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></span>
+    <span class="rcs-sep">|</span>
+    <span class="rcs-value" style="color:var(--info);"><?= $defaultViewTbImpact ? 'TB Impact View' : 'All Master View' ?></span>
+    <span class="rcs-sep">|</span>
+    <span class="rcs-value"><?= number_format($stats['total']) ?> ledgers</span>
+</div>
 
 <?php if (!empty($_SESSION['success'])): ?>
     <div class="success-box"><p><?= htmlspecialchars($_SESSION['success']) ?></p></div>
@@ -1006,13 +1041,16 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         table = new Tabulator('#hot', {
             data: filtered,
             layout: 'fitDataFill',
-            height: Math.min(filtered.length * 35 + 50, 620),
+            height: 'calc(100vh - 320px)',
             selectable: true,
             movableColumns: true,
             resizable: true,
             headerSortTristate: true,
             rowClass: rowClass,
             placeholder: 'No ledgers found',
+            pagination: 'local',
+            paginationSize: 250,
+            paginationSizeSelector: [100, 250, 500, 1000, true],
             columns: [
                 {title:'', formatter:'rowSelection', titleFormatter:'rowSelection', headerSort:false, width:40, hozAlign:'center', cellClick:function(e, cell){cell.getRow().toggleSelect();}},
                 {title:'Ledger Name', field:'ledger_name', width:220, frozen:true, headerTooltip:true},
@@ -1464,32 +1502,35 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         var isCritical = type === 'critical';
         var accentColor = isCritical ? '#dc2626' : '#e65100';
         var icon = isCritical ? '&#9888;' : '&#9888;';
-        var btnClass = isCritical ? 'btn-danger' : 'btn-warning';
 
-        var html = '<div style="background:#fff;border-radius:12px;max-width:560px;width:90%;max-height:80vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">';
+        var html = '<div style="background:#fff;border-radius:12px;max-width:600px;width:90%;max-height:80vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">';
         html += '<div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;">';
         html += '<div style="display:flex;align-items:center;gap:10px;">';
         html += '<span style="font-size:1.5rem;color:' + accentColor + ';">' + icon + '</span>';
         html += '<h3 style="margin:0;font-size:1.1rem;color:#1f2937;">' + title + '</h3>';
         html += '</div></div>';
         html += '<div style="padding:16px 24px;">';
-        html += '<p style="font-size:0.9rem;color:#4b5563;margin-bottom:12px;">The following ledgers have mapping risks that should be reviewed before saving:</p>';
+        html += '<p style="font-size:0.9rem;color:#4b5563;margin-bottom:12px;">' + items.length + ' ledger(s) have mapping risks that should be reviewed before saving:</p>';
         html += '<div style="max-height:300px;overflow-y:auto;">';
         html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
-        html += '<thead><tr style="border-bottom:2px solid #e5e7eb;background:#f9fafb;"><th style="text-align:left;padding:8px;">Ledger</th><th style="text-align:left;padding:8px;">Group</th><th style="text-align:left;padding:8px;">Schedule</th><th style="text-align:left;padding:8px;">Risk</th></tr></thead>';
+        html += '<thead><tr style="border-bottom:2px solid #e5e7eb;background:#f9fafb;"><th style="text-align:left;padding:8px;">Ledger</th><th style="text-align:left;padding:8px;">Schedule</th><th style="text-align:left;padding:8px;">Risk</th></tr></thead>';
         html += '<tbody>';
-        items.forEach(function(item) {
+        var showMax = Math.min(items.length, 20);
+        for (var idx = 0; idx < showMax; idx++) {
+            var item = items[idx];
             html += '<tr style="border-bottom:1px solid #f3f4f6;">';
             html += '<td style="padding:8px;font-weight:500;">' + escHtml(item.name) + '</td>';
-            html += '<td style="padding:8px;color:#6b7280;">' + escHtml(item.group) + '</td>';
             html += '<td style="padding:8px;color:#6b7280;">' + escHtml(item.code) + '</td>';
             html += '<td style="padding:8px;color:' + (isCritical ? '#dc2626' : '#e65100') + ';font-weight:500;">' + escHtml(item.reason) + '</td>';
             html += '</tr>';
-        });
+        }
+        if (items.length > 20) {
+            html += '<tr><td colspan="3" style="padding:8px;color:#6b7280;text-align:center;font-style:italic;">... and ' + (items.length - 20) + ' more</td></tr>';
+        }
         html += '</tbody></table></div></div>';
         html += '<div style="padding:16px 24px;border-top:1px solid #e5e7eb;display:flex;gap:10px;justify-content:flex-end;">';
         html += '<button class="btn btn-outline" onclick="document.getElementById(\'riskModal\').remove()" style="padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:0.85rem;">Review Now</button>';
-        html += '<button class="btn ' + btnClass + '" id="riskModalConfirm" style="padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-size:0.85rem;color:#fff;background:' + accentColor + ';">Save Anyway</button>';
+        html += '<button class="btn ' + (isCritical ? 'btn-danger' : 'btn-success') + '" id="riskModalConfirm" style="padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-size:0.85rem;color:#fff;background:' + (isCritical ? accentColor : '#16a34a') + ';">Save Anyway (' + items.length + ' risks)</button>';
         html += '</div></div>';
         modal.innerHTML = html;
         document.body.appendChild(modal);
@@ -1512,55 +1553,67 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         var dirty = Object.keys(dirtyRows);
         if (!dirty.length) { showToast('No changes to save', 'info'); return; }
         var mappings = {};
+        var remarksMap = {};
         dirty.forEach(function(name) {
             for (var i=0;i<allData.length;i++) {
                 if (allData[i].ledger_name===name && allData[i].final_mapping && allData[i].final_mapping!=='') {
                     mappings[name] = allData[i].final_mapping;
+                    if (allData[i].remarks) remarksMap[name] = allData[i].remarks;
                     break;
                 }
             }
         });
-        document.getElementById('statusText').textContent = 'Saving...';
+        if (Object.keys(mappings).length === 0) { showToast('No valid mappings to save', 'error'); return; }
+        document.getElementById('statusText').textContent = 'Saving ' + Object.keys(mappings).length + ' mappings...';
         document.getElementById('btnSave').disabled = true;
+        document.getElementById('btnSave').textContent = 'Saving...';
         fetch(ebalBaseUrl+'data_console/ajax_mapping_save.php', {
             method:'POST',
             headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},
-            body: JSON.stringify({mappings:mappings,overrides:{},remember:{}}),
+            body: JSON.stringify({mappings:mappings, overrides:{}, remember:{}, remarks:remarksMap}),
         })
         .then(function(r){return r.json();})
         .then(function(resp){
             document.getElementById('btnSave').disabled = false;
+            document.getElementById('btnSave').textContent = '\uD83D\uDCBE Save Changes';
             if (resp.redirect) {
                 showToast(resp.error || 'Session expired', 'error');
                 setTimeout(function(){ window.location.href = ebalBaseUrl + 'login.php'; }, 1500);
                 return;
             }
             if (resp.success) {
-                dirtyRows = {};
+                var savedCount = resp.saved || 0;
+                var conflictCount = resp.conflicts || 0;
+                var errorCount = (resp.errors || []).length;
+                /* Update all saved rows' current_mapping from final_mapping */
                 Object.keys(mappings).forEach(function(name){
                     for(var i=0;i<allData.length;i++){
                         if(allData[i].ledger_name===name){
                             allData[i].current_mapping=mappings[name];
                             allData[i].current_label=optionsMap[mappings[name]]||mappings[name];
-                            if(!allData[i].final_mapping||allData[i].final_mapping===''){allData[i].final_mapping=mappings[name];}
                             break;
                         }
                     }
                 });
+                /* Clear dirty rows only for successfully saved ones */
+                dirtyRows = {};
                 originalData = JSON.parse(JSON.stringify(allData));
                 updateStats(); refreshGrid(); refreshGroupPanel(); populateParentGroupDropdown();
-                var msg = resp.saved+' mappings saved.';
-                if(resp.pending>0) msg+=' '+resp.pending+' ledgers remaining.';
+                var msg = savedCount + ' mappings saved.';
+                if (conflictCount > 0) msg += ' ' + conflictCount + ' skipped (parent group conflict).';
+                if (errorCount > 0) msg += ' ' + errorCount + ' errors.';
+                if(resp.pending>0) msg+=' '+resp.pending+' remaining.';
                 if(resp.mapping_complete) msg+=' All ledgers mapped!';
-                document.getElementById('statusText').textContent='Saved '+resp.saved+' rows';
-                showToast(msg,'success');
+                document.getElementById('statusText').textContent='Saved '+savedCount+' rows';
+                showToast(msg, savedCount > 0 ? 'success' : (conflictCount > 0 ? 'info' : 'error'));
             } else {
                 document.getElementById('statusText').textContent='Save failed';
                 showToast(resp.error||'Save failed','error');
             }
         })
-        .catch(function(){
+        .catch(function(e){
             document.getElementById('btnSave').disabled=false;
+            document.getElementById('btnSave').textContent = '\uD83D\uDCBE Save Changes';
             document.getElementById('statusText').textContent='Network error';
             showToast('Network error. Please try again.','error');
         });
@@ -1664,10 +1717,17 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     }
 
     /* ---- Init ---- */
+    var clientStart = performance.now();
     populateParentGroupDropdown();
+    var clientFilters = performance.now();
     initTable();
+    var clientGrid = performance.now();
     updateStats();
     refreshGroupPanel();
+    var clientTotal = performance.now();
+    if (window.location.search.indexOf('debug=1') !== -1) {
+        console.log('ReconHub client timing: filters=' + Math.round(clientFilters - clientStart) + 'ms, grid=' + Math.round(clientGrid - clientFilters) + 'ms, group_panel=' + Math.round(clientTotal - clientGrid) + 'ms, total=' + Math.round(clientTotal - clientStart) + 'ms');
+    }
 
 })();
 </script>
