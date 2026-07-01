@@ -49,6 +49,11 @@ if ($company_id <= 0 || $fy_id <= 0) {
     exit;
 }
 
+/* Mode detection: group (default) or ledger */
+$mode = isset($_GET['mode']) && $_GET['mode'] === 'ledger' ? 'ledger' : 'group';
+$isGroupMode = ($mode === 'group');
+$isLedgerMode = ($mode === 'ledger');
+
 ensureMappingAiSchema($pdo);
 ensureLedgerMappingOverrideColumn($pdo);
 
@@ -522,7 +527,7 @@ error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}
 
 $pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
-$page_title = "ReconHub";
+$page_title = $isLedgerMode ? "Ledger-wise Mapping" : "ReconHub";
 $showSidebar = true;
 require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
@@ -739,13 +744,21 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
 <!-- Compact Context Strip -->
 <div class="recon-context-strip">
+    <?php if ($isLedgerMode): ?>
+    <a href="<?= BASE_URL ?>data_console/mapping_workbench.php" class="btn btn-outline" style="padding:4px 12px;font-size:0.78rem;text-decoration:none;">&#8592; Back to ReconHub</a>
+    <span class="rcs-sep">|</span>
+    <?php endif; ?>
     <span class="rcs-label">Entity:</span> <span class="rcs-value"><?= htmlspecialchars($_SESSION['company_name'] ?? 'Not Selected') ?></span>
     <span class="rcs-sep">|</span>
     <span class="rcs-label">FY:</span> <span class="rcs-value"><?= htmlspecialchars($_SESSION['fy_name'] ?? 'Not Selected') ?></span>
     <span class="rcs-sep">|</span>
-    <span class="rcs-value" style="color:var(--info);"><?= $defaultViewTbImpact ? 'TB Impact View' : 'All Master View' ?></span>
+    <span class="rcs-value" style="color:var(--info);"><?= $isLedgerMode ? 'Ledger-wise Mapping' : ($defaultViewTbImpact ? 'TB Impact View' : 'All Master View') ?></span>
     <span class="rcs-sep">|</span>
     <span class="rcs-value"><?= number_format($stats['total']) ?> ledgers</span>
+    <?php if ($isGroupMode): ?>
+    <span class="rcs-sep">|</span>
+    <a href="<?= BASE_URL ?>data_console/mapping_workbench.php?mode=ledger" class="btn btn-primary" style="padding:4px 12px;font-size:0.78rem;text-decoration:none;">Ledger-wise Mapping &#8594;</a>
+    <?php endif; ?>
 </div>
 
 <?php if (!empty($_SESSION['success'])): ?>
@@ -824,14 +837,17 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     <div id="groupMappingBody" style="overflow-x:auto;"></div>
 </div>
 
-<!-- Grid with horizontal scroll -->
+<!-- Grid with horizontal scroll (ledger mode only) -->
+<?php if ($isLedgerMode): ?>
 <div class="recon-grid-wrap">
     <div class="hot-container">
         <div id="hot"></div>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- Action Bar -->
+<?php if ($isLedgerMode): ?>
 <div class="wb-actions">
     <button class="btn btn-success" id="btnAcceptHigh" title="Accept all suggestions with confidence >= 90%">Accept High Confidence</button>
     <button class="btn" id="btnAcceptGroup" title="Accept parent group rule suggestions for visible rows" style="background:#7c3aed;color:#fff;border-color:#7c3aed;">Accept Group Suggestions</button>
@@ -852,6 +868,15 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     <button class="btn btn-outline" id="btnImport" title="Import mapping from Excel">&#128228; Import</button>
     <span class="status-text" id="statusText">Ready</span>
 </div>
+<?php else: ?>
+<div class="wb-actions">
+    <button class="btn btn-success" id="btnGroupSave" title="Save group mappings">&#128190; Save Changes</button>
+    <button class="btn btn-outline" id="btnGroupReset" title="Reset group changes">&#8617; Reset</button>
+    <div class="sep"></div>
+    <a href="<?= BASE_URL ?>data_console/mapping_workbench.php?mode=ledger" class="btn" style="background:#7c3aed;color:#fff;border-color:#7c3aed;text-decoration:none;">Ledger-wise Mapping &#8594;</a>
+    <span class="status-text" id="statusText">Ready</span>
+</div>
+<?php endif; ?>
 
 <!-- Hidden form for import -->
 <form id="importForm" class="hidden-input" enctype="multipart/form-data">
@@ -915,6 +940,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 })();
 </script>
 
+<?php if ($isLedgerMode): ?>
 <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6/dist/js/tabulator.min.js"></script>
 <script>
 (function() {
@@ -1785,6 +1811,131 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
 })();
 </script>
+<?php endif; /* $isLedgerMode */ ?>
+<?php if ($isGroupMode): ?>
+<!-- Group-wise Save Script -->
+<script>
+(function() {
+    'use strict';
+    var ebalBaseUrl = <?= json_encode(BASE_URL) ?>;
+    var csrfToken = <?= json_encode(csrfToken()) ?>;
+    var mappingOptions = <?= json_encode($mappingOptionsJson) ?>;
+    var optionsMap = {};
+    mappingOptions.forEach(function(o) { optionsMap[o.id] = o.label; });
+    var groupDirty = {};
+
+    function showToast(msg, type) {
+        var t = document.createElement('div');
+        t.className = 'toast ' + (type || 'info');
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(function() { t.remove(); }, 3500);
+    }
+
+    function escHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    /* Mark group dirty on apply */
+    window.markGroupDirty = function(pg, scheduleCode) {
+        groupDirty[pg] = scheduleCode;
+        var unsaved = Object.keys(groupDirty).length;
+        var el = document.getElementById('statUnsaved');
+        if (el) el.textContent = unsaved;
+    };
+
+    /* Group save */
+    var btnSave = document.getElementById('btnGroupSave');
+    if (btnSave) {
+        btnSave.addEventListener('click', function() {
+            var dirty = Object.keys(groupDirty);
+            if (!dirty.length) { showToast('No changes to save', 'info'); return; }
+            var mappings = {};
+            /* For each dirty group, find unmapped ledgers and build mappings */
+            var gridData = <?= json_encode($gridData) ?>;
+            dirty.forEach(function(pg) {
+                var code = groupDirty[pg];
+                for (var i = 0; i < gridData.length; i++) {
+                    var r = gridData[i];
+                    if (r.parent_group === pg && (!r.current_mapping || r.current_mapping === '')) {
+                        mappings[r.ledger_name] = code;
+                    }
+                }
+            });
+            if (!Object.keys(mappings).length) { showToast('No unmapped ledgers to save', 'info'); return; }
+            document.getElementById('statusText').textContent = 'Saving ' + Object.keys(mappings).length + ' mappings...';
+            btnSave.disabled = true;
+            fetch(ebalBaseUrl + 'data_console/ajax_mapping_save.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+                body: JSON.stringify({mappings: mappings, overrides: {}, remember: {}, remarks: {}}),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(resp) {
+                btnSave.disabled = false;
+                if (resp.redirect) {
+                    showToast(resp.error || 'Session expired', 'error');
+                    setTimeout(function() { window.location.href = ebalBaseUrl + 'login.php'; }, 1500);
+                    return;
+                }
+                if (resp.success) {
+                    groupDirty = {};
+                    var el = document.getElementById('statUnsaved');
+                    if (el) el.textContent = '0';
+                    var msg = (resp.saved || 0) + ' mappings saved.';
+                    if (resp.pending > 0) msg += ' ' + resp.pending + ' remaining.';
+                    document.getElementById('statusText').textContent = 'Saved ' + (resp.saved || 0) + ' rows';
+                    showToast(msg, 'success');
+                    setTimeout(function() { window.location.reload(); }, 1500);
+                } else {
+                    document.getElementById('statusText').textContent = 'Save failed';
+                    showToast(resp.error || 'Save failed', 'error');
+                }
+            })
+            .catch(function() {
+                btnSave.disabled = false;
+                document.getElementById('statusText').textContent = 'Network error';
+                showToast('Network error. Please try again.', 'error');
+            });
+        });
+    }
+
+    /* Group reset */
+    var btnReset = document.getElementById('btnGroupReset');
+    if (btnReset) {
+        btnReset.addEventListener('click', function() {
+            groupDirty = {};
+            var el = document.getElementById('statUnsaved');
+            if (el) el.textContent = '0';
+            showToast('All changes reset', 'info');
+        });
+    }
+
+    /* Group panel apply button handler */
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.gm-apply-btn');
+        if (!btn) return;
+        var pg = btn.getAttribute('data-pg');
+        var select = document.querySelector('.gm-select[data-pg="' + pg + '"]');
+        if (!select || !select.value) { showToast('Select a Schedule III head first', 'error'); return; }
+        var scheduleCode = select.value;
+        /* Find unmapped count for this group */
+        var gridData = <?= json_encode($gridData) ?>;
+        var count = 0;
+        for (var i = 0; i < gridData.length; i++) {
+            if (gridData[i].parent_group === pg && (!gridData[i].current_mapping || gridData[i].current_mapping === '')) {
+                count++;
+            }
+        }
+        if (count === 0) { showToast('No unmapped ledgers under "' + pg + '"', 'info'); return; }
+        markGroupDirty(pg, scheduleCode);
+        showToast(count + ' unmapped ledgers under "' + pg + '" marked for mapping to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
+    });
+
+})();
+</script>
+<?php endif; /* $isGroupMode */ ?>
 
 <?php
 unset($_SESSION['success'], $_SESSION['error']);
