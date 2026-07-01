@@ -669,7 +669,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 .hot-container {
     border: 1px solid var(--border);
     border-radius: 10px;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: var(--shadow-sm);
     min-height: 400px;
     position: relative;
