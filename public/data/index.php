@@ -106,8 +106,8 @@ $v2SubSections = [
     [
         'key'   => 'mapping',
         'icon'  => '🗂️',
-        'label' => 'Ledger Mapping',
-        'desc'  => 'Map ledgers to Schedule III codes with AI assistance',
+        'label' => 'ReconHub',
+        'desc'  => 'Map ledgers to Schedule III codes, tag groups, review risks',
         'href'  => BASE_URL . 'data_console/mapping_workbench.php',
         'status' => !empty($v2Ws['mapping_completed']) ? 'complete' : ($v2Mapped > 0 ? 'partial' : 'pending'),
         'detail' => !empty($v2Ws['mapping_completed'])

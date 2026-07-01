@@ -5,7 +5,7 @@
  * This page redirects to the Bulk Mapping Workbench.
  * The old mapping console has been superseded by mapping_workbench.php.
  */
-$page_title = 'Mapping Console';
+$page_title = 'ReconHub';
 
 require_once __DIR__ . '/../../app/context_check.php';
 require_once __DIR__ . '/../../config/database.php';
@@ -35,20 +35,20 @@ if (!empty($params)) {
 
 <?= uiBreadcrumb([
     ['label' => 'Data', 'href' => BASE_URL . 'data_console/tally_console.php'],
-    ['label' => 'Mapping Console'],
+    ['label' => 'ReconHub'],
 ]) ?>
 
-<?= uiPageHero('Mapping Console', 'Ledger mapping has moved to the Bulk Mapping Workbench.') ?>
+<?= uiPageHero('ReconHub', 'Ledger mapping has moved to the ReconHub workspace.') ?>
 
 <?= uiWorkspaceStart() ?>
 
 <div style="max-width:640px;margin:0 auto;text-align:center;padding:40px 20px;">
     <div style="font-size:3rem;margin-bottom:16px;">🗂️</div>
-    <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:8px;color:var(--text);">Mapping has moved to Bulk Mapping Workbench</h2>
+    <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:8px;color:var(--text);">Mapping has moved to ReconHub</h2>
     <p style="font-size:0.9rem;color:var(--muted);margin-bottom:24px;line-height:1.6;">
-        The legacy mapping console has been replaced by the new <strong>Bulk Mapping Workbench</strong>
+        The legacy mapping console has been replaced by <strong>ReconHub</strong>
         which provides an Excel-like interface with DR/CR columns, Schedule III Group Mapping,
-        AI suggestions, and bulk save capabilities.
+        AI suggestions, risk review, and bulk save capabilities.
     </p>
 
     <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:24px;">
@@ -58,7 +58,7 @@ if (!empty($params)) {
     </div>
 
     <a href="<?= htmlspecialchars($workbenchUrl) ?>" class="v2-btn v2-btn--primary" style="display:inline-flex;align-items:center;gap:8px;padding:14px 32px;font-size:1rem;">
-        Open Bulk Mapping Workbench →
+        Open ReconHub →
     </a>
 
     <div style="margin-top:24px;font-size:0.8rem;color:var(--muted);">
