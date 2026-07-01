@@ -1813,16 +1813,22 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 </script>
 <?php endif; /* $isLedgerMode */ ?>
 <?php if ($isGroupMode): ?>
-<!-- Group-wise Save Script -->
+<!-- Group-wise Save + Render Script -->
 <script>
 (function() {
     'use strict';
     var ebalBaseUrl = <?= json_encode(BASE_URL) ?>;
     var csrfToken = <?= json_encode(csrfToken()) ?>;
     var mappingOptions = <?= json_encode($mappingOptionsJson) ?>;
+    var groupMappingData = <?= json_encode($groupMappingData) ?>;
+    var gridData = <?= json_encode($gridData) ?>;
     var optionsMap = {};
-    mappingOptions.forEach(function(o) { optionsMap[o.id] = o.label; });
+    var optionList = [];
+    mappingOptions.forEach(function(o) { optionsMap[o.id] = o.label; optionList.push(o); });
     var groupDirty = {};
+    var currentFilter = 'all';
+    var currentParentGroup = '';
+    var searchMode = 'all';
 
     function showToast(msg, type) {
         var t = document.createElement('div');
@@ -1837,7 +1843,182 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    /* Mark group dirty on apply */
+    function fmtMoney(v) {
+        if (v === null || v === undefined || v === '') return '';
+        return parseFloat(v).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    /* ---- Filter logic (group-aware) ---- */
+    function filterGroup(pg, d) {
+        if (currentFilter === 'all' && !currentParentGroup) return true;
+        if (currentParentGroup && pg !== currentParentGroup) return false;
+        if (currentFilter === 'all') return true;
+        switch (currentFilter) {
+            case 'unmapped': return d._unmapped > 0;
+            case 'mapped': return d._mapped > 0;
+            case 'suggested': return d.confidence >= 70 && d._unmapped > 0;
+            case 'high_conf': return d.confidence >= 90 && d._unmapped > 0;
+            case 'low_conf': return d.confidence > 0 && d.confidence < 70 && d._unmapped > 0;
+            case 'review': return d.confidence < 70 && d._unmapped > 0;
+            case 'risky': return d.risk_count > 0;
+            case 'critical': return d.risk_count > 0;
+            default: return true;
+        }
+    }
+
+    function searchGroup(pg) {
+        var search = (document.getElementById('hotSearch').value || '').toLowerCase().trim();
+        if (!search) return true;
+        return pg.toLowerCase().indexOf(search) !== -1;
+    }
+
+    /* ---- Populate parent group dropdown ---- */
+    function populateParentGroupDropdown() {
+        var sel = document.getElementById('pgFilter');
+        if (!sel) return;
+        var current = sel.value;
+        sel.innerHTML = '<option value="">All Parent Groups (' + groupMappingData.length + ')</option>';
+        var sorted = groupMappingData.slice().sort(function(a, b) { return b.ledger_count - a.ledger_count; });
+        sorted.forEach(function(g) {
+            var opt = document.createElement('option');
+            opt.value = g.parent_group;
+            opt.textContent = g.parent_group + ' (' + g.ledger_count + ')';
+            sel.appendChild(opt);
+        });
+        if (current) sel.value = current;
+    }
+
+    /* ---- Dynamic group panel builder ---- */
+    function refreshGroupPanel() {
+        /* Compute unmapped counts from grid data */
+        var unmappedCounts = {};
+        gridData.forEach(function(r) {
+            var pg = r.parent_group || '';
+            if (!pg) return;
+            if (!r.current_mapping || r.current_mapping === '') {
+                unmappedCounts[pg] = (unmappedCounts[pg] || 0) + 1;
+            }
+        });
+
+        var filtered = [];
+        groupMappingData.forEach(function(g) {
+            g._unmapped = unmappedCounts[g.parent_group] || 0;
+            g._mapped = g.ledger_count - g._unmapped;
+            if (filterGroup(g.parent_group, g) && searchGroup(g.parent_group)) {
+                filtered.push(g);
+            }
+        });
+        var body = document.getElementById('groupMappingBody');
+        var info = document.getElementById('groupPanelInfo');
+        if (!body || !info) return;
+        if (filtered.length === 0) {
+            body.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:0.82rem;">No parent groups in current filter.</div>';
+            info.textContent = '0 groups';
+            return;
+        }
+        var html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;"><thead><tr style="border-bottom:2px solid var(--border);">';
+        html += '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Parent Group</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Total</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Unmapped</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Closing Dr</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Closing Cr</th>';
+        html += '<th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--muted);">Net Balance</th>';
+        html += '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Suggested</th>';
+        html += '<th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Conf</th>';
+        html += '<th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--muted);">Risk</th>';
+        html += '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--muted);">Schedule III</th>';
+        html += '<th style="text-align:center;padding:6px 8px;"></th>';
+        html += '</tr></thead><tbody>';
+        var showMax = Math.min(filtered.length, 30);
+        for (var i = 0; i < showMax; i++) {
+            var g = filtered[i];
+            var netBal = g.closing_dr - g.closing_cr;
+            var netColor = netBal < 0 ? 'color:var(--danger)' : '';
+            var dominantLabel = g.dominant_mapping ? (optionsMap[g.dominant_mapping] || g.dominant_mapping) : '';
+            var suggestedLabel = g.suggested_code ? (optionsMap[g.suggested_code] || g.suggested_code) : '';
+            var confClass = g.confidence >= 90 ? 'color:var(--success)' : (g.confidence >= 70 ? 'color:var(--warning)' : 'color:var(--danger)');
+            html += '<tr style="border-bottom:1px solid var(--border);" data-pg="' + escHtml(g.parent_group) + '">';
+            html += '<td style="padding:6px 8px;font-weight:500;white-space:nowrap;">' + escHtml(g.parent_group) + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;">' + g.ledger_count + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:' + (g._unmapped > 0 ? 'var(--danger)' : 'var(--success)') + ';">' + g._unmapped + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;">' + fmtMoney(g.closing_dr) + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;">' + fmtMoney(g.closing_cr) + '</td>';
+            html += '<td style="padding:6px 8px;text-align:right;font-weight:600;' + netColor + '">' + fmtMoney(netBal) + '</td>';
+            html += '<td style="padding:6px 8px;">' + (dominantLabel || '<span style="color:var(--muted);">\u2014</span>') + '</td>';
+            html += '<td style="padding:6px 8px;text-align:center;font-weight:600;' + confClass + '">' + g.confidence + '%</td>';
+            html += '<td style="padding:6px 8px;text-align:center;">' + (g.risk_count > 0 ? '<span style="color:var(--danger);font-weight:600;">' + g.risk_count + '</span>' : '<span style="color:var(--success);">0</span>') + '</td>';
+            html += '<td style="padding:6px 8px;"><select class="gm-select" data-pg="' + escHtml(g.parent_group) + '" style="padding:4px 8px;border:1px solid var(--border-strong);border-radius:4px;font-size:0.78rem;min-width:140px;"><option value="">Select...</option>';
+            optionList.forEach(function(o) {
+                var sel = (o.id === g.suggested_code) ? ' selected' : '';
+                html += '<option value="' + escHtml(o.id) + '"' + sel + '>' + escHtml(o.label) + '</option>';
+            });
+            html += '</select></td>';
+            html += '<td style="padding:6px 8px;"><button class="btn btn-sm gm-apply-btn" data-pg="' + escHtml(g.parent_group) + '" style="padding:4px 10px;font-size:0.72rem;">Apply</button></td>';
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        if (filtered.length > 30) {
+            html += '<div style="margin-top:8px;font-size:0.75rem;color:var(--muted);">Showing 30 of ' + filtered.length + ' groups.</div>';
+        }
+        body.innerHTML = html;
+        info.textContent = filtered.length + ' groups from ' + gridData.length + ' ledgers';
+    }
+
+    /* ---- Filter chip click ---- */
+    var filterChips = document.getElementById('filterChips');
+    if (filterChips) {
+        filterChips.addEventListener('click', function(e) {
+            var chip = e.target.closest('.filter-chip');
+            if (!chip) return;
+            var filter = chip.getAttribute('data-filter');
+            document.querySelectorAll('#filterChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
+            chip.classList.add('active');
+            currentFilter = filter;
+            currentParentGroup = '';
+            refreshGroupPanel();
+        });
+    }
+
+    /* ---- Parent group dropdown filter ---- */
+    var pgFilter = document.getElementById('pgFilter');
+    if (pgFilter) {
+        pgFilter.addEventListener('change', function() {
+            currentParentGroup = this.value;
+            refreshGroupPanel();
+        });
+    }
+
+    /* ---- Search ---- */
+    var searchTimer;
+    var hotSearch = document.getElementById('hotSearch');
+    if (hotSearch) {
+        hotSearch.addEventListener('input', function() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(refreshGroupPanel, 250);
+        });
+    }
+
+    /* ---- KPI tile click ---- */
+    var wbSummary = document.getElementById('wbSummary');
+    if (wbSummary) {
+        wbSummary.addEventListener('click', function(e) {
+            var card = e.target.closest('.wb-card[data-filter]');
+            if (!card) return;
+            var filter = card.getAttribute('data-filter');
+            if (filter === 'unsaved' || filter === 'tb_impact') return;
+            document.querySelectorAll('#wbSummary .wb-card').forEach(function(c) { c.classList.remove('active-tile'); });
+            card.classList.add('active-tile');
+            currentFilter = filter;
+            currentParentGroup = '';
+            document.querySelectorAll('#filterChips .filter-chip').forEach(function(c) { c.classList.remove('active'); });
+            var target = document.querySelector('#filterChips .filter-chip[data-filter="' + filter + '"]');
+            if (target) target.classList.add('active');
+            else document.querySelector('#filterChips .filter-chip[data-filter="all"]').classList.add('active');
+            refreshGroupPanel();
+        });
+    }
+
+    /* ---- Mark group dirty on apply ---- */
     window.markGroupDirty = function(pg, scheduleCode) {
         groupDirty[pg] = scheduleCode;
         var unsaved = Object.keys(groupDirty).length;
@@ -1845,15 +2026,32 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         if (el) el.textContent = unsaved;
     };
 
-    /* Group save */
+    /* ---- Group panel apply button handler ---- */
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.gm-apply-btn');
+        if (!btn) return;
+        var pg = btn.getAttribute('data-pg');
+        var select = document.querySelector('.gm-select[data-pg="' + pg + '"]');
+        if (!select || !select.value) { showToast('Select a Schedule III head first', 'error'); return; }
+        var scheduleCode = select.value;
+        var count = 0;
+        for (var i = 0; i < gridData.length; i++) {
+            if (gridData[i].parent_group === pg && (!gridData[i].current_mapping || gridData[i].current_mapping === '')) {
+                count++;
+            }
+        }
+        if (count === 0) { showToast('No unmapped ledgers under "' + pg + '"', 'info'); return; }
+        markGroupDirty(pg, scheduleCode);
+        showToast(count + ' unmapped ledgers under "' + pg + '" marked for mapping to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
+    });
+
+    /* ---- Group save ---- */
     var btnSave = document.getElementById('btnGroupSave');
     if (btnSave) {
         btnSave.addEventListener('click', function() {
             var dirty = Object.keys(groupDirty);
             if (!dirty.length) { showToast('No changes to save', 'info'); return; }
             var mappings = {};
-            /* For each dirty group, find unmapped ledgers and build mappings */
-            var gridData = <?= json_encode($gridData) ?>;
             dirty.forEach(function(pg) {
                 var code = groupDirty[pg];
                 for (var i = 0; i < gridData.length; i++) {
@@ -1901,7 +2099,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         });
     }
 
-    /* Group reset */
+    /* ---- Group reset ---- */
     var btnReset = document.getElementById('btnGroupReset');
     if (btnReset) {
         btnReset.addEventListener('click', function() {
@@ -1912,26 +2110,9 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         });
     }
 
-    /* Group panel apply button handler */
-    document.addEventListener('click', function(e) {
-        var btn = e.target.closest('.gm-apply-btn');
-        if (!btn) return;
-        var pg = btn.getAttribute('data-pg');
-        var select = document.querySelector('.gm-select[data-pg="' + pg + '"]');
-        if (!select || !select.value) { showToast('Select a Schedule III head first', 'error'); return; }
-        var scheduleCode = select.value;
-        /* Find unmapped count for this group */
-        var gridData = <?= json_encode($gridData) ?>;
-        var count = 0;
-        for (var i = 0; i < gridData.length; i++) {
-            if (gridData[i].parent_group === pg && (!gridData[i].current_mapping || gridData[i].current_mapping === '')) {
-                count++;
-            }
-        }
-        if (count === 0) { showToast('No unmapped ledgers under "' + pg + '"', 'info'); return; }
-        markGroupDirty(pg, scheduleCode);
-        showToast(count + ' unmapped ledgers under "' + pg + '" marked for mapping to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
-    });
+    /* ---- Init ---- */
+    populateParentGroupDropdown();
+    refreshGroupPanel();
 
 })();
 </script>
