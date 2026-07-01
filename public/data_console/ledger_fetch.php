@@ -1,9 +1,39 @@
 <?php
+/**
+ * e-BAL V2 — Ledger Fetch
+ *
+ * Fetches ledger master data from Tally via Smart Bridge.
+ * Displays results and updates workflow status.
+ */
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+set_exception_handler(function (\Throwable $e) {
+    http_response_code(500);
+    error_log('Ledger Fetch FATAL: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    echo '<!DOCTYPE html><html><head><title>Error</title></head><body>';
+    echo '<h1>Ledger Fetch Error</h1>';
+    echo '<p>The ledger fetch encountered an error. Please try again or contact support.</p>';
+    echo '<p><small>' . htmlspecialchars($e->getMessage()) . '</small></p>';
+    echo '<p><a href="' . (defined('BASE_URL') ? BASE_URL : '/') . '">Return to Dashboard</a></p>';
+    echo '</body></html>';
+    exit;
+});
+
+set_error_handler(function (int $errno, string $errstr, string $errfile, int $errline) {
+    if (error_reporting() & $errno) {
+        error_log("Ledger Fetch ERROR [$errno]: $errstr in $errfile:$errline");
+    }
+    return false;
+});
+
+require_once '../../app/context_check.php';
 require_once '../../config/database.php';
 require_once '../../config/app.php';
 require_once '../../xml_engine/tally_connector.php';
-require_once '../../app/context_check.php';
 
+/* ---- Early validation BEFORE header output ---- */
 requireFullContext();
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -86,10 +116,17 @@ $xml = <<<XML
 </ENVELOPE>
 XML;
 
-$response = fetchFromTally($xml);
+$response = null;
+try {
+    $response = fetchFromTally($xml);
+} catch (\Throwable $e) {
+    error_log('Ledger Fetch: fetchFromTally failed: ' . $e->getMessage());
+    renderLedgerFetchPage('Ledger Fetch Result', 'Failed to connect to Tally. Please check that Smart Bridge is running and Tally is accessible.', false, $e->getMessage());
+    exit;
+}
 
 if (!$response) {
-    renderLedgerFetchPage('Ledger Fetch Result', 'No response was received from Tally.');
+    renderLedgerFetchPage('Ledger Fetch Result', 'No response was received from Tally. Please check that Smart Bridge is running and Tally is accessible.');
     exit;
 }
 
@@ -181,8 +218,11 @@ try {
     ")->execute([$company_id, $fy_id]);
 
     $pdo->commit();
-} catch (Exception $e) {
-    $pdo->rollBack();
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log('Ledger Fetch: DB save failed: ' . $e->getMessage());
     renderLedgerFetchPage('Ledger Fetch Result', 'Database error while saving ledgers.', false, $e->getMessage());
     exit;
 }
