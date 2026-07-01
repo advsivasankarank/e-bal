@@ -13,6 +13,10 @@ require_once __DIR__ . '/../app/helpers/entity_access_helper.php';
 
 $userId  = (int) ($_SESSION['user_id'] ?? 0);
 $entityId = (int) ($_GET['entity_id'] ?? 0);
+/* Fallback: read entity_id from POST if GET is empty (form submit edge case) */
+if ($entityId <= 0) {
+    $entityId = (int) ($_POST['entity_id'] ?? 0);
+}
 
 /* ---- Validate entity access ---- */
 validateEntityAccessOrRedirect($pdo, $entityId, 'view');
@@ -64,6 +68,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['fy_action'] ?? '') === 'cr
                 $_SESSION['fy_id'] = $newFyId;
                 $_SESSION['fy_name'] = $fyLabel;
 
+                /* Ensure session is written before redirect */
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    session_write_close();
+                }
+
                 header("Location: " . BASE_URL . "fy_workspace.php?entity_id=" . $entityId . "&fy_id=" . $newFyId);
                 exit;
             } catch (\Throwable $e) {
@@ -92,8 +101,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['fy_action'] ?? '') === 'se
             $_SESSION['fy_id'] = $selFy['id'];
             $_SESSION['fy_name'] = $selFy['fy_label'];
 
+            /* Ensure session is written before redirect */
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+
             header("Location: " . BASE_URL . "fy_workspace.php?entity_id=" . $entityId . "&fy_id=" . $selFy['id']);
             exit;
+        } else {
+            error_log("FY Manager: FY ID {$selFyId} not found for entity {$entityId}");
         }
     }
     $_SESSION['error'] = 'Invalid Financial Year selected.';
@@ -149,6 +165,7 @@ $identifier = $entity['cin'] ?? $entity['llp_code'] ?? $entity['pan'] ?? '';
                     <?= csrfInput() ?>
                     <input type="hidden" name="fy_action" value="select">
                     <input type="hidden" name="fy_id" value="<?= (int) $fy['id'] ?>">
+                    <input type="hidden" name="entity_id" value="<?= (int) $entityId ?>">
                     <button type="submit" style="flex:1;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--panel-strong);border:1px solid var(--border);border-radius:8px;cursor:pointer;text-align:left;transition:border-color .15s;font-size:.88rem;"
                             onmouseover="this.style.borderColor='var(--brand)'" onmouseout="this.style.borderColor='var(--border)'">
                         <div>

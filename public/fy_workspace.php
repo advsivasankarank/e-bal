@@ -50,6 +50,11 @@ $_SESSION['company_name'] = $entity['name'];
 $_SESSION['fy_id'] = $fyId;
 $_SESSION['fy_name'] = $fy['fy_label'];
 
+/* Ensure session is written for subsequent requests */
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 /* ---- Load workflow status ---- */
 $wfStmt = $pdo->prepare("SELECT * FROM workflow_status WHERE company_id = ? AND fy_id = ?");
 $wfStmt->execute([$entityId, $fyId]);
