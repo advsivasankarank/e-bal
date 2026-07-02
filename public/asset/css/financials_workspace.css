@@ -153,7 +153,7 @@
     box-sizing: border-box;
 }
 .fs-canvas .report-page:last-child { margin-bottom: 0; }
-.fs-canvas .report-page[data-tab]:not([data-tab="active"]) { display: none; }
+/* report-page visibility is managed by JavaScript (switchTab + setViewMode) */
 
 /* --- Input Panel (Manual Adjustments) --- */
 .fs-input-panel {

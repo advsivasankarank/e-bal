@@ -96,6 +96,11 @@
                 p.style.display = 'none';
                 return;
             }
+            /* In spreadsheet or print mode, hide all report pages (handled by setViewMode) */
+            if (viewMode !== 'statement') {
+                p.style.display = 'none';
+                return;
+            }
             if (wpMode === 'working') {
                 if (p.classList.contains('fs-wp-page')) {
                     p.style.display = '';
@@ -132,7 +137,16 @@
         var spreadsheetView = document.getElementById('fsSpreadsheetView');
         var printView = document.getElementById('fsPrintPreview');
 
-        if (statementView) statementView.style.display = mode === 'statement' ? '' : 'none';
+        if (statementView) {
+            statementView.style.display = mode === 'statement' ? '' : 'none';
+        } else {
+            /* No fsStatementView wrapper — toggle report pages directly */
+            pages.forEach(function (p) {
+                if (!p.classList.contains('fs-wp-page')) {
+                    p.style.display = mode === 'statement' ? '' : 'none';
+                }
+            });
+        }
         if (spreadsheetView) spreadsheetView.style.display = mode === 'spreadsheet' ? '' : 'none';
         if (printView) printView.style.display = mode === 'print' ? '' : 'none';
 
