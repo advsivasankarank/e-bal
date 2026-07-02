@@ -488,6 +488,8 @@ function getCompanyReportingMeta(PDO $pdo, int $companyId): array
             category,
             company_type,
             noncorp_subcategory,
+            cin,
+            registered_address,
             statutory_auditor_name,
             statutory_auditor_firm,
             statutory_auditor_frn,

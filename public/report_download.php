@@ -78,7 +78,7 @@ if ($format === 'pdf') {
     if (class_exists('Dompdf\\Dompdf')) {
         $options = new Options();
         $options->set('isRemoteEnabled', false);
-        $options->set('defaultFont', 'DejaVu Sans');
+        $options->set('defaultFont', 'Garamond');
 
         $dompdf = new Dompdf($options);
         $dompdf->loadHtml($htmlDocument, 'UTF-8');

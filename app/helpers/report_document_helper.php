@@ -9,7 +9,7 @@ function reportDocumentStyles(): string
     size: A4 portrait;
 }
 body {
-    font-family: 'DejaVu Sans', sans-serif;
+    font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
     counter-reset: section;
 }
 .report-shell { background: transparent; border: 0; padding: 0; }
