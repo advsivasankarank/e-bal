@@ -868,6 +868,31 @@ require_once __DIR__ . '/layouts/header_v2.php';
                         <div class="rc-bucket-val" style="color:var(--rc-warning)"><?= (int) (($bridgeBlock['status_counts']['unmapped'] ?? 0) + ($bridgeBlock['status_counts']['excluded'] ?? 0)) ?></div>
                         <div class="rc-bucket-lbl">Unmapped / Excluded</div>
                     </div>
+                    <?php
+                    /* Manual Overrides Included — count ledgers with mapping_source = 'manual_override' */
+                    $manualOverrideItems = [];
+                    $manualOverrideCount = 0;
+                    $manualOverrideAmount = 0.0;
+                    if ($bridgeBlock !== null) {
+                        foreach (($bridgeBlock['items'] ?? []) as $brItem) {
+                            $brStatus = (string) ($brItem['status'] ?? '');
+                            if (str_starts_with($brStatus, 'included_')) {
+                                $brLedger = (string) ($brItem['ledger_name'] ?? '');
+                                if ($brLedger !== '' && isMappingManuallyOverridden($pdo, $companyId, $brLedger)) {
+                                    $manualOverrideCount++;
+                                    $manualOverrideAmount += (float) ($brItem['signed_amount'] ?? 0);
+                                    $manualOverrideItems[] = $brItem;
+                                }
+                            }
+                        }
+                    }
+                    ?>
+                    <?php if ($manualOverrideCount > 0): ?>
+                    <div class="rc-bridge-bucket" style="border:1px solid #c4b5fd;background:#f5f3ff;">
+                        <div class="rc-bucket-val" style="color:#7c3aed"><?= $manualOverrideCount ?></div>
+                        <div class="rc-bucket-lbl">Manual Overrides</div>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -884,6 +909,42 @@ require_once __DIR__ . '/layouts/header_v2.php';
                     </table>
                 </div>
             </div>
+
+            <?php if ($manualOverrideCount > 0): ?>
+            <!-- Manual Overrides Included -->
+            <div class="rc-card" style="border:1px solid #c4b5fd;">
+                <div class="rc-card-header">
+                    <h3 style="color:#7c3aed;">Manual Overrides Included</h3>
+                    <span class="rc-badge" style="background:#ede9fe;color:#7c3aed;"><?= $manualOverrideCount ?> items</span>
+                </div>
+                <div style="font-size:0.82rem;color:var(--rc-muted);margin-bottom:10px;">
+                    These items were included by professional manual override. Review retained. Eliminate on consolidation where applicable.
+                </div>
+                <div class="rc-table-wrap">
+                    <table class="rc-table">
+                        <tr><th>Ledger</th><th>Tally Group</th><th>Schedule</th><th class="num">Amount</th><th>Override Reason</th></tr>
+                        <?php foreach ($manualOverrideItems as $moItem):
+                            $moAmt = (float) ($moItem['signed_amount'] ?? 0);
+                            $moLedger = (string) ($moItem['ledger_name'] ?? '');
+                            $moReason = '';
+                            if ($moLedger !== '') {
+                                $moStmt = $pdo->prepare("SELECT mapping_reason FROM ledger_mapping WHERE company_id = ? AND ledger_name = ? AND mapping_source = 'manual_override' LIMIT 1");
+                                $moStmt->execute([$companyId, $moLedger]);
+                                $moReason = (string) $moStmt->fetchColumn();
+                            }
+                        ?>
+                        <tr>
+                            <td><?= htmlspecialchars($moLedger) ?></td>
+                            <td><?= htmlspecialchars((string) ($moItem['parent_group'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($moItem['mapped_code'] ?? '')) ?></td>
+                            <td class="num" style="font-weight:600;"><?= formatMoney($moAmt) ?></td>
+                            <td style="font-size:0.78rem;color:var(--rc-muted);"><?= htmlspecialchars($moReason) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- Detailed Comparison (Collapsible) -->
             <div class="rc-card">

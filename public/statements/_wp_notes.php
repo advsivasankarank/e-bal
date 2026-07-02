@@ -55,6 +55,11 @@ $hasPrev = !$isFirstYear;
             </tr>
         </tfoot>
     </table>
+    <?php if (!empty($section['disclosure'])): ?>
+    <div style="margin-top:8px;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:0.78rem;color:#92400e;">
+        <strong>Disclosure:</strong> <?= htmlspecialchars($section['disclosure']) ?>
+    </div>
+    <?php endif; ?>
 </div>
 <?php endforeach; ?>
 <?php endif; ?>

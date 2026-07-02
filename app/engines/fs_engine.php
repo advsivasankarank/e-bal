@@ -620,6 +620,52 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
         $sections[] = $section;
     }
 
+    /* ---- Branch / Divisions — Standalone Treatment ---- */
+    // TODO: Future consolidation module should eliminate Branch / Division balances
+    // across HO and branch books. For now, include in standalone Balance Sheet
+    // with proper disclosure and warning.
+    $branchDivCurrent = 0.0;
+    $branchDivPrevious = 0.0;
+    $branchDivLines = [];
+    foreach ($classified['schedule_items'] as $code => $item) {
+        foreach (($item['rows'] ?? []) as $row) {
+            $pg = strtolower(trim((string) ($row['parent_group'] ?? '')));
+            $pgNorm = str_replace(['&', '-', '_', '/', '.', ','], ' ', $pg);
+            $pgNorm = preg_replace('/\s+/', ' ', $pgNorm);
+            if (in_array($pgNorm, ['branch divisions', 'branch division', 'branch/divisions', 'branch/division'], true)) {
+                $ledgerName = trim((string) ($row['ledger_name'] ?? ''));
+                if ($ledgerName === '') continue;
+                $drAmt = (float) ($row['amount'] ?? 0);
+                $crAmt = (float) ($row['previous_amount'] ?? 0);
+                $branchDivCurrent += $drAmt;
+                $branchDivPrevious += $crAmt;
+                $branchDivLines[] = [
+                    'label' => $ledgerName,
+                    'current' => $drAmt,
+                    'previous' => $crAmt,
+                ];
+            }
+        }
+    }
+    if ($branchDivCurrent != 0.0 || $branchDivPrevious != 0.0) {
+        $branchDivNet = $branchDivCurrent - $branchDivPrevious;
+        $branchNote = [
+            'title' => 'Branch / Division Account — Standalone',
+            'note_no' => count($sections) + 1,
+            'master_code' => 'BRDIV',
+            'custom_type' => 'branch_divisions',
+            'lines' => $branchDivLines,
+            'current_total' => $branchDivCurrent,
+            'previous_total' => $branchDivPrevious,
+            'branch_div_net' => $branchDivNet,
+            'disclosure' => 'This represents inter-unit balance considered only for standalone Head Office financial statements and is subject to reconciliation/elimination in consolidated financial statements.',
+        ];
+        if (empty($branchDivLines)) {
+            $branchNote['lines'] = [['label' => 'No Branch / Division ledger breakup available', 'current' => 0.0, 'previous' => 0.0]];
+        }
+        $sections[] = $branchNote;
+    }
+
     return [
         'share_capital' => [
             'authorised' => manualAmount($manualInputs, 'share_capital_authorised', $currentPaidUp),
@@ -797,6 +843,35 @@ function buildCompanySummaryFromNotes(array $classified, array $notes, string $f
         'tax' => 0,
         'prev_tax' => 0,
     ];
+
+    /* ---- Branch / Divisions — Standalone Balance Sheet Treatment ---- */
+    // TODO: Future consolidation module should eliminate Branch / Division balances
+    // across HO and branch books. For now, include in standalone Balance Sheet.
+    $branchDivNote = null;
+    foreach (($notes['sections'] ?? []) as $section) {
+        if (($section['custom_type'] ?? '') === 'branch_divisions') {
+            $branchDivNote = $section;
+            break;
+        }
+    }
+    if ($branchDivNote !== null) {
+        $branchDivCurrent = (float) ($branchDivNote['current_total'] ?? 0);
+        $branchDivPrevious = (float) ($branchDivNote['previous_total'] ?? 0);
+        if ($branchDivCurrent > 0) {
+            // Debit balance → include as asset
+            $data['other_current_assets'] += $branchDivCurrent;
+            $data['prev_other_current_assets'] += $branchDivPrevious;
+        } elseif ($branchDivCurrent < 0) {
+            // Credit balance → include as liability
+            $data['other_current_liabilities'] += abs($branchDivCurrent);
+            $data['prev_other_current_liabilities'] += abs($branchDivPrevious);
+        }
+        $data['branch_divisions_note'] = [
+            'current' => $branchDivCurrent,
+            'previous' => $branchDivPrevious,
+            'disclosure' => $branchDivNote['disclosure'] ?? '',
+        ];
+    }
 
     $data['total_income'] = $data['revenue'] + $data['other_income'];
     $data['prev_total_income'] = $data['prev_revenue'] + $data['prev_other_income'];

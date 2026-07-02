@@ -1954,7 +1954,12 @@ require_once __DIR__ . '/../layouts/header_v2.php';
                 html += '<option value="' + escHtml(o.id) + '"' + sel + '>' + escHtml(o.label) + '</option>';
             });
             html += '</select></td>';
-            html += '<td style="padding:6px 8px;"><button class="btn btn-sm gm-apply-btn" data-pg="' + escHtml(g.parent_group) + '" style="padding:4px 10px;font-size:0.72rem;">Apply</button></td>';
+            html += '<td style="padding:6px 8px;display:flex;gap:4px;flex-wrap:nowrap;">';
+            html += '<button class="btn btn-sm gm-apply-btn" data-pg="' + escHtml(g.parent_group) + '" style="padding:4px 10px;font-size:0.72rem;">Apply</button>';
+            if (g.risk_count > 0 || g._unmapped > 0) {
+                html += '<button class="btn btn-sm gm-override-btn" data-pg="' + escHtml(g.parent_group) + '" style="padding:4px 8px;font-size:0.68rem;background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;" title="Include with manual override despite risk/conflict">Override</button>';
+            }
+            html += '</td>';
             html += '</tr>';
         }
         html += '</tbody></table>';
@@ -2048,6 +2053,65 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         showToast(count + ' unmapped ledgers under "' + pg + '" mapped to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
     });
 
+    /* ---- Override & Include button handler ---- */
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.gm-override-btn');
+        if (!btn) return;
+        var pg = btn.getAttribute('data-pg');
+        var select = document.querySelector('.gm-select[data-pg="' + pg + '"]');
+        if (!select || !select.value) { showToast('Select a Schedule III head first', 'error'); return; }
+        var scheduleCode = select.value;
+        showOverrideModal(pg, scheduleCode);
+    });
+
+    function showOverrideModal(pg, scheduleCode) {
+        var existing = document.getElementById('overrideModal');
+        if (existing) existing.remove();
+        var modal = document.createElement('div');
+        modal.id = 'overrideModal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+        var label = optionsMap[scheduleCode] || scheduleCode;
+        var html = '<div style="background:#fff;border-radius:12px;max-width:520px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">';
+        html += '<div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;"><h3 style="margin:0;font-size:1.05rem;color:#1f2937;">&#9998; Manual Override Confirmation</h3></div>';
+        html += '<div style="padding:20px 24px;">';
+        html += '<p style="font-size:0.88rem;color:#4b5563;margin-bottom:12px;">Group <strong>' + escHtml(pg) + '</strong> will be mapped to <strong>' + escHtml(label) + '</strong> via manual override.</p>';
+        html += '<p style="font-size:0.82rem;color:#6b7285;margin-bottom:14px;">This group/ledger has a mapping risk or validation conflict. By overriding, you confirm that the classification has been professionally reviewed and should be included in the financial statements under the selected Schedule III head.</p>';
+        html += '<div style="margin-bottom:12px;"><label style="font-size:0.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Override Reason / Remarks *</label>';
+        html += '<textarea id="overrideReason" rows="3" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.85rem;box-sizing:border-box;" placeholder="Describe the professional review and rationale for inclusion..."></textarea></div>';
+        html += '<div style="margin-bottom:4px;"><label style="font-size:0.82rem;color:#374151;display:flex;align-items:start;gap:8px;cursor:pointer;"><input type="checkbox" id="overrideConfirm" style="margin-top:3px;"><span>I confirm that this mapping has been reviewed and approved for financial statement inclusion.</span></label></div>';
+        html += '</div>';
+        html += '<div style="padding:16px 24px;border-top:1px solid #e5e7eb;display:flex;gap:10px;justify-content:flex-end;">';
+        html += '<button onclick="document.getElementById(\'overrideModal\').remove()" style="padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:0.85rem;background:#fff;">Cancel</button>';
+        html += '<button id="overrideConfirmBtn" style="padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-size:0.85rem;color:#fff;background:#7c3aed;">Confirm Override</button>';
+        html += '</div></div>';
+        modal.innerHTML = html;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', function(ev) { if (ev.target === modal) modal.remove(); });
+        document.getElementById('overrideConfirmBtn').addEventListener('click', function() {
+            var reason = (document.getElementById('overrideReason').value || '').trim();
+            var confirmed = document.getElementById('overrideConfirm').checked;
+            if (!reason) { showToast('Override reason is required', 'error'); return; }
+            if (!confirmed) { showToast('Please confirm the override', 'error'); return; }
+            modal.remove();
+            applyOverride(pg, scheduleCode, reason);
+        });
+    }
+
+    function applyOverride(pg, scheduleCode, reason) {
+        var count = 0;
+        for (var i = 0; i < gridData.length; i++) {
+            if (gridData[i].parent_group === pg) {
+                gridData[i].final_mapping = scheduleCode;
+                gridData[i].override_reason = reason;
+                count++;
+            }
+        }
+        markGroupDirty(pg, scheduleCode);
+        groupDirty[pg + '::__override'] = reason;
+        refreshGroupPanel();
+        showToast(count + ' ledgers under "' + pg + '" included by manual override to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
+    }
+
     /* ---- Group save ---- */
     var btnSave = document.getElementById('btnGroupSave');
     if (btnSave) {
@@ -2055,12 +2119,19 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             var dirty = Object.keys(groupDirty);
             if (!dirty.length) { showToast('No changes to save', 'info'); return; }
             var mappings = {};
+            var overrides = {};
+            var overrideReasons = {};
             dirty.forEach(function(pg) {
                 var code = groupDirty[pg];
+                var overrideReason = groupDirty[pg + '::__override'] || '';
                 for (var i = 0; i < gridData.length; i++) {
                     var r = gridData[i];
                     if (r.parent_group === pg && (!r.current_mapping || r.current_mapping === '')) {
                         mappings[r.ledger_name] = r.final_mapping || code;
+                        if (overrideReason || r.override_reason) {
+                            overrides[r.ledger_name] = 1;
+                            overrideReasons[r.ledger_name] = overrideReason || r.override_reason || '';
+                        }
                     }
                 }
             });
@@ -2070,7 +2141,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             fetch(ebalBaseUrl + 'data_console/ajax_mapping_save.php', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
-                body: JSON.stringify({mappings: mappings, overrides: {}, remember: {}, remarks: {}}),
+                body: JSON.stringify({mappings: mappings, overrides: overrides, override_reasons: overrideReasons, remember: {}, remarks: {}}),
             })
             .then(function(r) { return r.json(); })
             .then(function(resp) {

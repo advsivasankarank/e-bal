@@ -60,6 +60,7 @@ if (!is_array($data) || empty($data['mappings'])) {
 $mappings  = $data['mappings'];
 $overrides = is_array($data['overrides'] ?? null) ? $data['overrides'] : [];
 $remember  = is_array($data['remember'] ?? null) ? $data['remember'] : [];
+$overrideReasons = is_array($data['override_reasons'] ?? null) ? $data['override_reasons'] : [];
 
 /* ---- Schema check ---- */
 ensureMappingAiSchema($pdo);
@@ -140,6 +141,7 @@ try {
         $parentGroup = (string) (($parentRow['parent_group'] ?? '') ?: '');
 
         $isOverride = !empty($overrides[$ledger]);
+        $overrideReason = isset($overrideReasons[$ledger]) ? trim((string) $overrideReasons[$ledger]) : '';
         $rememberScope = isset($remember[$ledger]) ? strtolower(trim($remember[$ledger])) : '';
         if (!in_array($rememberScope, ['', 'company', 'global'], true)) {
             $rememberScope = '';
@@ -162,6 +164,13 @@ try {
         $mappingReason = $suggestionMatched
             ? (string) ($suggestion['reason'] ?? 'Accepted AI/rule suggestion via bulk workbench.')
             : 'Manually mapped via bulk workbench.';
+
+        // Manual Override: professional review with reason
+        if ($isOverride && $overrideReason !== '') {
+            $mappingSource = 'manual_override';
+            $mappingReason = 'Manual Override — ' . $overrideReason;
+            $confidenceScore = 100.0;
+        }
 
         // Parent group validation
         if (!isScheduleCodeAllowedForParentGroup($parentGroup, $head)) {

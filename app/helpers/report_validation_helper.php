@@ -84,10 +84,36 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
         }
     }
 
+    /* Manual Override warning */
+    $manualOverrides = getManualOverrides($pdo, $company_id);
+    if (!empty($manualOverrides)) {
+        $overrideCount = count($manualOverrides);
+        $warnings[] = [
+            'check' => 'manual_overrides_included',
+            'message' => $overrideCount . ' ledger(s) included by manual override — review retained. '
+                . 'Eliminate on consolidation where applicable.',
+        ];
+    }
+
+    /* Branch / Divisions standalone warning */
+    foreach (($notes['sections'] ?? []) as $section) {
+        if (($section['custom_type'] ?? '') === 'branch_divisions') {
+            $branchNet = (float) ($section['branch_div_net'] ?? 0);
+            if ($branchNet != 0.0) {
+                $warnings[] = [
+                    'check' => 'branch_divisions_standalone',
+                    'message' => 'Branch / Division balance of ₹' . format_inr_number($branchNet)
+                        . ' included in standalone Balance Sheet — eliminate on consolidation.',
+                ];
+            }
+            break;
+        }
+    }
+
     return [
         'can_generate' => empty($errors),
         'errors' => $errors,
         'warnings' => $warnings,
-        'total_checks' => 8,
+        'total_checks' => 10,
     ];
 }

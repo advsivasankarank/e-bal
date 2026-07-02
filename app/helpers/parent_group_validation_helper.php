@@ -199,3 +199,47 @@ function ensureLedgerMappingOverrideColumn(PDO $pdo): void
         $pdo->exec("ALTER TABLE ledger_mapping ADD COLUMN override_parent_group TINYINT(1) NOT NULL DEFAULT 0");
     }
 }
+
+/**
+ * Check if a ledger mapping has been manually overridden with professional review.
+ * Uses mapping_source = 'manual_override' as the indicator.
+ */
+function isMappingManuallyOverridden(PDO $pdo, int $companyId, string $ledgerName): bool
+{
+    $stmt = $pdo->prepare("
+        SELECT mapping_source FROM ledger_mapping
+        WHERE company_id = ? AND ledger_name = ? AND schedule_code IS NOT NULL AND schedule_code != ''
+        LIMIT 1
+    ");
+    $stmt->execute([$companyId, $ledgerName]);
+    $source = (string) $stmt->fetchColumn();
+    return $source === 'manual_override';
+}
+
+/**
+ * Get all manually overridden ledgers for a company.
+ * Returns array of [ledger_name, schedule_code, mapping_reason, approved_by_user_id, approved_at]
+ */
+function getManualOverrides(PDO $pdo, int $companyId): array
+{
+    $stmt = $pdo->prepare("
+        SELECT ledger_name, schedule_code, mapping_reason, approved_by_user_id, approved_at
+        FROM ledger_mapping
+        WHERE company_id = ? AND mapping_source = 'manual_override'
+        AND schedule_code IS NOT NULL AND schedule_code != ''
+        ORDER BY ledger_name
+    ");
+    $stmt->execute([$companyId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Detect if a parent group is "Branch / Divisions" (normalized match).
+ */
+function isBranchDivisionsGroup(string $parentGroup): bool
+{
+    $normalized = strtolower(trim($parentGroup));
+    $normalized = str_replace(['&', '-', '_', '/', '.', ','], ' ', $normalized);
+    $normalized = preg_replace('/\s+/', ' ', $normalized);
+    return in_array($normalized, ['branch divisions', 'branch division', 'branch/divisions', 'branch/division'], true);
+}
