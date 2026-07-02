@@ -88,16 +88,51 @@ $noteCompleteness = $fs['validation']['note_completeness'] ?? ['missing' => [], 
 $validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
 
 if ($hasReportData) {
-    $hasBlockingErrors = !empty($validationResult['errors']);
+    $hasBlockingErrorsV = !empty($validationResult['errors']);
     $bsBalanced = abs($currentDiff) <= 0.01;
     $notesComplete = $noteCompleteness['is_complete'] ?? true;
 
-    if (!$hasBlockingErrors && $bsBalanced && $notesComplete) {
+    if (!$hasBlockingErrorsV && $bsBalanced && $notesComplete) {
         updateWorkflow($company_id, $fy_id, 'notes_prepared');
         updateWorkflow($company_id, $fy_id, 'profit_loss_prepared');
         updateWorkflow($company_id, $fy_id, 'balance_sheet_prepared');
     }
 }
+
+/* ============================================================
+   PART A — READINESS STATUS COMPUTATION
+   ============================================================ */
+$conflictCount = count($parentGroupConflicts);
+$missingNotesCount = count($noteCompleteness['missing'] ?? []);
+$errorCount = count($validationResult['errors']);
+$warningCount = count($validationResult['warnings']);
+$bsDifference = abs($currentDiff) > 0.01;
+$hasBlockingErrors = !empty($validationResult['errors']);
+$hasConflicts = $conflictCount > 0;
+$notesIncomplete = !($noteCompleteness['is_complete'] ?? true);
+$hasWarnings = $warningCount > 0;
+
+if ($bsDifference || $hasBlockingErrors) {
+    $readinessStatus = 'blocked';
+    $readinessLabel = 'Reports Blocked';
+} elseif ($hasConflicts) {
+    $readinessStatus = 'mapping_review';
+    $readinessLabel = 'Mapping Review Required';
+} elseif ($notesIncomplete) {
+    $readinessStatus = 'notes_incomplete';
+    $readinessLabel = 'Notes Incomplete';
+} elseif ($hasWarnings) {
+    $readinessStatus = 'warnings';
+    $readinessLabel = 'Ready with Warnings';
+} else {
+    $readinessStatus = 'ready';
+    $readinessLabel = 'Reports Ready';
+}
+
+$isBlocked = in_array($readinessStatus, ['blocked', 'mapping_review', 'notes_incomplete'], true);
+$readinessColor = $readinessStatus === 'ready' ? '#16a34a' : ($readinessStatus === 'warnings' ? '#d97706' : '#dc2626');
+$readinessBg = $readinessStatus === 'ready' ? '#dcfce7' : ($readinessStatus === 'warnings' ? '#fef3c7' : '#fee2e2');
+$readinessBorder = $readinessStatus === 'ready' ? '#86efac' : ($readinessStatus === 'warnings' ? '#fcd34d' : '#fca5a5');
 ?>
 
 <?php
@@ -133,22 +168,22 @@ if ($isCorporate) {
 
 $validationIssues = [];
 if (abs($currentDiff) > 0.01 || abs($previousDiff) > 0.01) {
-    $validationIssues[] = ['type' => 'error', 'text' => 'BS not balanced (Diff: ₹' . number_format($currentDiff, 2) . ')'];
+    $validationIssues[] = ['type' => 'error', 'text' => 'BS not balanced (Diff: &#8377;' . number_format($currentDiff, 2) . ')', 'link' => BASE_URL . 'reconciliation_console.php'];
 }
 if (!empty($parentGroupConflicts)) {
-    $validationIssues[] = ['type' => 'warning', 'text' => count($parentGroupConflicts) . ' parent-group conflict(s) excluded from notes'];
+    $validationIssues[] = ['type' => 'warning', 'text' => count($parentGroupConflicts) . ' parent-group conflict(s)', 'link' => BASE_URL . 'data_console/mapping_workbench.php'];
 }
 if (!($noteCompleteness['is_complete'] ?? true)) {
-    $validationIssues[] = ['type' => 'warning', 'text' => count($noteCompleteness['missing'] ?? []) . ' expected note heading(s) missing'];
+    $validationIssues[] = ['type' => 'warning', 'text' => count($noteCompleteness['missing'] ?? []) . ' expected note heading(s) missing', 'link' => '#notes-to-accounts'];
 }
 $validationSummary = [];
 if (!empty($validationResult['errors'])) {
     $validationSummary['errors'] = count($validationResult['errors']);
-    $validationIssues[] = ['type' => 'error', 'text' => count($validationResult['errors']) . ' validation error(s)'];
+    $validationIssues[] = ['type' => 'error', 'text' => count($validationResult['errors']) . ' validation error(s)', 'link' => BASE_URL . 'review_centre.php'];
 }
 if (!empty($validationResult['warnings'])) {
     $validationSummary['warnings'] = count($validationResult['warnings']);
-    $validationIssues[] = ['type' => 'warning', 'text' => count($validationResult['warnings']) . ' validation warning(s)'];
+    $validationIssues[] = ['type' => 'warning', 'text' => count($validationResult['warnings']) . ' validation warning(s)', 'link' => BASE_URL . 'review_centre.php'];
 }
 ?>
 
@@ -164,17 +199,56 @@ if (!empty($validationResult['warnings'])) {
     'fy' => $fyName,
     'entity_type' => $fs['company_meta']['entity_type'] ?? '',
     'profile' => 0,
-    'status' => $hasReportData ? 'Reports Ready' : 'Setup Required',
+    'status' => $hasReportData ? $readinessLabel : 'Setup Required',
     'edit_url' => '',
 ]) ?>
 
+<?php if ($hasReportData): ?>
+<!-- ============================================================
+     PART B — BLOCKING BANNER
+     ============================================================ -->
+<?php if ($isBlocked || $readinessStatus === 'mapping_review' || $readinessStatus === 'notes_incomplete'): ?>
+<div style="display:flex;align-items:center;gap:16px;padding:16px 24px;border-radius:12px;margin-bottom:14px;background:<?= $readinessBg ?>;border:1px solid <?= $readinessBorder ?>;">
+    <div style="font-size:1.6rem;flex-shrink:0;"><?= $readinessStatus === 'blocked' ? '&#10060;' : '&#9888;&#65039;' ?></div>
+    <div style="flex:1;">
+        <div style="font-size:1.05rem;font-weight:700;color:<?= $readinessColor ?>;margin-bottom:2px;">Financial Statements Not Ready</div>
+        <div style="font-size:0.82rem;color:#475569;">
+            <?php if ($bsDifference): ?>Balance Sheet difference: &#8377;<?= number_format($currentDiff, 2) ?> &middot; <?php endif; ?>
+            <?php if ($hasConflicts): ?><?= $conflictCount ?> parent-group conflict(s) &middot; <?php endif; ?>
+            <?php if ($notesIncomplete): ?><?= $missingNotesCount ?> missing note heading(s) &middot; <?php endif; ?>
+            <?php if ($errorCount > 0): ?><?= $errorCount ?> validation error(s) &middot; <?php endif; ?>
+            <?php if ($warningCount > 0): ?><?= $warningCount ?> warning(s)<?php endif; ?>
+        </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
+        <a class="btn" href="<?= BASE_URL ?>reconciliation_console.php" style="font-size:0.78rem;padding:6px 14px;background:#fff;border:1px solid <?= $readinessBorder ?>;">Open Reconciliation Console</a>
+        <a class="btn" href="<?= BASE_URL ?>data_console/mapping_workbench.php" style="font-size:0.78rem;padding:6px 14px;background:#fff;border:1px solid <?= $readinessBorder ?>;">Open ReconHub</a>
+        <a class="btn" href="<?= BASE_URL ?>review_centre.php" style="font-size:0.78rem;padding:6px 14px;background:#fff;border:1px solid <?= $readinessBorder ?>;">Open Review Centre</a>
+        <a class="btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_review" style="font-size:0.78rem;padding:6px 14px;background:#fff;border:1px solid <?= $readinessBorder ?>;">Ask IntelAI</a>
+    </div>
+</div>
+<?php elseif ($readinessStatus === 'ready'): ?>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-radius:10px;margin-bottom:14px;background:#dcfce7;border:1px solid #86efac;">
+    <span style="font-size:1.2rem;">&#9989;</span>
+    <span style="font-size:0.9rem;font-weight:600;color:#166534;">Financial Statements Ready for Export</span>
+</div>
+<?php endif; ?>
+
+<!-- ============================================================
+     PART C — EXPORT BUTTONS (Draft Labels)
+     ============================================================ -->
 <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;">
-    <?php if ($hasReportData): ?>
+    <?php if ($isBlocked): ?>
+    <a class="btn" href="<?= BASE_URL ?>report_download.php?format=pdf" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;opacity:0.85;" onclick="return confirm('Financial statements are not ready. Export will be marked as draft. Continue?');">&#128196; Draft PDF</a>
+    <a class="btn" href="<?= BASE_URL ?>report_download.php?format=word" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;background:#6b7280;opacity:0.85;" onclick="return confirm('Financial statements are not ready. Export will be marked as draft. Continue?');">&#128196; Draft Word</a>
+    <a class="btn" href="<?= BASE_URL ?>report_download.php?format=excel" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;background:#6b7280;opacity:0.85;" onclick="return confirm('Financial statements are not ready. Export will be marked as draft. Continue?');">&#128196; Draft Excel</a>
+    <?php else: ?>
     <a class="btn" href="<?= BASE_URL ?>report_download.php?format=pdf" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;">PDF</a>
     <a class="btn" href="<?= BASE_URL ?>report_download.php?format=word" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;background:linear-gradient(135deg,#1d4ed8,#1e40af);">Word</a>
     <a class="btn" href="<?= BASE_URL ?>report_download.php?format=excel" style="min-height:34px;padding:0 14px;font-size:0.8rem;position:static;background:linear-gradient(135deg,#15803d,#166534);">Excel</a>
     <?php endif; ?>
 </div>
+<?php endif; ?>
 
 <?php if (!empty($_SESSION['success'])): ?>
     <div class="success-box"><p><?= htmlspecialchars($_SESSION['success']) ?></p></div>
@@ -207,21 +281,37 @@ if (!empty($validationResult['warnings'])) {
 .fs-tab.active { background: var(--brand); color: #fff; font-weight: 600; }
 .fs-tab-spacer { flex: 1; }
 
+/* ---- PART D: CLICKABLE VALIDATION STRIP ---- */
 .fs-validation-strip {
     display: flex;
-    gap: 16px;
+    gap: 8px;
     padding: 10px 16px;
     background: #fffbeb;
     border: 1px solid #fde68a;
     border-radius: 10px;
     margin-bottom: 14px;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     align-items: center;
     flex-wrap: wrap;
 }
-.fs-validation-strip .item { display: flex; align-items: center; gap: 6px; }
-.fs-validation-strip .item.error { color: var(--danger); }
-.fs-validation-strip .item.warning { color: var(--warning); }
+.fs-val-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+}
+.fs-val-chip:hover { opacity: 0.85; transform: translateY(-1px); }
+.fs-val-chip.error { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.fs-val-chip.warning { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.fs-val-chip.ok { background: #dcfce7; color: #166534; border-color: #86efac; }
+.fs-val-chip .chip-count { font-weight: 700; }
 
 .fs-year-toggle {
     display: flex;
@@ -252,7 +342,7 @@ if (!empty($validationResult['warnings'])) {
     transition: grid-template-columns 0.3s ease;
 }
 .fs-workspace.input-panel-open {
-    grid-template-columns: 220px 1fr 320px;
+    grid-template-columns: 220px 1fr 360px;
 }
 
 /* Section sidebar */
@@ -296,6 +386,7 @@ if (!empty($validationResult['warnings'])) {
     background: transparent;
     overflow-y: auto;
     max-height: 800px;
+    position: relative;
 }
 .fs-canvas .report-page {
     width: 100%;
@@ -311,7 +402,25 @@ if (!empty($validationResult['warnings'])) {
 .fs-canvas .report-page:last-child { margin-bottom: 0; }
 .fs-canvas .report-page[data-tab]:not([data-tab="active"]) { display: none; }
 
-/* Input panel */
+/* ---- PART F: DRAFT WATERMARK ---- */
+.fs-draft-watermark {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    padding: 4px 12px;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #92400e;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    z-index: 5;
+    pointer-events: none;
+}
+
+/* ---- PART E: REVIEW & FIX PANEL ---- */
 .fs-input-panel {
     background: var(--panel-strong);
     border: 1px solid var(--border);
@@ -331,12 +440,104 @@ if (!empty($validationResult['warnings'])) {
 }
 .fs-input-panel .panel-header h3 { font-size: 0.95rem; margin: 0; }
 .fs-input-panel .panel-header .toggle { font-size: 0.8rem; color: var(--brand); cursor: pointer; }
+.fs-input-panel .panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+}
+.fs-input-panel .panel-tab {
+    flex: 1;
+    padding: 8px;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+}
+.fs-input-panel .panel-tab:hover { color: var(--text); background: var(--bg); }
+.fs-input-panel .panel-tab.active { color: var(--brand); border-bottom-color: var(--brand); }
 .fs-input-panel .panel-body { padding: 14px 16px; flex: 1; overflow-y: auto; }
 .fs-input-panel .form-group { margin-bottom: 14px; }
 .fs-input-panel .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
 .fs-input-panel .form-group input, .fs-input-panel .form-group select { width: 100%; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 8px; font-size: 0.85rem; }
 .fs-input-panel .form-group .hint { font-size: 0.75rem; color: var(--muted); margin-top: 3px; }
 .fs-input-panel .btn-primary { margin-top: 14px; }
+
+/* Issue list in Review & Fix panel */
+.fs-issue-list { list-style: none; padding: 0; margin: 0; }
+.fs-issue-item {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+}
+.fs-issue-item .fs-issue-title { font-weight: 600; margin-bottom: 3px; }
+.fs-issue-item .fs-issue-reason { color: var(--muted); font-size: 0.75rem; margin-bottom: 6px; }
+.fs-issue-item .fs-issue-action { font-size: 0.72rem; }
+.fs-issue-item .fs-issue-action a { color: var(--brand); text-decoration: none; font-weight: 600; }
+.fs-issue-item .fs-issue-action a:hover { text-decoration: underline; }
+.fs-issue-item.error { border-color: #fca5a5; background: #fef2f2; }
+.fs-issue-item.warning { border-color: #fcd34d; background: #fffbeb; }
+
+/* IntelAI buttons in panel */
+.fs-ai-btns { display: flex; flex-direction: column; gap: 6px; }
+.fs-ai-btn {
+    display: block;
+    padding: 8px 12px;
+    background: #f0f7ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    color: var(--brand);
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.15s;
+}
+.fs-ai-btn:hover { background: #e0efff; }
+
+/* ---- PART G: NOTES UX ---- */
+.fs-note-search {
+    padding: 6px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    width: 100%;
+    margin-bottom: 10px;
+}
+.fs-note-toggle-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.fs-note-toggle-bar button {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.72rem;
+    cursor: pointer;
+}
+.fs-note-toggle-bar button:hover { background: var(--bg); }
+
+/* ---- PART H: BS HIGHLIGHTS ---- */
+.fs-highlight-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-left: 4px;
+}
+.fs-highlight-badge.review { background: #fef3c7; color: #92400e; }
+.fs-highlight-badge.negative { background: #fee2e2; color: #991b1b; }
+.fs-highlight-badge.od { background: #dbeafe; color: #1e40af; }
 
 /* Override report-page styles only in canvas */
 .fs-canvas h2.report-page-title {
@@ -367,13 +568,19 @@ if (!empty($validationResult['warnings'])) {
     color: #0f172a;
     font-size: 14px;
     line-height: 1.35;
+    cursor: pointer;
+    user-select: none;
 }
+.fs-canvas .note-heading:hover { background: linear-gradient(180deg, #f0f7ff 0%, #e0efff 100%); }
+.fs-canvas .note-heading .note-collapse-icon { float: right; font-size: 0.75rem; color: var(--muted); transition: transform 0.2s; }
+.fs-canvas .note-heading.collapsed .note-collapse-icon { transform: rotate(-90deg); }
 .fs-canvas .note-table { margin-top: 0; border: 1px solid #d9e5f2; }
 .fs-canvas .note-table thead th { background: #eef4f9; font-size: 12px; letter-spacing: 0.02em; color: #334155; }
 .fs-canvas .note-table tbody tr:nth-child(even) td { background: #fbfdff; }
 .fs-canvas .note-table tfoot td { background: #f3f7fb; font-weight: 700; }
 .fs-canvas .note-policy-list { margin: 12px 0 0 18px; padding: 0; }
 .fs-canvas .note-policy-list li { margin-bottom: 6px; line-height: 1.5; }
+.fs-canvas .note-negative { color: #dc2626; font-weight: 600; }
 
 .fs-no-data {
     text-align: center;
@@ -404,6 +611,7 @@ if (!empty($validationResult['warnings'])) {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
+    .fs-draft-watermark { display: none !important; }
 }
 </style>
 
@@ -427,14 +635,21 @@ if (!empty($validationResult['warnings'])) {
     <button class="fs-tab" onclick="window.location.reload()">&#128260; Rebuild</button>
 </div>
 
-<!-- Validation Strip -->
+<!-- ============================================================
+     PART D — CLICKABLE VALIDATION STRIP
+     ============================================================ -->
 <?php if (!empty($validationIssues) || !empty($validationResult['errors']) || !empty($validationResult['warnings'])): ?>
 <div class="fs-validation-strip" id="fsValidationStrip">
     <?php foreach ($validationIssues as $vi): ?>
-    <span class="item <?= $vi['type'] ?>"><?= $vi['type'] === 'error' ? '&#10060;' : '&#9888;&#65039;' ?> <?= htmlspecialchars($vi['text']) ?></span>
+    <a class="fs-val-chip <?= $vi['type'] ?>" href="<?= htmlspecialchars($vi['link'] ?? '#') ?>" title="Click to fix">
+        <?= $vi['type'] === 'error' ? '&#10060;' : '&#9888;&#65039;' ?>
+        <?= $vi['text'] ?>
+    </a>
     <?php endforeach; ?>
     <?php if ($hasReportData && abs($currentDiff) <= 0.01 && abs($previousDiff) <= 0.01): ?>
-    <span class="item" style="color:var(--success);">&#9989; BS Identity: Balanced (&#8377;<?= format_inr($fs['data']['total_assets'] ?? 0) ?>)</span>
+    <a class="fs-val-chip ok" href="<?= BASE_URL ?>reconciliation_console.php" title="View reconciliation">
+        &#9989; BS Balanced (&#8377;<?= format_inr($fs['data']['total_assets'] ?? 0) ?>)
+    </a>
     <?php endif; ?>
     <span style="margin-left:auto;">
         <button class="btn btn-sm btn-outline" onclick="window.location.reload()">&#128260; Refresh</button>
@@ -459,6 +674,9 @@ if (!empty($validationResult['warnings'])) {
 
     <!-- CENTER: Report Canvas -->
     <div class="fs-canvas" id="fsCanvas">
+        <?php if ($isBlocked): ?>
+        <div class="fs-draft-watermark">DRAFT &mdash; VALIDATION PENDING</div>
+        <?php endif; ?>
         <?php
         $data = $fs['data'];
         $notes = $fs['notes'];
@@ -477,79 +695,149 @@ if (!empty($validationResult['warnings'])) {
         <?php include $fs['notes_template']; ?>
     </div>
 
-    <!-- RIGHT: Manual Input Panel -->
+    <!-- ============================================================
+         PART E — RIGHT PANEL: REVIEW & FIX
+         ============================================================ -->
     <div class="fs-input-panel" id="fsInputPanel">
         <div class="panel-header">
-            <h3>&#128221; Manual Adjustments</h3>
+            <h3>&#128269; Review &amp; Fix</h3>
             <span class="toggle" id="fsTogglePanel">&#9654; Hide</span>
         </div>
+        <div class="panel-tabs">
+            <button class="panel-tab active" data-panel="issues">Issues</button>
+            <button class="panel-tab" data-panel="adjustments">Adjustments</button>
+            <button class="panel-tab" data-panel="intelai">IntelAI</button>
+        </div>
         <div class="panel-body">
-            <?php if ($isCorporate): ?>
-            <form method="post" id="manualInputForm">
-                <?= csrfInput() ?>
-                <input type="hidden" name="report_action" value="save_manual_company_note">
-                <div class="form-group">
-                    <label for="share_capital_authorised">Authorised Capital (&#8377;)</label>
-                    <input id="share_capital_authorised" name="share_capital_authorised" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_authorised'] ?? '')) ?>">
+            <!-- Issues Tab -->
+            <div class="panel-tab-content" id="panel-issues">
+                <?php if ($isBlocked || $hasConflicts || $notesIncomplete || $hasWarnings): ?>
+                <ul class="fs-issue-list">
+                    <?php if ($bsDifference): ?>
+                    <li class="fs-issue-item error">
+                        <div class="fs-issue-title">&#10060; Balance Sheet Not Balanced</div>
+                        <div class="fs-issue-reason">Current year difference: &#8377;<?= number_format($currentDiff, 2) ?>. Assets and liabilities do not match.</div>
+                        <div class="fs-issue-action"><a href="<?= BASE_URL ?>reconciliation_console.php">Open Reconciliation Console</a></div>
+                    </li>
+                    <?php endif; ?>
+                    <?php if ($hasConflicts): ?>
+                    <li class="fs-issue-item error">
+                        <div class="fs-issue-title">&#128681; Parent-Group Conflicts (<?= $conflictCount ?>)</div>
+                        <div class="fs-issue-reason">Ledgers with conflicting parent-group mappings are excluded from classification.</div>
+                        <div class="fs-issue-action"><a href="<?= BASE_URL ?>data_console/mapping_workbench.php">Open ReconHub</a></div>
+                    </li>
+                    <?php endif; ?>
+                    <?php if ($notesIncomplete): ?>
+                    <li class="fs-issue-item warning">
+                        <div class="fs-issue-title">&#128221; Missing Note Headings (<?= $missingNotesCount ?>)</div>
+                        <div class="fs-issue-reason">Expected note sections are missing from the report.</div>
+                        <div class="fs-issue-action"><a href="#notes-to-accounts">View Notes Tab</a></div>
+                    </li>
+                    <?php endif; ?>
+                    <?php foreach ($validationResult['errors'] as $err): ?>
+                    <li class="fs-issue-item error">
+                        <div class="fs-issue-title">&#10060; <?= htmlspecialchars($err['check'] ?? 'Error') ?></div>
+                        <div class="fs-issue-reason"><?= htmlspecialchars($err['message'] ?? '') ?></div>
+                        <div class="fs-issue-action"><a href="<?= BASE_URL ?>review_centre.php">Open Review Centre</a></div>
+                    </li>
+                    <?php endforeach; ?>
+                    <?php foreach ($validationResult['warnings'] as $warn): ?>
+                    <li class="fs-issue-item warning">
+                        <div class="fs-issue-title">&#9888;&#65039; <?= htmlspecialchars($warn['check'] ?? 'Warning') ?></div>
+                        <div class="fs-issue-reason"><?= htmlspecialchars($warn['message'] ?? '') ?></div>
+                        <div class="fs-issue-action"><a href="<?= BASE_URL ?>review_centre.php">Open Review Centre</a></div>
+                    </li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php else: ?>
+                <div style="padding:16px;text-align:center;color:var(--success);font-size:0.85rem;">
+                    &#9989; No issues detected. Reports are ready.
                 </div>
-                <div class="form-group">
-                    <label for="share_capital_issued">Issued Capital (&#8377;)</label>
-                    <input id="share_capital_issued" name="share_capital_issued" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_issued'] ?? '')) ?>">
+                <?php endif; ?>
+            </div>
+
+            <!-- Manual Adjustments Tab -->
+            <div class="panel-tab-content" id="panel-adjustments" style="display:none;">
+                <?php if ($isCorporate): ?>
+                <form method="post" id="manualInputForm">
+                    <?= csrfInput() ?>
+                    <input type="hidden" name="report_action" value="save_manual_company_note">
+                    <div class="form-group">
+                        <label for="share_capital_authorised">Authorised Capital (&#8377;)</label>
+                        <input id="share_capital_authorised" name="share_capital_authorised" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_authorised'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="share_capital_issued">Issued Capital (&#8377;)</label>
+                        <input id="share_capital_issued" name="share_capital_issued" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_issued'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="share_capital_paidup">Paid-up Capital (&#8377;)</label>
+                        <input id="share_capital_paidup" name="share_capital_paidup" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_paidup'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="note2_opening_profit_loss">Note 2 Opening P&amp;L (&#8377;)</label>
+                        <input id="note2_opening_profit_loss" name="note2_opening_profit_loss" type="number" step="0.01" value="<?= htmlspecialchars((string) (($manualBundle['saved_current']['note2_opening_profit_loss'] ?? '') !== '' ? $manualBundle['saved_current']['note2_opening_profit_loss'] : ($fs['notes']['other_equity']['opening_balance'] ?? ''))) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="note16_opening_raw_materials">Opening Raw Materials (&#8377;)</label>
+                        <input id="note16_opening_raw_materials" name="note16_opening_raw_materials" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note16_opening_raw_materials'] ?? $manualBundle['previous']['note16_closing_raw_materials'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="note16_closing_raw_materials">Closing Raw Materials (&#8377;)</label>
+                        <input id="note16_closing_raw_materials" name="note16_closing_raw_materials" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note16_closing_raw_materials'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="note24_opening_finished_goods">Opening FG (&#8377;)</label>
+                        <input id="note24_opening_finished_goods" name="note24_opening_finished_goods" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_opening_finished_goods'] ?? $manualBundle['previous']['note24_closing_finished_goods'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="note24_opening_work_in_progress">Opening WIP (&#8377;)</label>
+                        <input id="note24_opening_work_in_progress" name="note24_opening_work_in_progress" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_opening_work_in_progress'] ?? $manualBundle['previous']['note24_closing_work_in_progress'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="note24_opening_stock_in_trade">Opening Stock (&#8377;)</label>
+                        <input id="note24_opening_stock_in_trade" name="note24_opening_stock_in_trade" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_opening_stock_in_trade'] ?? $manualBundle['previous']['note24_closing_stock_in_trade'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="note24_closing_finished_goods">Closing FG (&#8377;)</label>
+                        <input id="note24_closing_finished_goods" name="note24_closing_finished_goods" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_closing_finished_goods'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="note24_closing_work_in_progress">Closing WIP (&#8377;)</label>
+                        <input id="note24_closing_work_in_progress" name="note24_closing_work_in_progress" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_closing_work_in_progress'] ?? '')) ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="note24_closing_stock_in_trade">Closing Stock (&#8377;)</label>
+                        <input id="note24_closing_stock_in_trade" name="note24_closing_stock_in_trade" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_closing_stock_in_trade'] ?? '')) ?>">
+                    </div>
+                    <button class="btn btn-primary" type="submit" style="width:100%;">Save Manual Inputs</button>
+                </form>
+                <?php else: ?>
+                <div style="font-size:0.85rem;color:var(--muted);">Manual adjustments for this entity type are configured in the report engine.</div>
+                <?php endif; ?>
+                <?php if ($isCorporate): ?>
+                <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+                    <h4 style="font-size:0.85rem;margin:0 0 8px;color:var(--muted);">Adjustment History</h4>
+                    <div style="font-size:0.8rem;padding:8px;background:var(--bg);border-radius:8px;">
+                        <div>Values are carried forward from the previous financial year automatically.</div>
+                        <div style="color:var(--muted);margin-top:4px;">Last saved adjustments are displayed above.</div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="share_capital_paidup">Paid-up Capital (&#8377;)</label>
-                    <input id="share_capital_paidup" name="share_capital_paidup" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_paidup'] ?? '')) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="note2_opening_profit_loss">Note 2 Opening P&amp;L (&#8377;)</label>
-                    <input id="note2_opening_profit_loss" name="note2_opening_profit_loss" type="number" step="0.01" value="<?= htmlspecialchars((string) (($manualBundle['saved_current']['note2_opening_profit_loss'] ?? '') !== '' ? $manualBundle['saved_current']['note2_opening_profit_loss'] : ($fs['notes']['other_equity']['opening_balance'] ?? ''))) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="note16_opening_raw_materials">Opening Raw Materials (&#8377;)</label>
-                    <input id="note16_opening_raw_materials" name="note16_opening_raw_materials" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note16_opening_raw_materials'] ?? $manualBundle['previous']['note16_closing_raw_materials'] ?? '')) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="note16_closing_raw_materials">Closing Raw Materials (&#8377;)</label>
-                    <input id="note16_closing_raw_materials" name="note16_closing_raw_materials" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note16_closing_raw_materials'] ?? '')) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="note24_opening_finished_goods">Opening FG (&#8377;)</label>
-                    <input id="note24_opening_finished_goods" name="note24_opening_finished_goods" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_opening_finished_goods'] ?? $manualBundle['previous']['note24_closing_finished_goods'] ?? '')) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="note24_opening_work_in_progress">Opening WIP (&#8377;)</label>
-                    <input id="note24_opening_work_in_progress" name="note24_opening_work_in_progress" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_opening_work_in_progress'] ?? $manualBundle['previous']['note24_closing_work_in_progress'] ?? '')) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="note24_opening_stock_in_trade">Opening Stock (&#8377;)</label>
-                    <input id="note24_opening_stock_in_trade" name="note24_opening_stock_in_trade" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_opening_stock_in_trade'] ?? $manualBundle['previous']['note24_closing_stock_in_trade'] ?? '')) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="note24_closing_finished_goods">Closing FG (&#8377;)</label>
-                    <input id="note24_closing_finished_goods" name="note24_closing_finished_goods" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_closing_finished_goods'] ?? '')) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="note24_closing_work_in_progress">Closing WIP (&#8377;)</label>
-                    <input id="note24_closing_work_in_progress" name="note24_closing_work_in_progress" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_closing_work_in_progress'] ?? '')) ?>">
-                </div>
-                <div class="form-group">
-                    <label for="note24_closing_stock_in_trade">Closing Stock (&#8377;)</label>
-                    <input id="note24_closing_stock_in_trade" name="note24_closing_stock_in_trade" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_closing_stock_in_trade'] ?? '')) ?>">
-                </div>
-                <button class="btn btn-primary" type="submit" style="width:100%;">Save Manual Inputs</button>
-            </form>
-            <?php else: ?>
-            <div style="font-size:0.85rem;color:var(--muted);">Manual adjustments for this entity type are configured in the report engine.</div>
-            <?php endif; ?>
-            <?php if ($isCorporate): ?>
-            <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
-                <h4 style="font-size:0.85rem;margin:0 0 8px;color:var(--muted);">Adjustment History</h4>
-                <div style="font-size:0.8rem;padding:8px;background:var(--bg);border-radius:8px;">
-                    <div>Values are carried forward from the previous financial year automatically.</div>
-                    <div style="color:var(--muted);margin-top:4px;">Last saved adjustments are displayed above.</div>
+                <?php endif; ?>
+            </div>
+
+            <!-- IntelAI Tab -->
+            <div class="panel-tab-content" id="panel-intelai" style="display:none;">
+                <div style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">Ask IntelAI to explain your financial statements.</div>
+                <div class="fs-ai-btns">
+                    <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_review&entity=<?= urlencode($companyName) ?>&fy=<?= urlencode($fyName) ?>" target="_blank">Review Financial Statements</a>
+                    <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_bs_diff&diff=<?= urlencode(number_format($currentDiff, 2)) ?>" target="_blank">Why is Balance Sheet Not Balanced?</a>
+                    <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_missing_notes" target="_blank">Explain Missing Notes</a>
+                    <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_mapping_risks" target="_blank">Review Mapping Risks</a>
+                    <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_conflicts" target="_blank">Explain Parent-Group Conflict</a>
+                    <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_make_ready" target="_blank">How to Make Reports Ready?</a>
                 </div>
             </div>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -563,8 +851,27 @@ if (!empty($validationResult['warnings'])) {
 </div>
 <?php endif; ?>
 
+<!-- ============================================================
+     PART I — INTELAI CONTEXT
+     ============================================================ -->
+<script>
+window.ebalIntelAIContext = {
+    module: "Financial Statements",
+    entityName: <?= json_encode($companyName) ?>,
+    fy: <?= json_encode($fyName) ?>,
+    activeStatement: "balance-sheet",
+    bsDifference: <?= json_encode(number_format($currentDiff, 2)) ?>,
+    validationErrors: <?= json_encode($errorCount) ?>,
+    validationWarnings: <?= json_encode($warningCount) ?>,
+    parentGroupConflicts: <?= json_encode($conflictCount) ?>,
+    missingNotes: <?= json_encode($missingNotesCount) ?>
+};
+</script>
+
 <script>
 (function () {
+    'use strict';
+
     var tabBar = document.getElementById('fsTabBar');
     var canvas = document.getElementById('fsCanvas');
     var sidebar = document.getElementById('fsSectionList');
@@ -580,7 +887,6 @@ if (!empty($validationResult['warnings'])) {
         if (id) {
             page.setAttribute('data-tab', id);
         }
-        // Also set data-tab for notes cover
     });
 
     // Show only the first tab's pages initially
@@ -591,7 +897,7 @@ if (!empty($validationResult['warnings'])) {
     tabBar.addEventListener('click', function (e) {
         var btn = e.target.closest('.fs-tab');
         if (!btn || btn.classList.contains('active')) return;
-        if (btn.onclick) return; // let onclick handlers work (print, rebuild)
+        if (btn.onclick) return;
         var tabId = btn.getAttribute('data-tab');
         if (!tabId) return;
         tabBar.querySelectorAll('.fs-tab').forEach(function (t) { t.classList.remove('active'); });
@@ -607,7 +913,6 @@ if (!empty($validationResult['warnings'])) {
     }
 
     function buildSectionSidebar(tabId) {
-        // Find sections from the active tab's page
         var activePage = null;
         pages.forEach(function (p) {
             if (p.getAttribute('data-tab') === tabId && p.style.display !== 'none') {
@@ -620,7 +925,6 @@ if (!empty($validationResult['warnings'])) {
             return;
         }
 
-        // Extract section headings from the active page
         var headings = activePage.querySelectorAll('h2, h3, .section-header td, .note-heading');
         var items = [];
         headings.forEach(function (h) {
@@ -630,7 +934,6 @@ if (!empty($validationResult['warnings'])) {
             }
         });
 
-        // Also look for bold section rows in tables
         if (items.length === 0) {
             var boldRows = activePage.querySelectorAll('tr td b, tr td strong');
             boldRows.forEach(function (b) {
@@ -659,7 +962,6 @@ if (!empty($validationResult['warnings'])) {
         });
         sidebar.innerHTML = html;
 
-        // Click to scroll to section in the active page
         sidebar.querySelectorAll('.fs-section-item').forEach(function (item) {
             item.addEventListener('click', function () {
                 var text = this.getAttribute('data-section');
@@ -671,7 +973,6 @@ if (!empty($validationResult['warnings'])) {
     }
 
     function scrollToSection(text) {
-        // Try to find the element in the active page
         var allElements = canvas.querySelectorAll('h2, h3, .note-heading, .section-header td, td b, td strong, tr');
         var bestMatch = null;
         allElements.forEach(function (el) {
@@ -701,19 +1002,7 @@ if (!empty($validationResult['warnings'])) {
             this.classList.add('active');
             var year = this.getAttribute('data-year');
             var prevCols = canvas.querySelectorAll('[data-prev]');
-            prevCols.forEach(function (col) {
-                if (year === 'current') {
-                    col.style.display = 'none';
-                } else if (year === 'previous') {
-                    col.style.display = '';
-                    // Also hide current columns? For simplicity, just show both
-                } else {
-                    col.style.display = '';
-                }
-            });
-            // For 'previous' mode, we'd need to hide current columns. Simple implementation:
             if (year === 'previous') {
-                // find current-year columns (those without data-prev)
                 var allFigs = canvas.querySelectorAll('.figure, th.figure');
                 allFigs.forEach(function (f) {
                     if (!f.hasAttribute('data-prev')) {
@@ -741,6 +1030,78 @@ if (!empty($validationResult['warnings'])) {
             this.innerHTML = workspace.classList.contains('input-panel-open') ? '&#9654; Hide' : '&#9664; Show';
         });
     }
+
+    // ---- PART E: Panel tab switching ----
+    var panelTabs = document.querySelectorAll('.panel-tab');
+    var panelContents = document.querySelectorAll('.panel-tab-content');
+    panelTabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            var target = this.getAttribute('data-panel');
+            panelTabs.forEach(function (t) { t.classList.remove('active'); });
+            panelContents.forEach(function (c) { c.style.display = 'none'; });
+            this.classList.add('active');
+            var el = document.getElementById('panel-' + target);
+            if (el) el.style.display = '';
+        });
+    });
+
+    // ---- PART G: Notes UX — Collapse/Expand & Search ----
+    var noteHeadings = canvas.querySelectorAll('.note-heading');
+    noteHeadings.forEach(function (h) {
+        // Add collapse icon
+        var icon = document.createElement('span');
+        icon.className = 'note-collapse-icon';
+        icon.innerHTML = '&#9660;';
+        h.appendChild(icon);
+
+        // Click to toggle
+        h.addEventListener('click', function () {
+            var block = this.closest('.note-block');
+            if (!block) return;
+            var content = block.querySelector('.note-table, .note-policy-list, table, ul');
+            if (!content) return;
+            var isCollapsed = this.classList.toggle('collapsed');
+            content.style.display = isCollapsed ? 'none' : '';
+            icon.innerHTML = isCollapsed ? '&#9654;' : '&#9660;';
+        });
+    });
+
+    // Notes expand/collapse all buttons (in sidebar when notes tab active)
+    // These are invoked from the notes tab
+    window.fsExpandAllNotes = function () {
+        noteHeadings.forEach(function (h) {
+            h.classList.remove('collapsed');
+            var block = h.closest('.note-block');
+            if (block) {
+                var content = block.querySelector('.note-table, .note-policy-list, table, ul');
+                if (content) content.style.display = '';
+                var icon = h.querySelector('.note-collapse-icon');
+                if (icon) icon.innerHTML = '&#9660;';
+            }
+        });
+    };
+    window.fsCollapseAllNotes = function () {
+        noteHeadings.forEach(function (h) {
+            h.classList.add('collapsed');
+            var block = h.closest('.note-block');
+            if (block) {
+                var content = block.querySelector('.note-table, .note-policy-list, table, ul');
+                if (content) content.style.display = 'none';
+                var icon = h.querySelector('.note-collapse-icon');
+                if (icon) icon.innerHTML = '&#9654;';
+            }
+        });
+    };
+
+    // ---- PART H: BS Issue Highlights ----
+    // Highlight negative figures in the canvas
+    var figures = canvas.querySelectorAll('.figure');
+    figures.forEach(function (fig) {
+        var val = parseFloat(fig.textContent.replace(/[₹,\s]/g, ''));
+        if (!isNaN(val) && val < 0) {
+            fig.classList.add('note-negative');
+        }
+    });
 
     // Init: open input panel by default for corporate
     <?php if ($isCorporate): ?>
