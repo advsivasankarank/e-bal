@@ -5,6 +5,7 @@ require_once __DIR__ . '/../app/helpers/xml_sanitizer.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../app/helpers/tb_import_helper.php';
 require_once __DIR__ . '/../app/helpers/runtime_helper.php';
+require_once __DIR__ . '/../app/helpers/financial_year_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -214,8 +215,59 @@ if (empty($rows)) {
     exit;
 }
 
+/* ---- Resolve opening balances from previous FY closing ---- */
+$openingRows = [];
+$openingSource = 'none';
+$openingWarning = null;
+$openingApplied = 0;
+
 try {
-    $result = importTrialBalanceRows($pdo, $companyId, $fyId, $rows, [], [], true);
+    $fyStmt = $pdo->prepare("SELECT fy_label FROM financial_years WHERE id = ? AND company_id = ? LIMIT 1");
+    $fyStmt->execute([$fyId, $companyId]);
+    $fyLabel = (string) $fyStmt->fetchColumn();
+
+    if ($fyLabel !== '') {
+        $previousFyLabel = getPreviousFinancialYearLabel($fyLabel);
+
+        if ($previousFyLabel !== '') {
+            $previousFy = findFinancialYearByLabel($pdo, $previousFyLabel, $companyId);
+
+            if ($previousFy !== null) {
+                $previousFyId = (int) ($previousFy['id'] ?? 0);
+
+                if ($previousFyId > 0) {
+                    $prevCountStmt = $pdo->prepare("SELECT COUNT(*) FROM tally_ledgers WHERE company_id = ? AND fy_id = ?");
+                    $prevCountStmt->execute([$companyId, $previousFyId]);
+                    $hasStoredPreviousYear = (int) $prevCountStmt->fetchColumn() > 0;
+
+                    if ($hasStoredPreviousYear) {
+                        $openingRows = loadOpeningRowsFromStoredYear($pdo, $companyId, $previousFyId);
+                        $openingSource = 'previous_fy_closing';
+                        $openingApplied = count($openingRows);
+                    } else {
+                        $openingWarning = 'Previous financial year exists but no stored trial balance was found; opening balances set to zero.';
+                    }
+                } else {
+                    $openingWarning = 'Previous financial year ID is invalid; opening balances set to zero.';
+                }
+            } else {
+                $openingWarning = 'No previous financial year trial balance found; opening balances set to zero.';
+            }
+        } else {
+            $openingWarning = 'Could not determine previous financial year; opening balances set to zero.';
+        }
+    } else {
+        $openingWarning = 'Current financial year label not found; opening balances set to zero.';
+    }
+} catch (Throwable $e) {
+    $openingWarning = 'Opening balance resolution failed: ' . $e->getMessage() . '. Opening balances set to zero.';
+    $openingRows = [];
+    $openingSource = 'none';
+    $openingApplied = 0;
+}
+
+try {
+    $result = importTrialBalanceRows($pdo, $companyId, $fyId, $rows, [], $openingRows, true);
 
     if (!(bool) ($result['ok'] ?? false)) {
         http_response_code(409);
@@ -234,6 +286,9 @@ try {
         'client_id' => $clientId,
         'dr_total' => $stats['dr_total'] ?? 0,
         'cr_total' => $stats['cr_total'] ?? 0,
+        'opening_rows_applied' => $openingApplied,
+        'opening_source' => $openingSource,
+        'opening_warning' => $openingWarning,
     ]);
 } catch (Throwable $e) {
     appLog('ERROR', 'Bridge TB upload failed', [
