@@ -248,8 +248,8 @@ function buildOtherEquitySection(array $classified, array $manualInputs, array $
         'movement' => $currentMovement,
         'previous_movement' => $previousMovement,
         'lines' => $lines,
-        'current_total' => $reserveCurrent + $currentClosing,
-        'previous_total' => $reservePrevious + $previousClosing,
+        'current_total' => $reserveCurrent + $currentMovement,
+        'previous_total' => $reservePrevious + $previousMovement,
     ];
 }
 
