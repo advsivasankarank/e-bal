@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../engines/classification_engine.php';
 require_once __DIR__ . '/fy_closure_helper.php';
+require_once __DIR__ . '/figure_helper.php';
 
 function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $fs): array
 {
@@ -19,9 +20,9 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
     if (abs($bsDiff) > 0.01) {
         $errors[] = [
             'check' => 'assets_equals_liabilities',
-            'message' => 'Balance Sheet does not balance. Assets (₹' . number_format($assetsTotal, 2)
-                . ') ≠ Liabilities (₹' . number_format($liabilitiesTotal, 2)
-                . '). Difference: ₹' . number_format($bsDiff, 2) . '.',
+            'message' => 'Balance Sheet does not balance. Assets (₹' . format_inr_number($assetsTotal)
+                . ') ≠ Liabilities (₹' . format_inr_number($liabilitiesTotal)
+                . '). Difference: ₹' . format_inr_number($bsDiff) . '.',
         ];
     }
 
@@ -57,14 +58,14 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
     if (abs($currentDiff) > 0.01) {
         $warnings[] = [
             'check' => 'current_year_reconciliation',
-            'message' => 'Current year balance difference: ₹' . number_format($currentDiff, 2)
+            'message' => 'Current year balance difference: ₹' . format_inr_number($currentDiff)
                 . '. The trial balance totals may not match the classified note totals.',
         ];
     }
     if (abs($previousDiff) > 0.01) {
         $warnings[] = [
             'check' => 'previous_year_reconciliation',
-            'message' => 'Previous year balance difference: ₹' . number_format($previousDiff, 2)
+            'message' => 'Previous year balance difference: ₹' . format_inr_number($previousDiff)
                 . '. Opening balances may not reconcile with note totals.',
         ];
     }

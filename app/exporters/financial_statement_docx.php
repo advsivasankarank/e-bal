@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../helpers/figure_helper.php';
+
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\Writer\Word2007;
 use PhpOffice\PhpWord\SimpleType\TblWidth;
@@ -36,7 +38,7 @@ function addDocxTableRow($table, array $values, bool $isBold = false, bool $isSe
     foreach ($values as $idx => $value) {
         $text = (string) $value;
         if (in_array($idx, $figureCols, true) && is_numeric($value)) {
-            $text = number_format((float) $value, 2);
+            $text = format_inr_number((float) $value);
         }
         $cell = $row->addCell(
             $idx === 0 ? 6000 : 2000,

@@ -168,7 +168,7 @@ if ($isCorporate) {
 
 $validationIssues = [];
 if (abs($currentDiff) > 0.01 || abs($previousDiff) > 0.01) {
-    $validationIssues[] = ['type' => 'error', 'text' => 'BS not balanced (Diff: &#8377;' . number_format($currentDiff, 2) . ')', 'link' => BASE_URL . 'reconciliation_console.php'];
+    $validationIssues[] = ['type' => 'error', 'text' => 'BS not balanced (Diff: &#8377;' . format_inr_number($currentDiff) . ')', 'link' => BASE_URL . 'reconciliation_console.php'];
 }
 if (!empty($parentGroupConflicts)) {
     $validationIssues[] = ['type' => 'warning', 'text' => count($parentGroupConflicts) . ' parent-group conflict(s)', 'link' => BASE_URL . 'data_console/mapping_workbench.php'];
@@ -213,7 +213,7 @@ if (!empty($validationResult['warnings'])) {
     <div style="flex:1;">
         <div style="font-size:1.05rem;font-weight:700;color:<?= $readinessColor ?>;margin-bottom:2px;">Financial Statements Not Ready</div>
         <div style="font-size:0.82rem;color:#475569;">
-            <?php if ($bsDifference): ?>Balance Sheet difference: &#8377;<?= number_format($currentDiff, 2) ?> &middot; <?php endif; ?>
+            <?php if ($bsDifference): ?>Balance Sheet difference: &#8377;<?= format_inr_number($currentDiff) ?> &middot; <?php endif; ?>
             <?php if ($hasConflicts): ?><?= $conflictCount ?> parent-group conflict(s) &middot; <?php endif; ?>
             <?php if ($notesIncomplete): ?><?= $missingNotesCount ?> missing note heading(s) &middot; <?php endif; ?>
             <?php if ($errorCount > 0): ?><?= $errorCount ?> validation error(s) &middot; <?php endif; ?>
@@ -716,7 +716,7 @@ if (!empty($validationResult['warnings'])) {
                     <?php if ($bsDifference): ?>
                     <li class="fs-issue-item error">
                         <div class="fs-issue-title">&#10060; Balance Sheet Not Balanced</div>
-                        <div class="fs-issue-reason">Current year difference: &#8377;<?= number_format($currentDiff, 2) ?>. Assets and liabilities do not match.</div>
+                        <div class="fs-issue-reason">Current year difference: &#8377;<?= format_inr_number($currentDiff) ?>. Assets and liabilities do not match.</div>
                         <div class="fs-issue-action"><a href="<?= BASE_URL ?>reconciliation_console.php">Open Reconciliation Console</a></div>
                     </li>
                     <?php endif; ?>
@@ -831,7 +831,7 @@ if (!empty($validationResult['warnings'])) {
                 <div style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">Ask IntelAI to explain your financial statements.</div>
                 <div class="fs-ai-btns">
                     <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_review&entity=<?= urlencode($companyName) ?>&fy=<?= urlencode($fyName) ?>" target="_blank">Review Financial Statements</a>
-                    <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_bs_diff&diff=<?= urlencode(number_format($currentDiff, 2)) ?>" target="_blank">Why is Balance Sheet Not Balanced?</a>
+                    <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_bs_diff&diff=<?= urlencode(format_inr_number($currentDiff)) ?>" target="_blank">Why is Balance Sheet Not Balanced?</a>
                     <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_missing_notes" target="_blank">Explain Missing Notes</a>
                     <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_mapping_risks" target="_blank">Review Mapping Risks</a>
                     <a class="fs-ai-btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_conflicts" target="_blank">Explain Parent-Group Conflict</a>
@@ -860,7 +860,7 @@ window.ebalIntelAIContext = {
     entityName: <?= json_encode($companyName) ?>,
     fy: <?= json_encode($fyName) ?>,
     activeStatement: "balance-sheet",
-    bsDifference: <?= json_encode(number_format($currentDiff, 2)) ?>,
+    bsDifference: <?= json_encode(format_inr_number($currentDiff)) ?>,
     validationErrors: <?= json_encode($errorCount) ?>,
     validationWarnings: <?= json_encode($warningCount) ?>,
     parentGroupConflicts: <?= json_encode($conflictCount) ?>,

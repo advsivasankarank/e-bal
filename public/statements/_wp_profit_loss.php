@@ -4,6 +4,7 @@
  * Per-statement computation sheet for P&L tab
  * Expects: $fs, $data, $notes, $isFirstYear, $isCorporate, $entitySubcategory
  */
+require_once __DIR__ . '/../../app/helpers/figure_helper.php';
 if (!isset($fs)) return;
 $summary = $fs['summary'] ?? [];
 $prevSummary = $fs['previous_summary'] ?? [];
@@ -14,7 +15,7 @@ $diff = function ($key) use ($summary, $prevSummary) {
     $p = (float)($prevSummary[$key] ?? 0);
     return $c - $p;
 };
-$fmt = function ($v) { return $v === '' ? '--' : number_format((float)$v, 2); };
+$fmt = function ($v) { return $v === '' ? '--' : format_inr_number((float)$v); };
 $hasPrev = !$isFirstYear;
 $isTrust = in_array($entitySubcategory ?? '', ['trust', 'society'], true);
 ?>

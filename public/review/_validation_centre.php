@@ -15,7 +15,7 @@ $checks[] = [
     'impact' => 'financial', 'impact_value' => $tbDiff,
     'passed' => $tbDiff <= 0.01,
     'message' => 'Trial Balance is not balanced',
-    'detail' => $tbDiff > 0.01 ? 'Difference: ' . number_format($tbDiff, 2) : '',
+    'detail' => $tbDiff > 0.01 ? 'Difference: ' . format_inr_number($tbDiff) : '',
     'action_url' => BASE_URL . 'data_console/trial_balance_preview.php', 'action_label' => 'Go to Data'
 ];
 $conflicts = $fs['validation']['parent_group_conflicts'] ?? [];
@@ -44,7 +44,7 @@ $checks[] = [
     'impact' => 'financial', 'impact_value' => $currentDiff,
     'passed' => $currentDiff <= 0.01,
     'message' => 'Balance Sheet does not balance',
-    'detail' => $currentDiff > 0.01 ? 'Difference: Rs. ' . number_format($currentDiff, 2) : '',
+    'detail' => $currentDiff > 0.01 ? 'Difference: Rs. ' . format_inr_number($currentDiff) : '',
     'action_url' => BASE_URL . 'statements/financials.php', 'action_label' => 'Go to Financials'
 ];
 $checks[] = [
@@ -60,7 +60,7 @@ $checks[] = [
     'impact' => 'financial', 'impact_value' => $currentDiff,
     'passed' => $currentDiff <= 0.01,
     'message' => 'Current year reconciliation difference detected',
-    'detail' => $currentDiff > 0.01 ? 'Diff: Rs. ' . number_format($currentDiff, 2) : '',
+    'detail' => $currentDiff > 0.01 ? 'Diff: Rs. ' . format_inr_number($currentDiff) : '',
     'action_url' => BASE_URL . 'statements/financials.php', 'action_label' => 'Go to Financials'
 ];
 $checks[] = [
@@ -68,12 +68,13 @@ $checks[] = [
     'impact' => 'financial', 'impact_value' => $previousDiff,
     'passed' => $previousDiff <= 0.01 || ($fs['is_first_year'] ?? true),
     'message' => 'Previous year reconciliation difference detected',
-    'detail' => $previousDiff > 0.01 ? 'Diff: Rs. ' . number_format($previousDiff, 2) : '',
+    'detail' => $previousDiff > 0.01 ? 'Diff: Rs. ' . format_inr_number($previousDiff) : '',
     'action_url' => BASE_URL . 'statements/financials.php', 'action_label' => 'Go to Financials'
 ];
 $prevFYClosed = true;
 if (!($fs['is_first_year'] ?? true)) {
     require_once __DIR__ . '/../../app/helpers/fy_closure_helper.php';
+    require_once __DIR__ . '/../../app/helpers/figure_helper.php';
     $prevFyId = getPreviousFYId($pdo, (int) $company_id, (int) $fy_id);
     if ($prevFyId) {
         $prevStatus = getFYStatus($pdo, (int) $company_id, (int) $prevFyId);
@@ -224,7 +225,7 @@ foreach ($checks as $c) { $grouped[$c['category']][] = $c; }
                 <?= htmlspecialchars($check['message']) ?>
                 <?php if ($check['detail']): ?><div class="rw-impact"><?= htmlspecialchars($check['detail']) ?></div><?php endif; ?>
                 <?php if ($check['impact'] === 'financial' && $check['impact_value'] > 0): ?>
-                <div class="rw-impact">Financial Impact: Rs. <?= number_format($check['impact_value'], 2) ?></div>
+                <div class="rw-impact">Financial Impact: Rs. <?= format_inr_number($check['impact_value']) ?></div>
                 <?php elseif ($check['impact'] === 'disclosure'): ?>
                 <div class="rw-impact">Disclosure Impact</div>
                 <?php endif; ?>

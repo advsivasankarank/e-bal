@@ -1,6 +1,7 @@
 <?php
 require_once '../../app/context_check.php';
 require_once '../../config/app.php';
+require_once '../../app/helpers/figure_helper.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -40,8 +41,8 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     <?php else: ?>
         <h3>✅ Process Completed</h3>
         <p><strong>Total Ledgers:</strong> <?= (int)$stats['total'] ?></p>
-        <p><strong>Total Debit:</strong> ₹<?= number_format((float)$stats['dr_total'], 2) ?></p>
-        <p><strong>Total Credit:</strong> ₹<?= number_format((float)$stats['cr_total'], 2) ?></p>
+        <p><strong>Total Debit:</strong> ₹<?= format_inr_number((float)$stats['dr_total']) ?></p>
+        <p><strong>Total Credit:</strong> ₹<?= format_inr_number((float)$stats['cr_total']) ?></p>
         <p><strong>Source:</strong> <?= strtoupper($stats['type']) ?></p>
     <?php endif; ?>
 </div>

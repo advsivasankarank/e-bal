@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/engines/reconciliation_engine.php';
 require_once __DIR__ . '/../app/engines/ai_mapping_engine.php';
 require_once __DIR__ . '/../app/helpers/schedule3_master_helper.php';
+require_once __DIR__ . '/../app/helpers/figure_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -22,7 +23,7 @@ function jsonResponse(array $payload, int $statusCode = 200): void
 
 function formatMoney($value): string
 {
-    return number_format((float) $value, 2, '.', ',');
+    return format_inr_number((float) $value);
 }
 
 function findBreakdownBlock(array $response, string $type): ?array

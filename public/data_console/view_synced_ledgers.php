@@ -2,6 +2,7 @@
 require_once '../../app/context_check.php';
 require_once '../../config/database.php';
 require_once '../../app/engines/ai_mapping_engine.php';
+require_once '../../app/helpers/figure_helper.php';
 
 requireFullContext();
 
@@ -103,7 +104,7 @@ foreach ($rows as $row) {
                     Unmapped
                 <?php endif; ?>
             </td>
-            <td><?= (float) ($row['amount'] ?? 0) != 0.0 ? number_format((float) $row['amount'], 2) : '-' ?></td>
+            <td><?= (float) ($row['amount'] ?? 0) != 0.0 ? format_inr_number((float) $row['amount']) : '-' ?></td>
             <td><?= htmlspecialchars($row['dr_cr'] ?: '-') ?></td>
         </tr>
     <?php endforeach; ?>

@@ -3,6 +3,7 @@ require_once '../../app/context_check.php';
 require_once '../../config/database.php';
 require_once '../../app/engines/ai_mapping_engine.php';
 require_once '../../config/app.php';
+require_once '../../app/helpers/figure_helper.php';
 
 requireFullContext();
 
@@ -64,7 +65,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             <tr>
                 <td><input type="checkbox" name="approve[<?= htmlspecialchars($ledgerName) ?>]" value="1"></td>
                 <td><?= htmlspecialchars($ledgerName) ?></td>
-                <td><?= number_format((float) ($row['amount'] ?? 0), 2) ?></td>
+                <td><?= format_inr_number((float) ($row['amount'] ?? 0)) ?></td>
                 <td><?= htmlspecialchars($row['type'] ?? '-') ?></td>
                 <td><input type="text" name="parent_group[<?= htmlspecialchars($ledgerName) ?>]" value="TB Added Ledger"></td>
                 <td>

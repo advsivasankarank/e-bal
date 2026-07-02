@@ -4,6 +4,7 @@
  * Printable summary of all review data
  * Expects: $validationChecks, $remarkData, $signoffData, $readinessScore, $timelineEntries, $companyName, $fyName, $entityType
  */
+require_once __DIR__ . '/../../app/helpers/figure_helper.php';
 if (!isset($validationChecks)) return;
 ?>
 <!DOCTYPE html>
@@ -76,7 +77,7 @@ if (!isset($validationChecks)) return;
                 <strong><?= htmlspecialchars($check['message']) ?></strong>
                 <?php if (!$check['passed'] && $check['detail']): ?><br><small><?= htmlspecialchars($check['detail']) ?></small><?php endif; ?>
                 <?php if (!$check['passed'] && $check['impact'] === 'financial' && $check['impact_value'] > 0): ?>
-                <br><small>Financial Impact: Rs. <?= number_format($check['impact_value'], 2) ?></small>
+                <br><small>Financial Impact: Rs. <?= format_inr_number($check['impact_value']) ?></small>
                 <?php endif; ?>
             </td>
             <td><?= htmlspecialchars($check['category']) ?></td>

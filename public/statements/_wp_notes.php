@@ -4,9 +4,10 @@
  * Per-statement derivation sheet for Notes tab
  * Expects: $fs, $notes, $isFirstYear, $entitySubcategory
  */
+require_once __DIR__ . '/../../app/helpers/figure_helper.php';
 if (!isset($fs) || !isset($notes)) return;
 $sections = $notes['sections'] ?? [];
-$fmt = function ($v) { return $v === '' || $v === null ? '--' : number_format((float)$v, 2); };
+$fmt = function ($v) { return $v === '' || $v === null ? '--' : format_inr_number((float)$v); };
 $hasPrev = !$isFirstYear;
 ?>
 <?php if (empty($sections)): ?>

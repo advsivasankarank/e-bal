@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../helpers/figure_helper.php';
+
 function renderNotesToAccounts(array $notesData): void
 {
     if ($notesData === []) {
@@ -24,7 +26,7 @@ function renderNotesToAccounts(array $notesData): void
                         <?php foreach ($note['table'] as $row): ?>
                             <tr>
                                 <?php foreach ($row as $cell): ?>
-                                    <td><?= is_numeric($cell) ? number_format((float) $cell, 2) : htmlspecialchars((string) $cell) ?></td>
+                                    <td><?= is_numeric($cell) ? format_inr_number((float) $cell) : htmlspecialchars((string) $cell) ?></td>
                                 <?php endforeach; ?>
                             </tr>
                         <?php endforeach; ?>

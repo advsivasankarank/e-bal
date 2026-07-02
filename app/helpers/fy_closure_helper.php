@@ -3,6 +3,7 @@
 require_once __DIR__ . '/financial_year_helper.php';
 require_once __DIR__ . '/parent_group_validation_helper.php';
 require_once __DIR__ . '/mapping_ai_helper.php';
+require_once __DIR__ . '/figure_helper.php';
 
 /* =========================
    SCHEMA MANAGEMENT
@@ -157,10 +158,10 @@ function validateFYClosure(PDO $pdo, int $company_id, int $fy_id): array
     $diff = round($assetsTotal - $equityIncludingProfit, 2);
 
     if (abs($diff) > 0.01) {
-        $msg = "Balance sheet does not balance. Assets (₹" . number_format($assetsTotal, 2)
-            . ") ≠ Liabilities + Equity (₹" . number_format($liabilitiesTotal, 2)
-            . ") including current year profit/loss (₹" . number_format($profit, 2)
-            . "). Difference: ₹" . number_format($diff, 2);
+        $msg = "Balance sheet does not balance. Assets (₹" . format_inr_number($assetsTotal)
+            . ") ≠ Liabilities + Equity (₹" . format_inr_number($liabilitiesTotal)
+            . ") including current year profit/loss (₹" . format_inr_number($profit)
+            . "). Difference: ₹" . format_inr_number($diff);
         $failures[] = ['check_name' => 'balance_sheet_balance', 'severity' => 'error', 'message' => $msg, 'details' => json_encode(['assets' => $assetsTotal, 'liabilities' => $liabilitiesTotal, 'profit' => $profit, 'equity_including_profit' => $equityIncludingProfit, 'diff' => $diff])];
     }
 
@@ -595,7 +596,7 @@ function buildComparativeValidation(PDO $pdo, int $company_id, int $fy_id): arra
 
     $bsCheck = round($prevTotalAssets - $prevTotalLiabilities, 2);
     if (abs($bsCheck) > 0.01) {
-        $issues[] = "Previous year closing Balance Sheet does not balance (Difference: ₹" . number_format($bsCheck, 2) . ").";
+        $issues[] = "Previous year closing Balance Sheet does not balance (Difference: ₹" . format_inr_number($bsCheck) . ").";
     }
 
     if (abs($prevPnlProfit) > 0.01) {
@@ -605,7 +606,7 @@ function buildComparativeValidation(PDO $pdo, int $company_id, int $fy_id): arra
         $capitalMovement = (float) $stmt->fetchColumn();
         $capitalImpact = $prevPnlProfit + $capitalMovement;
         if (abs($capitalImpact) > 0.01) {
-            $issues[] = "Previous year Profit/Loss (₹" . number_format($prevPnlProfit, 2)
+            $issues[] = "Previous year Profit/Loss (₹" . format_inr_number($prevPnlProfit)
                 . ") may not reconcile with Capital movement.";
         }
     }

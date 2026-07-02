@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/helpers/figure_helper.php';
+
 function buildNotes($pdo, $company_id, $data)
 {
     $notes = [];
@@ -25,13 +27,13 @@ function formatNote($title, $rows)
     foreach ($rows as $r) {
         $html .= "<tr>
                     <td>{$r['name']}</td>
-                    <td>".number_format($r['amount'],2)."</td>
+                    <td>".format_inr_number($r['amount'])."</td>
                   </tr>";
 
         $total += $r['amount'];
     }
 
-    $html .= "<tr><td><b>Total</b></td><td><b>".number_format($total,2)."</b></td></tr>";
+    $html .= "<tr><td><b>Total</b></td><td><b>".format_inr_number($total)."</b></td></tr>";
     $html .= "</table>";
 
     return $html;

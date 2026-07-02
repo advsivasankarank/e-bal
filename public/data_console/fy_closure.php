@@ -4,6 +4,7 @@ require_once '../../app/workflow_engine.php';
 require_once '../../config/database.php';
 require_once '../../app/helpers/fy_closure_helper.php';
 require_once '../../app/engines/fs_engine.php';
+require_once '../../app/helpers/figure_helper.php';
 
 requireFullContext();
 
@@ -175,12 +176,12 @@ $fyLabel = (string) $fyStmt->fetchColumn();
             <?php foreach ($snapshotSummary as $code => $amount): ?>
                 <tr>
                     <td><?= htmlspecialchars(scheduleCodeLabel($code)) ?></td>
-                    <td class="figure"><?= number_format($amount, 2) ?></td>
+                    <td class="figure"><?= format_inr_number($amount) ?></td>
                 </tr>
             <?php endforeach; ?>
             <tr style="font-weight:bold;">
                 <td>Total</td>
-                <td class="figure"><?= number_format(array_sum($snapshotSummary), 2) ?></td>
+                <td class="figure"><?= format_inr_number(array_sum($snapshotSummary)) ?></td>
             </tr>
         </table>
     </div>

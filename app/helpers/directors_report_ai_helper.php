@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/figure_helper.php';
+
 function getDirectorsReportSectionDefinitions(): array
 {
     return [
@@ -31,7 +33,7 @@ function buildDirectorsReportFallbackSections(array $fs, string $companyName, st
 
     return [
         'intro' => "Your Directors are pleased to present their report together with the audited financial statements of {$companyName} for the financial year ended {$fyName}.",
-        'financial_highlights' => "- Revenue from operations for the year stood at " . number_format($revenue, 2) . " as against " . number_format($previousRevenue, 2) . " in the previous year.\n- Profit after tax for the year stood at " . number_format($profitAfterTax, 2) . " as against " . number_format($previousPat, 2) . " in the previous year.\n- Net worth as at year end stood at " . number_format($netWorth, 2) . " as against " . number_format($previousNetWorth, 2) . " in the previous year.",
+        'financial_highlights' => "- Revenue from operations for the year stood at " . format_inr_number($revenue) . " as against " . format_inr_number($previousRevenue) . " in the previous year.\n- Profit after tax for the year stood at " . format_inr_number($profitAfterTax) . " as against " . format_inr_number($previousPat) . " in the previous year.\n- Net worth as at year end stood at " . format_inr_number($netWorth) . " as against " . format_inr_number($previousNetWorth) . " in the previous year.",
         'state_of_affairs' => "The Company continued its business operations during the year. The accompanying financial statements and notes to accounts present the operating results and financial position of the Company for the year under review.",
         'dividend_reserve' => "The Board may record its decision regarding declaration of dividend and transfer to reserves based on the approved financial results.",
         'directors_kmp' => "{$signatoryOne}" . ($signatoryTwo !== '' ? " and {$signatoryTwo}" : '') . " continued to act as Directors of the Company during the year. Any changes in directorships or key managerial personnel may be recorded here before finalisation.",

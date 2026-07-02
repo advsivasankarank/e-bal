@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../helpers/figure_helper.php';
+
 function renderScheduleIII(array $report): void
 {
     ?>
@@ -21,8 +23,8 @@ function renderScheduleIII(array $report): void
                         <?php foreach ($rows as $row): ?>
                             <tr>
                                 <td><?= htmlspecialchars((string) ($row['label'] ?? '')) ?></td>
-                                <td><?= number_format((float) ($row['amount'] ?? 0), 2) ?></td>
-                                <td><?= number_format((float) ($row['previous_amount'] ?? 0), 2) ?></td>
+                                <td><?= format_inr_number((float) ($row['amount'] ?? 0)) ?></td>
+                                <td><?= format_inr_number((float) ($row['previous_amount'] ?? 0)) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </table>
@@ -41,8 +43,8 @@ function renderScheduleIII(array $report): void
                 <?php foreach (($report['pnl'] ?? []) as $row): ?>
                     <tr>
                         <td><?= htmlspecialchars((string) ($row['label'] ?? '')) ?></td>
-                        <td><?= number_format((float) ($row['amount'] ?? 0), 2) ?></td>
-                        <td><?= number_format((float) ($row['previous_amount'] ?? 0), 2) ?></td>
+                        <td><?= format_inr_number((float) ($row['amount'] ?? 0)) ?></td>
+                        <td><?= format_inr_number((float) ($row['previous_amount'] ?? 0)) ?></td>
                     </tr>
                 <?php endforeach; ?>
             </table>

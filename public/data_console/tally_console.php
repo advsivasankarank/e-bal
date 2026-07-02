@@ -8,6 +8,7 @@
 $page_title = "Tally Console";
 require_once '../../app/context_check.php';
 require_once '../../app/helpers/financial_year_helper.php';
+require_once '../../app/helpers/figure_helper.php';
 require_once '../../config/database.php';
 
 /* Handle FY selection POST before any output */
@@ -146,7 +147,7 @@ $workflowSteps = [
 function formatAmount($val): string {
     $num = (float) $val;
     if ($num == 0) return '—';
-    return ($num < 0 ? '-' : '') . '₹' . number_format(abs($num), 2);
+    return format_inr($num);
 }
 
 ?>
