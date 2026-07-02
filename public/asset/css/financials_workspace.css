@@ -209,71 +209,26 @@
     margin: 0 0 12px;
     color: #0f172a;
 }
-.fs-compliance-placeholder {
+
+/* --- No Data State --- */
+.fs-no-data {
     text-align: center;
-    padding: 40px 20px;
+    padding: 60px 20px;
     color: var(--muted, #64748b);
-    font-size: 0.9rem;
 }
-.fs-compliance-placeholder .badge {
-    display: inline-block;
-    padding: 4px 10px;
-    background: #f1f5f9;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--muted, #64748b);
-    margin-bottom: 8px;
-}
+.fs-no-data .icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.3; }
 
-/* --- Directors Report in Compliance Zone --- */
-.fs-dr-form textarea {
-    width: 100%;
-    min-height: 80px;
-    padding: 10px 12px;
-    border: 1px solid var(--border, #e2e8f0);
-    border-radius: 8px;
-    font-size: 0.88rem;
-    font-family: inherit;
-    resize: vertical;
-    margin-bottom: 10px;
-}
-.fs-dr-form label {
-    display: block;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--muted, #64748b);
-    margin-bottom: 4px;
-}
+/* ============================================================
+   DELIVERABLE STYLES — Statutory Report Formatting
+   ============================================================ */
 
-/* --- e-BAL Working Paper Header --- */
-.ebal-wp-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    background: linear-gradient(135deg, #eff6ff 0%, #f0f7ff 100%);
-    border: 1px solid #bfdbfe;
-    border-radius: 8px;
-    margin-bottom: 14px;
-}
-.ebal-wp-badge {
-    padding: 4px 10px;
-    background: #1d4ed8;
-    color: #fff;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-.ebal-wp-meta {
-    font-size: 12px;
-    color: #475569;
-}
-.ebal-wp-meta strong {
-    color: #0f172a;
+/* --- e-BAL Deliverable Font Stack (Garamond) --- */
+.ebal-deliverable,
+.ebal-deliverable table,
+.fs-print-preview-content,
+.report-page,
+.notes-shell {
+    font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
 }
 
 /* --- e-BAL Statutory Header --- */
@@ -289,6 +244,7 @@
     margin-bottom: 10px;
 }
 .ebal-company-name {
+    font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
     font-size: 16px;
     font-weight: 700;
     color: #0f172a;
@@ -305,8 +261,83 @@
     color: #94a3b8;
     font-style: italic;
 }
+
+/* --- Report Page Titles (Deliverable) --- */
+.report-page-title {
+    font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 6px;
+    text-align: center;
+}
+.report-page-subtitle {
+    font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
+    font-size: 12px;
+    color: #475569;
+    margin: 0 0 14px;
+    text-align: center;
+    font-style: italic;
+}
+
+/* --- Deliverable Tables --- */
+.report-page table,
+.notes-shell table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 11px;
+}
+.report-page th,
+.report-page td,
+.notes-shell th,
+.notes-shell td {
+    border: 1px solid #c8d3e1;
+    padding: 6px 8px;
+    vertical-align: top;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+.report-page th,
+.notes-shell th {
+    background: #f3f6fb;
+    font-weight: 700;
+    font-size: 10.5px;
+    text-align: left;
+}
+.report-page th.figure,
+.report-page td.figure,
+.notes-shell th.figure,
+.notes-shell td.figure {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- Table Column Widths for A4 --- */
+.report-page table col.col-particulars { width: 58%; }
+.report-page table col.col-note { width: 10%; }
+.report-page table col.col-current { width: 16%; }
+.report-page table col.col-previous { width: 16%; }
+
+/* When no previous year, wider particulars */
+.report-page table.col-3col col.col-particulars { width: 68%; }
+.report-page table.col-3col col.col-note { width: 10%; }
+.report-page table.col-3col col.col-current { width: 22%; }
+
+/* --- Section Headings in Tables --- */
+.report-page tr.section td,
+.report-page tr.section th,
+.notes-shell tr.section td,
+.notes-shell tr.section th {
+    background: #eef2f7;
+    font-weight: 700;
+    font-size: 11px;
+}
+
+/* --- e-BAL Footer Branding --- */
 .ebal-footer-brand {
     text-align: center;
+    font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
     font-size: 10px;
     color: #94a3b8;
     padding: 12px 0 4px;
@@ -314,6 +345,8 @@
     border-top: 1px solid #e2e8f0;
     letter-spacing: 0.04em;
 }
+
+/* --- Disclosure Box --- */
 .ebal-disclosure-box {
     margin-top: 10px;
     padding: 10px 14px;
@@ -324,6 +357,8 @@
     color: #92400e;
     line-height: 1.5;
 }
+
+/* --- Empty Note --- */
 .ebal-empty-note {
     text-align: center;
     padding: 20px;
@@ -331,6 +366,8 @@
     font-style: italic;
     font-size: 13px;
 }
+
+/* --- Print Preview Container --- */
 .fs-print-preview-content {
     background: #fff;
     border: 1px solid #d8e2ef;
@@ -346,24 +383,7 @@
     margin: 0 0 20px;
 }
 
-/* --- No Data State --- */
-.fs-no-data {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--muted, #64748b);
-}
-.fs-no-data .icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.3; }
-
-/* --- Print Preview Container --- */
-.fs-print-preview-container {
-    max-width: 210mm;
-    margin: 0 auto;
-    background: #fff;
-    border: 1px solid #d8e2ef;
-    border-radius: 4px;
-    padding: 15mm;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-}
+/* --- Print Controls --- */
 .fs-print-controls {
     display: flex;
     gap: 8px;
@@ -410,6 +430,36 @@
 .fs-wp-table td.amount { text-align: right; font-variant-numeric: tabular-nums; }
 .fs-wp-table tfoot td { font-weight: 700; background: #f8fafc; }
 
+/* --- e-BAL Working Paper Header --- */
+.ebal-wp-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, #eff6ff 0%, #f0f7ff 100%);
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    margin-bottom: 14px;
+}
+.ebal-wp-badge {
+    padding: 4px 10px;
+    background: #1d4ed8;
+    color: #fff;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.ebal-wp-meta {
+    font-size: 12px;
+    color: #475569;
+}
+.ebal-wp-meta strong {
+    color: #0f172a;
+}
+
 /* --- Responsive --- */
 @media (max-width: 1024px) {
     .fs-workspace { grid-template-columns: 1fr 0fr; }
@@ -423,30 +473,85 @@
     .fs-compliance-zone { padding-top: 14px; }
 }
 
-/* --- Print --- */
+/* ============================================================
+   PRINT / PDF — Professional A4 Layout
+   ============================================================ */
 @media print {
-    @page { size: A4; margin: 10mm; }
-    body { background: #fff !important; }
+    @page {
+        size: A4;
+        margin: 14mm 12mm 16mm 12mm;
+    }
+    body { background: #fff !important; font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif !important; }
+
+    /* Hide app UI */
     .topbar, .page-title, .active-info, .fs-tab-bar, .fs-controls,
     .fs-validation-strip, .fs-section-sidebar, .fs-input-panel,
     .btn, .btn-primary, .success-box, .error-box,
     .fs-compliance-zone { display: none !important; }
+
+    /* Workspace layout */
     .fs-workspace { display: block !important; grid-template-columns: 1fr !important; }
-    .fs-canvas { max-height: none !important; }
+    .fs-canvas { max-height: none !important; overflow: visible !important; }
+
+    /* Report pages */
     .fs-canvas .report-page {
-        width: auto; min-height: auto; margin: 0 0 10mm;
-        border: 0; border-radius: 0; box-shadow: none; padding: 0;
+        width: 100% !important;
+        min-height: auto !important;
+        margin: 0 0 10mm !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
         page-break-after: always;
+        overflow: visible !important;
     }
     .fs-canvas .report-page:last-child { page-break-after: auto; }
     .fs-canvas .report-page[data-tab] { display: block !important; }
+
+    /* Tables — A4 safe */
+    .fs-canvas table,
+    .notes-shell table {
+        table-layout: fixed !important;
+        width: 100% !important;
+        font-size: 11pt !important;
+    }
+    .fs-canvas th, .fs-canvas td,
+    .notes-shell th, .notes-shell td {
+        padding: 5px 6px !important;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    .fs-canvas td.figure, .fs-canvas th.figure,
+    .notes-shell td.figure, .notes-shell th.figure {
+        text-align: right !important;
+        white-space: nowrap;
+    }
+
+    /* Hide collapse icons in print */
+    .note-collapse-icon { display: none !important; }
+
+    /* Hide note links (blue clickable) */
+    .notes-shell a { text-decoration: none !important; color: inherit !important; }
+
+    /* Headers and footers */
     .ebal-stat-header { border-bottom-color: #000 !important; }
+    .ebal-footer-brand { font-size: 9pt !important; color: #666 !important; border-top: 1px solid #ccc !important; }
+
+    /* Working paper headers */
     .ebal-wp-header { background: none !important; border: none !important; padding: 0 !important; }
     .ebal-wp-badge { background: none !important; color: #000 !important; border: 1px solid #000 !important; }
-    .fs-print-preview-content { border: none !important; padding: 0 !important; }
+
+    /* Print preview content */
+    .fs-print-controls { display: none !important; }
+    .fs-print-preview-content { border: none !important; padding: 0 !important; background: none !important; }
+
+    /* Note styling */
     .note-heading { background: none !important; border: 1px solid #ccc !important; }
     .note-heading, .note-table thead th, .note-table tfoot td, .note-table tbody tr:nth-child(even) td {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
+
+    /* Signature block */
+    .signature-table td { border: 0 !important; }
 }

@@ -92,6 +92,13 @@
         var wpMode = sessionStorage.getItem('fs-wp-mode') || 'statement';
 
         pages.forEach(function (p) {
+            /* Never hide report pages inside #fsPrintPreview — they are the print content */
+            var printPreview = document.getElementById('fsPrintPreview');
+            if (printPreview && printPreview.contains(p)) {
+                p.style.display = '';
+                return;
+            }
+
             if (p.getAttribute('data-tab') !== tabId) {
                 p.style.display = 'none';
                 return;

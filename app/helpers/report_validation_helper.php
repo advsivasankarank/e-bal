@@ -110,6 +110,20 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
         }
     }
 
+    /* Company statutory details warning */
+    $companyMeta = $fs['company_meta'] ?? [];
+    $hasCin = !empty(trim((string) ($companyMeta['cin'] ?? '')));
+    $hasAddress = !empty(trim((string) ($companyMeta['registered_address'] ?? '')));
+    if (!$hasCin || !$hasAddress) {
+        $missing = [];
+        if (!$hasCin) $missing[] = 'CIN';
+        if (!$hasAddress) $missing[] = 'Registered Office';
+        $warnings[] = [
+            'check' => 'company_statutory_details',
+            'message' => 'Company statutory details incomplete: ' . implode(' / ', $missing) . ' not configured.',
+        ];
+    }
+
     return [
         'can_generate' => empty($errors),
         'errors' => $errors,

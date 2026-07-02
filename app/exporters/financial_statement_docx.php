@@ -11,8 +11,8 @@ function exportFinancialStatementsToDocx(array $fs, string $companyName, string 
 {
     $phpWord = new PhpWord();
     $phpWord->getDocumentProperties()->setTitle($companyName . ' - Financial Statements - ' . $fyName);
-    $phpWord->setDefaultFontName('Calibri');
-    $phpWord->setDefaultFontSize(10);
+    $phpWord->setDefaultFontName('Garamond');
+    $phpWord->setDefaultFontSize(12);
 
     buildBsSection($phpWord, $fs, $companyName, $fyName);
     buildPlSection($phpWord, $fs, $companyName, $fyName);
@@ -26,20 +26,20 @@ function exportFinancialStatementsToDocx(array $fs, string $companyName, string 
 
 function addDocxCompanyHeader($section, string $companyName, string $titleText, string $subtitleText, array $companyMeta = []): void
 {
-    $section->addTitle($companyName, 1);
+    $section->addTitle($companyName, 1, ['font' => 'Garamond', 'size' => 16]);
     $cin = $companyMeta['cin'] ?? '';
     $address = $companyMeta['registered_address'] ?? '';
     if ($address !== '') {
-        $section->addText('Registered Office: ' . $address, ['size' => 9, 'color' => '475569']);
+        $section->addText('Registered Office: ' . $address, ['size' => 10, 'color' => '475569', 'font' => 'Garamond']);
     }
     if ($cin !== '') {
-        $section->addText('CIN: ' . $cin, ['size' => 9, 'color' => '475569']);
+        $section->addText('CIN: ' . $cin, ['size' => 10, 'color' => '475569', 'font' => 'Garamond']);
     } else {
-        $section->addText('CIN: Not configured', ['size' => 9, 'color' => '94a3b8', 'italic' => true]);
+        $section->addText('CIN: Not configured', ['size' => 10, 'color' => '94a3b8', 'italic' => true, 'font' => 'Garamond']);
     }
     $section->addTextBreak(0.3);
-    $section->addTitle($titleText, 2);
-    $section->addText($subtitleText, ['italic' => true, 'size' => 10]);
+    $section->addTitle($titleText, 2, ['font' => 'Garamond', 'size' => 14]);
+    $section->addText($subtitleText, ['italic' => true, 'size' => 11, 'font' => 'Garamond']);
     $section->addTextBreak(0.5);
 }
 
@@ -55,7 +55,7 @@ function addDocxTableRow($table, array $values, bool $isBold = false, bool $isSe
             $idx === 0 ? 6000 : 2000,
             ['alignment' => in_array($idx, $figureCols, true) ? 'right' : 'left']
         );
-        $cell->addText($text, ['bold' => $isBold || $isSection]);
+        $cell->addText($text, ['bold' => $isBold || $isSection, 'font' => 'Garamond', 'size' => 11]);
     }
 }
 
@@ -190,13 +190,13 @@ function buildNotesSections(PhpWord $phpWord, array $fs): void
     $companyMeta = $fs['company_meta'] ?? [];
     $noteCompanyName = (string) ($companyMeta['company_name'] ?? 'Company');
     $noteCin = (string) ($companyMeta['cin'] ?? '');
-    $noteSection->addTitle($noteCompanyName, 1);
+    $noteSection->addTitle($noteCompanyName, 1, ['font' => 'Garamond', 'size' => 16]);
     if ($noteCin !== '') {
-        $noteSection->addText('CIN: ' . $noteCin, ['size' => 9, 'color' => '475569']);
+        $noteSection->addText('CIN: ' . $noteCin, ['size' => 10, 'color' => '475569', 'font' => 'Garamond']);
     } else {
-        $noteSection->addText('CIN: Not configured', ['size' => 9, 'color' => '94a3b8', 'italic' => true]);
+        $noteSection->addText('CIN: Not configured', ['size' => 10, 'color' => '94a3b8', 'italic' => true, 'font' => 'Garamond']);
     }
-    $noteSection->addText('Notes to Financial Statements', 2);
+    $noteSection->addText('Notes to Financial Statements', 2, ['font' => 'Garamond', 'size' => 14]);
 
     foreach ($sections as $section) {
         $title = $section['title'] ?? 'Note';
