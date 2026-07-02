@@ -136,7 +136,8 @@ try {
         }
 
         $parentStmt->execute([$company_id, $ledger]);
-        $parentGroup = (string) ($parentStmt->fetchColumn() ?: '');
+        $parentRow = $parentStmt->fetch(PDO::FETCH_ASSOC);
+        $parentGroup = (string) (($parentRow['parent_group'] ?? '') ?: '');
 
         $isOverride = !empty($overrides[$ledger]);
         $rememberScope = isset($remember[$ledger]) ? strtolower(trim($remember[$ledger])) : '';

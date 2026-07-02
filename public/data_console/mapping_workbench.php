@@ -1890,12 +1890,13 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 
     /* ---- Dynamic group panel builder ---- */
     function refreshGroupPanel() {
-        /* Compute unmapped counts from grid data */
+        /* Compute unmapped counts from grid data, respecting final_mapping (pending save) */
         var unmappedCounts = {};
         gridData.forEach(function(r) {
             var pg = r.parent_group || '';
             if (!pg) return;
-            if (!r.current_mapping || r.current_mapping === '') {
+            var mappedCode = r.final_mapping || r.current_mapping || '';
+            if (!mappedCode || mappedCode === '') {
                 unmappedCounts[pg] = (unmappedCounts[pg] || 0) + 1;
             }
         });
@@ -2037,12 +2038,14 @@ require_once __DIR__ . '/../layouts/header_v2.php';
         var count = 0;
         for (var i = 0; i < gridData.length; i++) {
             if (gridData[i].parent_group === pg && (!gridData[i].current_mapping || gridData[i].current_mapping === '')) {
+                gridData[i].final_mapping = scheduleCode;
                 count++;
             }
         }
         if (count === 0) { showToast('No unmapped ledgers under "' + pg + '"', 'info'); return; }
         markGroupDirty(pg, scheduleCode);
-        showToast(count + ' unmapped ledgers under "' + pg + '" marked for mapping to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
+        refreshGroupPanel();
+        showToast(count + ' unmapped ledgers under "' + pg + '" mapped to ' + (optionsMap[scheduleCode] || scheduleCode), 'success');
     });
 
     /* ---- Group save ---- */
@@ -2057,7 +2060,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
                 for (var i = 0; i < gridData.length; i++) {
                     var r = gridData[i];
                     if (r.parent_group === pg && (!r.current_mapping || r.current_mapping === '')) {
-                        mappings[r.ledger_name] = code;
+                        mappings[r.ledger_name] = r.final_mapping || code;
                     }
                 }
             });
@@ -2072,20 +2075,35 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             .then(function(r) { return r.json(); })
             .then(function(resp) {
                 btnSave.disabled = false;
+                btnSave.textContent = '\uD83D\uDCBE Save Changes';
                 if (resp.redirect) {
                     showToast(resp.error || 'Session expired', 'error');
                     setTimeout(function() { window.location.href = ebalBaseUrl + 'login.php'; }, 1500);
                     return;
                 }
                 if (resp.success) {
+                    var savedCount = resp.saved || 0;
+                    var conflictCount = resp.conflicts || 0;
+                    var errorCount = (resp.errors || []).length;
                     groupDirty = {};
                     var el = document.getElementById('statUnsaved');
                     if (el) el.textContent = '0';
-                    var msg = (resp.saved || 0) + ' mappings saved.';
+                    var msg = savedCount + ' mappings saved.';
+                    if (conflictCount > 0) {
+                        msg += ' ' + conflictCount + ' skipped (parent group conflict).';
+                        var details = (resp.conflict_details || []).map(function(c) {
+                            return c.ledger_name + ': ' + c.parent_group + ' \u2194 ' + c.schedule_code;
+                        }).join(', ');
+                        if (details) msg += ' ' + details;
+                    }
+                    if (errorCount > 0) {
+                        msg += ' ' + errorCount + ' error(s): ' + (resp.errors || []).join('; ');
+                    }
                     if (resp.pending > 0) msg += ' ' + resp.pending + ' remaining.';
-                    document.getElementById('statusText').textContent = 'Saved ' + (resp.saved || 0) + ' rows';
-                    showToast(msg, 'success');
-                    setTimeout(function() { window.location.reload(); }, 1500);
+                    if (resp.mapping_complete) msg += ' All ledgers mapped!';
+                    document.getElementById('statusText').textContent = 'Saved ' + savedCount + (conflictCount > 0 ? ', ' + conflictCount + ' conflicts' : '') + ' rows';
+                    showToast(msg, savedCount > 0 ? 'success' : (conflictCount > 0 ? 'info' : 'error'));
+                    setTimeout(function() { window.location.reload(); }, conflictCount > 0 ? 3000 : 1500);
                 } else {
                     document.getElementById('statusText').textContent = 'Save failed';
                     showToast(resp.error || 'Save failed', 'error');
@@ -2104,8 +2122,12 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     if (btnReset) {
         btnReset.addEventListener('click', function() {
             groupDirty = {};
+            for (var i = 0; i < gridData.length; i++) {
+                gridData[i].final_mapping = '';
+            }
             var el = document.getElementById('statUnsaved');
             if (el) el.textContent = '0';
+            refreshGroupPanel();
             showToast('All changes reset', 'info');
         });
     }
