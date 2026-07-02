@@ -246,6 +246,106 @@
     margin-bottom: 4px;
 }
 
+/* --- e-BAL Working Paper Header --- */
+.ebal-wp-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, #eff6ff 0%, #f0f7ff 100%);
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    margin-bottom: 14px;
+}
+.ebal-wp-badge {
+    padding: 4px 10px;
+    background: #1d4ed8;
+    color: #fff;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.ebal-wp-meta {
+    font-size: 12px;
+    color: #475569;
+}
+.ebal-wp-meta strong {
+    color: #0f172a;
+}
+
+/* --- e-BAL Statutory Header --- */
+.ebal-stat-header {
+    text-align: center;
+    padding: 16px 0 12px;
+    border-bottom: 2px solid #0f172a;
+    margin-bottom: 16px;
+}
+.ebal-stat-header--compact {
+    border-bottom: 1px solid #d8e2ef;
+    padding: 10px 0 8px;
+    margin-bottom: 10px;
+}
+.ebal-company-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+.ebal-company-detail {
+    font-size: 12px;
+    color: #475569;
+    line-height: 1.5;
+}
+.ebal-company-detail.ebal-placeholder {
+    color: #94a3b8;
+    font-style: italic;
+}
+.ebal-footer-brand {
+    text-align: center;
+    font-size: 10px;
+    color: #94a3b8;
+    padding: 12px 0 4px;
+    margin-top: 16px;
+    border-top: 1px solid #e2e8f0;
+    letter-spacing: 0.04em;
+}
+.ebal-disclosure-box {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #92400e;
+    line-height: 1.5;
+}
+.ebal-empty-note {
+    text-align: center;
+    padding: 20px;
+    color: #94a3b8;
+    font-style: italic;
+    font-size: 13px;
+}
+.fs-print-preview-content {
+    background: #fff;
+    border: 1px solid #d8e2ef;
+    border-radius: 8px;
+    padding: 24px;
+    margin-top: 12px;
+}
+.fs-print-preview-content .report-page {
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0 0 20px;
+}
+
 /* --- No Data State --- */
 .fs-no-data {
     text-align: center;
@@ -340,4 +440,13 @@
     }
     .fs-canvas .report-page:last-child { page-break-after: auto; }
     .fs-canvas .report-page[data-tab] { display: block !important; }
+    .ebal-stat-header { border-bottom-color: #000 !important; }
+    .ebal-wp-header { background: none !important; border: none !important; padding: 0 !important; }
+    .ebal-wp-badge { background: none !important; color: #000 !important; border: 1px solid #000 !important; }
+    .fs-print-preview-content { border: none !important; padding: 0 !important; }
+    .note-heading { background: none !important; border: 1px solid #ccc !important; }
+    .note-heading, .note-table thead th, .note-table tfoot td, .note-table tbody tr:nth-child(even) td {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
 }

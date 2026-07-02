@@ -278,6 +278,11 @@ require_once __DIR__ . '/../layouts/header_v2.php';
                 <button onclick="window.print()">Print</button>
                 <a href="<?= BASE_URL ?>report_download.php?format=pdf" style="padding:6px 14px;border:1px solid #e2e8f0;border-radius:6px;text-decoration:none;font-size:0.82rem;">Download PDF</a>
             </div>
+            <div class="fs-print-preview-content">
+                <!-- Render same content as statement view for printing -->
+                <?php include $fs['format_template']; ?>
+                <?php include $fs['notes_template']; ?>
+            </div>
         </div>
     </div>
 

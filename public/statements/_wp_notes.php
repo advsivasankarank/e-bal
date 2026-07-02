@@ -2,14 +2,29 @@
 /**
  * Working Paper: Notes to Accounts
  * Per-statement derivation sheet for Notes tab
- * Expects: $fs, $notes, $isFirstYear, $entitySubcategory
+ * Expects: $fs, $notes, $isFirstYear, $entitySubcategory, $companyName, $fyName
  */
 require_once __DIR__ . '/../../app/helpers/figure_helper.php';
 if (!isset($fs) || !isset($notes)) return;
+$company_meta = $fs['company_meta'] ?? [];
 $sections = $notes['sections'] ?? [];
 $fmt = function ($v) { return $v === '' || $v === null ? '--' : format_inr_number((float)$v); };
 $hasPrev = !$isFirstYear;
+$wpCompanyName = $companyName ?? ($company_meta['company_name'] ?? 'Company');
+$wpFy = $fyName ?? '';
+$wpGenTime = date('d M Y H:i:s');
 ?>
+
+<!-- Working Paper Header -->
+<div class="ebal-wp-header">
+    <div class="ebal-wp-badge">e-BAL Working Paper</div>
+    <div class="ebal-wp-meta">
+        <strong><?= htmlspecialchars($wpCompanyName) ?></strong> &middot;
+        FY: <?= htmlspecialchars($wpFy) ?> &middot;
+        Generated: <?= $wpGenTime ?>
+    </div>
+</div>
+
 <?php if (empty($sections)): ?>
 <div class="fs-wp-section">
     <h4>No Note Data Available</h4>

@@ -530,6 +530,8 @@ function getCompanyReportingMeta(PDO $pdo, int $companyId): array
 
     return [
         'company_name' => (string) ($row['name'] ?? ''),
+        'cin' => (string) ($row['cin'] ?? ''),
+        'registered_address' => (string) ($row['registered_address'] ?? ''),
         'auditor_name' => (string) ($row['statutory_auditor_name'] ?? ''),
         'auditor_firm' => (string) ($row['statutory_auditor_firm'] ?? ''),
         'auditor_frn' => (string) ($row['statutory_auditor_frn'] ?? ''),

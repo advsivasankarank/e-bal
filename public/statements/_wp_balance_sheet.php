@@ -2,10 +2,11 @@
 /**
  * Working Paper: Balance Sheet
  * Per-statement computation sheet for BS tab
- * Expects: $fs, $data, $notes, $isFirstYear, $isCorporate, $entitySubcategory
+ * Expects: $fs, $data, $notes, $isFirstYear, $isCorporate, $entitySubcategory, $companyName, $fyName
  */
 require_once __DIR__ . '/../../app/helpers/figure_helper.php';
 if (!isset($fs)) return;
+$company_meta = $fs['company_meta'] ?? [];
 $summary = $fs['summary'] ?? [];
 $prevSummary = $fs['previous_summary'] ?? [];
 $prev = function ($key) use ($prevSummary) { return $prevSummary[$key] ?? ''; };
@@ -17,7 +18,21 @@ $diff = function ($key) use ($summary, $prevSummary) {
 };
 $fmt = function ($v) { return $v === '' ? '--' : format_inr_number((float)$v); };
 $hasPrev = !$isFirstYear;
+$wpCompanyName = $companyName ?? ($company_meta['company_name'] ?? 'Company');
+$wpFy = $fyName ?? '';
+$wpGenTime = date('d M Y H:i:s');
 ?>
+
+<!-- Working Paper Header -->
+<div class="ebal-wp-header">
+    <div class="ebal-wp-badge">e-BAL Working Paper</div>
+    <div class="ebal-wp-meta">
+        <strong><?= htmlspecialchars($wpCompanyName) ?></strong> &middot;
+        FY: <?= htmlspecialchars($wpFy) ?> &middot;
+        Generated: <?= $wpGenTime ?>
+    </div>
+</div>
+
 <div class="fs-wp-section">
     <h4>1. Share Capital Movement</h4>
     <div class="fs-wp-derivation">Opening + Issued during year - Buyback = Closing</div>

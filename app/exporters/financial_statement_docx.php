@@ -24,9 +24,20 @@ function exportFinancialStatementsToDocx(array $fs, string $companyName, string 
     return $filename;
 }
 
-function addDocxCompanyHeader($section, string $companyName, string $titleText, string $subtitleText): void
+function addDocxCompanyHeader($section, string $companyName, string $titleText, string $subtitleText, array $companyMeta = []): void
 {
     $section->addTitle($companyName, 1);
+    $cin = $companyMeta['cin'] ?? '';
+    $address = $companyMeta['registered_address'] ?? '';
+    if ($address !== '') {
+        $section->addText('Registered Office: ' . $address, ['size' => 9, 'color' => '475569']);
+    }
+    if ($cin !== '') {
+        $section->addText('CIN: ' . $cin, ['size' => 9, 'color' => '475569']);
+    } else {
+        $section->addText('CIN: Not configured', ['size' => 9, 'color' => '94a3b8', 'italic' => true]);
+    }
+    $section->addTextBreak(0.3);
     $section->addTitle($titleText, 2);
     $section->addText($subtitleText, ['italic' => true, 'size' => 10]);
     $section->addTextBreak(0.5);
@@ -68,7 +79,8 @@ function buildBsSection(PhpWord $phpWord, array $fs, string $companyName, string
     $data = $fs['data'] ?? [];
     $hasPrev = !($fs['is_first_year'] ?? false);
 
-    addDocxCompanyHeader($section, $companyName, 'Balance Sheet', 'As at ' . ($data['date'] ?? $fyName));
+    $companyMeta = $fs['company_meta'] ?? [];
+    addDocxCompanyHeader($section, $companyName, 'Balance Sheet', 'As at ' . ($data['date'] ?? $fyName), $companyMeta);
 
     $tableStyle = ['borderSize' => 6, 'borderColor' => '999999', 'cellMargin' => 80];
     $firstRowStyle = ['bgColor' => 'F0F4F8'];
@@ -119,7 +131,8 @@ function buildPlSection(PhpWord $phpWord, array $fs, string $companyName, string
 
     $plLabel = ($fs['entity_subcategory'] ?? '') === 'trust' ? 'Income & Expenditure' : 'Profit & Loss';
 
-    addDocxCompanyHeader($section, $companyName, 'Statement of ' . $plLabel, 'For the year ended ' . ($data['date'] ?? $fyName));
+    $companyMeta = $fs['company_meta'] ?? [];
+    addDocxCompanyHeader($section, $companyName, 'Statement of ' . $plLabel, 'For the year ended ' . ($data['date'] ?? $fyName), $companyMeta);
 
     $tableStyle = ['borderSize' => 6, 'borderColor' => '999999', 'cellMargin' => 80];
     $firstRowStyle = ['bgColor' => 'F0F4F8'];
@@ -174,7 +187,16 @@ function buildNotesSections(PhpWord $phpWord, array $fs): void
     }
 
     $noteSection = $phpWord->addSection(['margin' => [1440, 1440, 1440, 1440]]);
-    $noteSection->addTitle('Notes to Accounts', 2);
+    $companyMeta = $fs['company_meta'] ?? [];
+    $noteCompanyName = (string) ($companyMeta['company_name'] ?? 'Company');
+    $noteCin = (string) ($companyMeta['cin'] ?? '');
+    $noteSection->addTitle($noteCompanyName, 1);
+    if ($noteCin !== '') {
+        $noteSection->addText('CIN: ' . $noteCin, ['size' => 9, 'color' => '475569']);
+    } else {
+        $noteSection->addText('CIN: Not configured', ['size' => 9, 'color' => '94a3b8', 'italic' => true]);
+    }
+    $noteSection->addText('Notes to Financial Statements', 2);
 
     foreach ($sections as $section) {
         $title = $section['title'] ?? 'Note';
