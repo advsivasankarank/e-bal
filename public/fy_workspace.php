@@ -6,7 +6,10 @@
  * Data Centre, Financial Statements, Review Centre, Deliverables.
  */
 $page_title = 'Financial Year Console';
-require_once __DIR__ . '/layouts/header_v2.php';
+
+/* ---- Bootstrap before any output ---- */
+require_once __DIR__ . '/../app/context_check.php';
+require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/../app/helpers/entity_access_helper.php';
@@ -16,7 +19,7 @@ $userId  = (int) ($_SESSION['user_id'] ?? 0);
 $entityId = (int) ($_GET['entity_id'] ?? 0);
 $fyId = (int) ($_GET['fy_id'] ?? 0);
 
-/* ---- Validate entity access ---- */
+/* ---- Validate entity access (may redirect) ---- */
 validateEntityAccessOrRedirect($pdo, $entityId, 'view');
 
 $stmt = $pdo->prepare("SELECT id, name, category, pan, cin, llp_code FROM companies WHERE id = ?");
@@ -29,7 +32,7 @@ if (!$entity) {
     exit;
 }
 
-/* ---- Validate FY ---- */
+/* ---- Validate FY (may redirect) ---- */
 if ($fyId <= 0) {
     header("Location: " . BASE_URL . "fy_manager.php?entity_id=" . $entityId);
     exit;
@@ -87,6 +90,9 @@ $entityLabelMap = [
 ];
 $catKey = strtolower(str_replace(['-', ' '], '_', $entity['category'] ?? ''));
 $entLabel = $entityLabelMap[$catKey] ?? ucfirst($entity['category'] ?? '');
+
+/* ---- All redirects complete, safe to output HTML ---- */
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
 <?= uiBreadcrumb([

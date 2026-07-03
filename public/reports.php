@@ -8,7 +8,6 @@ require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 $showSidebar = true;
 $page_title = 'Management Reports';
-require_once __DIR__ . '/layouts/header_v2.php';
 
 requireFullContext();
 
@@ -185,6 +184,9 @@ if (!empty($validationResult['warnings'])) {
     $validationSummary['warnings'] = count($validationResult['warnings']);
     $validationIssues[] = ['type' => 'warning', 'text' => count($validationResult['warnings']) . ' validation warning(s)', 'link' => BASE_URL . 'review_centre.php'];
 }
+?>
+/* ---- All redirects complete, safe to output HTML ---- */
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
 <?= uiBreadcrumb([
