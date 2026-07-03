@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $mode === 'archive') {
 
             /* Determine action URL based on mode */
             if ($mode === 'open') {
-                $actionUrl = BASE_URL . 'fy_manager.php?entity_id=' . (int) $ent['id'];
+                $actionUrl = BASE_URL . 'fy_workspace.php?entity_id=' . (int) $ent['id'];
                 $actionLabel = 'Select';
                 $actionClass = 'v2-btn--primary';
             } elseif ($mode === 'edit') {

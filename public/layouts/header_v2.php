@@ -78,10 +78,8 @@ $v2CurrentDir    = basename(dirname($_SERVER['SCRIPT_NAME'] ?? ''));
 $v2ActiveSection = 'gateway';
 if ($v2CurrentScript === 'dashboard_company.php' || $v2CurrentScript === 'entity_select.php' || $v2CurrentScript === 'entity_create.php' || $v2CurrentScript === 'entity_edit.php') {
     $v2ActiveSection = 'gateway';
-} elseif ($v2CurrentScript === 'fy_manager.php') {
+} elseif ($v2CurrentScript === 'fy_manager.php' || $v2CurrentScript === 'fy_workspace.php') {
     $v2ActiveSection = 'fy_manager';
-} elseif ($v2CurrentScript === 'fy_workspace.php') {
-    $v2ActiveSection = 'workspace';
 } elseif ($v2CurrentDir === 'data' || $v2CurrentScript === 'data' || $v2CurrentDir === 'data_console') {
     $v2ActiveSection = 'data';
 } elseif ($v2CurrentDir === 'statements' || $v2CurrentScript === 'statements') {

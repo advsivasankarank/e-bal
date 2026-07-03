@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['company_id'] = (int) $newId;
         $_SESSION['company_name'] = $name;
 
-        header("Location: " . BASE_URL . "fy_manager.php?entity_id=" . (int) $newId);
+        header("Location: " . BASE_URL . "fy_workspace.php?entity_id=" . (int) $newId);
         exit;
     }
 }
