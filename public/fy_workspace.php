@@ -5,11 +5,12 @@
  * After entity + FY selection, shows four main modules:
  * Data Centre, Financial Statements, Review Centre, Deliverables.
  */
-$page_title = 'FY Workspace';
+$page_title = 'Financial Year Console';
 require_once __DIR__ . '/layouts/header_v2.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/../app/helpers/entity_access_helper.php';
+require_once __DIR__ . '/../app/helpers/workflow_navigation_helper.php';
 
 $userId  = (int) ($_SESSION['user_id'] ?? 0);
 $entityId = (int) ($_GET['entity_id'] ?? 0);
@@ -94,7 +95,12 @@ $entLabel = $entityLabelMap[$catKey] ?? ucfirst($entity['category'] ?? '');
     ['label' => 'FY ' . htmlspecialchars($fy['fy_label'])],
 ]) ?>
 
-<?= uiPageHero('FY Workspace', htmlspecialchars($entity['name']) . ' — Financial Year ' . htmlspecialchars($fy['fy_label'])) ?>
+<?= uiPageHero('Financial Year Console', htmlspecialchars($entity['name']) . ' — Financial Year ' . htmlspecialchars($fy['fy_label'])) ?>
+
+<?php
+$navData = getWorkflowNavigation($pdo, $entityId, $fyId);
+echo renderWorkflowNavigation($navData);
+?>
 
 <?= uiWorkspaceStart() ?>
 

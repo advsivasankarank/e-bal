@@ -7,7 +7,7 @@ require_once __DIR__ . '/../app/helpers/figure_helper.php';
 require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 $showSidebar = true;
-$page_title = 'Financial Statements Workspace';
+$page_title = 'Management Reports';
 require_once __DIR__ . '/layouts/header_v2.php';
 
 requireFullContext();

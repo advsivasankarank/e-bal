@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../app/helpers/report_manual_helper.php';
 require_once __DIR__ . '/../../app/helpers/figure_helper.php';
 require_once __DIR__ . '/../../app/helpers/report_validation_helper.php';
 require_once __DIR__ . '/../../app/workflow_engine.php';
+require_once __DIR__ . '/../../app/helpers/workflow_navigation_helper.php';
 
 $page_title = 'Financial Statements';
 requireAssignmentAccess();
@@ -161,6 +162,11 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     'status' => $hasReportData ? 'Reports Ready' : 'Setup Required',
     'edit_url' => '',
 ]) ?>
+
+<?php
+$navData = getWorkflowNavigation($pdo, $company_id, $fy_id);
+echo renderWorkflowNavigation($navData);
+?>
 
 <?php if ($hasReportData): ?>
 <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;">

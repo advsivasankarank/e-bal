@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../app/helpers/figure_helper.php';
 require_once __DIR__ . '/../../app/helpers/report_validation_helper.php';
 require_once __DIR__ . '/../../app/helpers/company_reporting_helper.php';
 require_once __DIR__ . '/../../app/workflow_engine.php';
+require_once __DIR__ . '/../../app/helpers/workflow_navigation_helper.php';
 
 $page_title = 'Deliverables';
 requireAssignmentAccess();
@@ -83,6 +84,11 @@ $baseUrl = BASE_URL . 'report_download.php';
     'status' => $deliveryStatus === 'ready' ? 'Ready for Delivery' : ucfirst($deliveryStatus),
     'edit_url' => '',
 ]) ?>
+
+<?php
+$navData = getWorkflowNavigation($pdo, $company_id, $fy_id);
+echo renderWorkflowNavigation($navData);
+?>
 
 <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
     <a class="btn btn-sm" href="<?= BASE_URL ?>assignment_home.php">&larr; Back to Assignment</a>

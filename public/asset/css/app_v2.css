@@ -267,8 +267,9 @@ img { display: block; max-width: 100%; }
   width: var(--sidebar-collapsed-w);
 }
 
-/* Desktop hover-expand sidebar */
+/* Desktop sidebar — expanded via toggle, collapsed by default */
 @media (min-width: 1025px) {
+  /* Default collapsed state */
   .v2-sidebar {
     width: var(--sidebar-collapsed-w);
   }
@@ -301,41 +302,35 @@ img { display: block; max-width: 100%; }
     margin: 4px 8px;
   }
 
-  .v2-sidebar:hover,
-  .v2-sidebar.hover-expand {
+  /* Expanded state via hamburger toggle (no .collapsed class) */
+  .v2-sidebar:not(.collapsed) {
     width: var(--sidebar-w);
-    box-shadow: var(--shadow-md);
     overflow-y: auto;
   }
 
-  .v2-sidebar:hover .v2-nav-text,
-  .v2-sidebar.hover-expand .v2-nav-text {
+  .v2-sidebar:not(.collapsed) .v2-nav-text {
     opacity: 1;
     width: auto;
-    transition: opacity 0.15s ease 0.08s, width 0.15s ease 0.08s;
+    transition: opacity 0.15s ease, width 0.15s ease;
   }
 
-  .v2-sidebar:hover .v2-nav-label,
-  .v2-sidebar.hover-expand .v2-nav-label {
+  .v2-sidebar:not(.collapsed) .v2-nav-label {
     opacity: 1;
     height: auto;
     padding: 16px 10px 4px;
-    transition: opacity 0.15s ease 0.08s, height 0.15s ease, padding 0.15s ease;
+    transition: opacity 0.15s ease, height 0.15s ease, padding 0.15s ease;
   }
 
-  .v2-sidebar:hover .v2-nav-item,
-  .v2-sidebar.hover-expand .v2-nav-item {
+  .v2-sidebar:not(.collapsed) .v2-nav-item {
     justify-content: flex-start;
     padding: 8px 10px;
   }
 
-  .v2-sidebar:hover .v2-nav-badge,
-  .v2-sidebar.hover-expand .v2-nav-badge {
+  .v2-sidebar:not(.collapsed) .v2-nav-badge {
     display: inline;
   }
 
-  .v2-sidebar:hover .v2-nav-divider,
-  .v2-sidebar.hover-expand .v2-nav-divider {
+  .v2-sidebar:not(.collapsed) .v2-nav-divider {
     margin: 6px 10px;
   }
 }
@@ -485,10 +480,9 @@ img { display: block; max-width: 100%; }
   transition: margin-left var(--transition);
 }
 
-/* Desktop hover expand: main adjusts when sidebar expands */
+/* Desktop: main adjusts when sidebar is expanded via toggle */
 @media (min-width: 1025px) {
-  .v2-sidebar:hover ~ .v2-main,
-  .v2-sidebar.hover-expand ~ .v2-main {
+  .v2-sidebar:not(.collapsed) ~ .v2-main {
     margin-left: var(--sidebar-w);
   }
 }
@@ -2401,20 +2395,103 @@ img { display: block; max-width: 100%; }
   -webkit-overflow-scrolling: touch;
 }
 
-/* ---- PRINT ---- */
+/* ---- WORKFLOW NAVIGATION ---- */
+.v2-workflow-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.v2-wf-current {
+  font-size: 0.82rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.v2-wf-current-label {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.v2-wf-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.v2-wf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+.v2-wf-btn:hover {
+  background: var(--bg);
+  border-color: var(--brand);
+}
+.v2-wf-btn--next {
+  background: var(--brand);
+  color: var(--brand-text);
+  border-color: var(--brand);
+}
+.v2-wf-btn--next:hover {
+  background: var(--brand-hover);
+}
+.v2-wf-btn--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.v2-wf-block-reason {
+  font-size: 0.72rem;
+  color: var(--warning);
+  margin-left: 4px;
+}
+
+@media (max-width: 768px) {
+  .v2-workflow-nav {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .v2-wf-controls {
+    justify-content: center;
+  }
+}
+
 @media print {
+  .v2-workflow-nav {
+    display: none !important;
+  }
   .v2-topbar,
   .v2-sidebar,
   .v2-mobile-overlay {
     display: none !important;
   }
-
   .v2-main {
     margin-left: 0 !important;
     padding-top: 0 !important;
   }
-
   .v2-content {
     padding: 0;
   }
+}
 }

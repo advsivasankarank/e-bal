@@ -11,10 +11,11 @@
  * Requires active Entity + FY context.
  * No inline context selection — context must be established before reaching this page.
  */
-$page_title = 'Data Centre';
+$page_title = 'Data Console';
 require_once __DIR__ . '/../../app/context_check.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../app/workflow_engine.php';
+require_once __DIR__ . '/../../app/helpers/workflow_navigation_helper.php';
 
 /* ---- Require active context ---- */
 $v2CompanyId = (int) ($_SESSION['company_id'] ?? 0);
@@ -159,7 +160,12 @@ foreach ($v2SubSections as $ss) {
     ['label' => 'Data Centre'],
 ]) ?>
 
-<?= uiPageHero('Data Centre', htmlspecialchars($v2CompanyName) . ' · FY ' . htmlspecialchars($v2FyName)) ?>
+<?= uiPageHero('Data Console', htmlspecialchars($v2CompanyName) . ' · FY ' . htmlspecialchars($v2FyName)) ?>
+
+<?php
+$navData = getWorkflowNavigation($pdo, $v2CompanyId, $v2FyId);
+echo renderWorkflowNavigation($navData);
+?>
 
 <!-- Progress -->
 <div class="v2-dw-progress">

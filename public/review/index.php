@@ -7,8 +7,9 @@ require_once __DIR__ . '/../../app/helpers/figure_helper.php';
 require_once __DIR__ . '/../../app/helpers/report_validation_helper.php';
 require_once __DIR__ . '/../../app/helpers/company_reporting_helper.php';
 require_once __DIR__ . '/../../app/workflow_engine.php';
+require_once __DIR__ . '/../../app/helpers/workflow_navigation_helper.php';
 
-$page_title = 'Review Workspace';
+$page_title = 'Review Centre';
 requireAssignmentAccess();
 
 $company_id = $_SESSION['company_id'];
@@ -221,6 +222,11 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     'status' => $hasReportData ? 'Reports Ready' : 'Setup Required',
     'edit_url' => '',
 ]) ?>
+
+<?php
+$navData = getWorkflowNavigation($pdo, $company_id, $fy_id);
+echo renderWorkflowNavigation($navData);
+?>
 
 <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
     <a class="btn btn-sm" href="<?= BASE_URL ?>assignment_home.php">&larr; Back to Assignment</a>

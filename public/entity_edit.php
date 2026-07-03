@@ -5,7 +5,8 @@
  * Edit entity master details. Does not affect financial data.
  */
 $page_title = 'Edit Entity';
-require_once __DIR__ . '/layouts/header_v2.php';
+require_once __DIR__ . '/../app/context_check.php';
+require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/../app/helpers/entity_access_helper.php';
@@ -26,6 +27,7 @@ if (!$entity) {
     exit;
 }
 
+/* ---- Process POST before any HTML output ---- */
 $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrfToken();
@@ -59,6 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 }
+
+/* ---- Now render HTML (after all redirects) ---- */
+require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
 <?= uiBreadcrumb([
