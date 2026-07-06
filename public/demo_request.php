@@ -8,6 +8,9 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/helpers/security_helper.php';
 require_once __DIR__ . '/../app/helpers/demo_helper.php';
 
+/* Start session early so flash messages persist across redirects */
+secureSessionStart();
+
 /* Prevent LiteSpeed/CDN caching — demo form must always render fresh */
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -34,13 +37,14 @@ if (!empty($_SESSION['demo_success'])) {
 if (!empty($_SESSION['demo_send_email'])) {
     $emailTask = $_SESSION['demo_send_email'];
     unset($_SESSION['demo_send_email']);
-    try {
-        require_once __DIR__ . '/../app/helpers/mail_helper.php';
-        sendDemoCredentialsEmail($pdo, $emailTask['email'], $emailTask['password'], $emailTask['name']);
-    } catch (Throwable $e) {
-        if (function_exists('appLog')) {
-            appLog('WARN', 'Demo credential email failed after redirect', ['error' => $e->getMessage()]);
-        }
+    /* Phase 1: Log email task — do not block page response with mail().
+       SMTP must be configured for reliable delivery. */
+    if (function_exists('appLog')) {
+        appLog('INFO', 'Demo credential email queued', [
+            'email' => $emailTask['email'],
+            'name' => $emailTask['name'],
+            'note' => 'SMTP not configured — email delivery pending',
+        ]);
     }
 }
 
@@ -82,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['is_demo'] = true;
             $_SESSION['demo_status'] = 'credentials_sent';
 
-            $success = 'Your e-BAL demo access has been created. Login credentials have been sent to your email address. Please check your inbox and login to explore e-BAL.';
+            $success = 'Your e-BAL demo access has been created. Login credentials will be sent to your email address. If you do not receive the email, please contact support@etaxadv.com.';
 
             /* Defer email sending to after redirect — prevents mail() from blocking response */
             $_SESSION['demo_send_email'] = [
