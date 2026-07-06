@@ -112,6 +112,21 @@ if (strlen($v2Initials) < 2 && strlen($v2UserName) > 1) {
     $v2Initials = strtoupper(substr($v2UserName, 0, 2));
 }
 
+/* ---- Demo mode detection ---- */
+$v2IsDemo = false;
+$v2DemoStatus = '';
+$v2DemoTimeRemaining = '';
+try {
+    require_once __DIR__ . '/../../app/helpers/demo_helper.php';
+    $v2IsDemo = isDemoUser($pdo);
+    if ($v2IsDemo) {
+        $v2DemoStatus = getDemoStatus($pdo);
+        $v2DemoTimeRemaining = getDemoTimeRemaining($pdo);
+    }
+} catch (Throwable $e) {
+    $v2IsDemo = false;
+}
+
 /* ---- Role label mapping ---- */
 $v2RoleLabels = [
     'admin' => 'Administrator',
@@ -225,6 +240,25 @@ $v2FooterItems = [
                 <span class="bc-status-val" data-status-kind="tally">Checking</span>
             </div>
         </div>
+
+        <?php if ($v2IsDemo): ?>
+        <!-- DEMO MODE BADGE -->
+        <div style="display:flex;align-items:center;gap:6px;margin-right:8px;">
+            <span style="display:inline-flex;align-items:center;gap:4px;background:rgba(220,38,38,0.08);color:#dc2626;font-size:10px;font-weight:700;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:0.3px;border:1px solid rgba(220,38,38,0.15);">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                DEMO MODE
+            </span>
+            <?php if ($v2DemoStatus === 'upgrade_pending'): ?>
+            <span style="display:inline-flex;align-items:center;gap:4px;background:rgba(198,146,20,0.08);color:#C69214;font-size:10px;font-weight:700;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:0.3px;border:1px solid rgba(198,146,20,0.15);">
+                UPGRADE PENDING
+            </span>
+            <?php endif; ?>
+            <?php if ($v2DemoTimeRemaining !== '' && $v2DemoTimeRemaining !== 'Expired'): ?>
+            <span style="font-size:10px;color:#64748b;font-weight:500;"><?= htmlspecialchars($v2DemoTimeRemaining) ?></span>
+            <?php endif; ?>
+            <span style="font-size:9px;color:#94a3b8;font-style:italic;">PDF demo copy only. Data purged on logout/expiry.</span>
+        </div>
+        <?php endif; ?>
 
         <!-- Profile Trigger -->
         <button class="v2-profile-trigger" type="button" id="v2-profile-trigger" aria-expanded="false" aria-haspopup="true">

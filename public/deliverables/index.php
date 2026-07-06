@@ -14,6 +14,9 @@ requireAssignmentAccess();
 
 require_once __DIR__ . '/../layouts/header_v2.php';
 
+require_once __DIR__ . '/../../app/helpers/demo_helper.php';
+$v2Demo = isDemoUser($pdo);
+
 $company_id = $_SESSION['company_id'];
 $fy_id = $_SESSION['fy_id'];
 $companyName = $_SESSION['company_name'] ?? 'Not Selected';
@@ -201,9 +204,32 @@ echo renderWorkflowNavigation($navData);
 
 <!-- Delivery Actions -->
 <div class="dw-actions-bar">
+    <?php if ($v2Demo): ?>
+    <div style="width:100%;padding:16px;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <strong style="color:#92400e;font-size:14px;">Demo Mode — Restricted Deliverables</strong>
+        </div>
+        <p style="margin:0 0 10px;font-size:13px;color:#78350f;">Demo users can generate PDF demo copies only. Upgrade to unlock final deliverables.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a href="<?= BASE_URL ?>demo_upgrade.php" style="display:inline-block;padding:8px 18px;background:#C69214;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;font-size:13px;">Upgrade to Paid</a>
+            <a href="https://etaxadv.com/contact" style="display:inline-block;padding:8px 18px;background:transparent;color:#92400e;border:2px solid #92400e;border-radius:7px;text-decoration:none;font-weight:600;font-size:13px;">Contact Sales</a>
+        </div>
+    </div>
+    <a href="<?= BASE_URL ?>report_download.php?format=pdf" class="btn btn-primary">Generate PDF Demo Copy</a>
+    <span class="btn" style="opacity:0.5;cursor:not-allowed;position:relative;" title="Upgrade to unlock Word export">
+        Generate Client Package (Word)
+        <span style="position:absolute;top:-6px;right:-6px;background:#dc2626;color:#fff;font-size:8px;padding:2px 5px;border-radius:4px;font-weight:700;">PRO</span>
+    </span>
+    <span class="btn" style="opacity:0.5;cursor:not-allowed;position:relative;" title="Upgrade to unlock Excel export">
+        Generate Client Package (Excel)
+        <span style="position:absolute;top:-6px;right:-6px;background:#dc2626;color:#fff;font-size:8px;padding:2px 5px;border-radius:4px;font-weight:700;">PRO</span>
+    </span>
+    <?php else: ?>
     <a href="<?= BASE_URL ?>report_download.php?format=pdf" class="btn btn-primary">Generate Client Package (PDF)</a>
     <a href="<?= BASE_URL ?>report_download.php?format=docx" class="btn">Generate Client Package (Word)</a>
     <a href="<?= BASE_URL ?>report_download.php?format=xlsx" class="btn">Generate Client Package (Excel)</a>
+    <?php endif; ?>
 </div>
 
 <script src="<?= BASE_URL ?>asset/js/deliverables_workspace.js?v=<?= filemtime(__DIR__ . '/../asset/js/deliverables_workspace.js') ?>"></script>

@@ -14,7 +14,8 @@ require_once __DIR__ . '/../app/helpers/entity_access_helper.php';
 $userId  = (int) ($_SESSION['user_id'] ?? 0);
 
 /* Check create permission */
-if (!canCreateEntity($pdo)) {
+require_once __DIR__ . '/../app/helpers/demo_helper.php';
+if (!canCreateEntity($pdo) && !isDemoUser($pdo)) {
     $_SESSION['error'] = 'You do not have permission to create entities.';
     header("Location: " . BASE_URL . "dashboard_company.php");
     exit;

@@ -69,7 +69,10 @@ function sendEmail(
     string $subject,
     string $bodyHtml,
     ?int $userId = null,
-    array $templateData = []
+    array $templateData = [],
+    ?string $fromEmail = null,
+    ?string $fromName = null,
+    ?string $replyTo = null
 ): bool {
     try {
         $config = getMailConfig();
@@ -87,10 +90,14 @@ function sendEmail(
             }
         }
 
+        $senderName = $fromName ?? $config['from_name'];
+        $senderEmail = $fromEmail ?? $config['from_address'];
+        $replyToEmail = $replyTo ?? $config['company_support_email'];
+
         $headers = "MIME-Version: 1.0\r\n";
         $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-        $headers .= "From: " . $config['from_name'] . " <" . $config['from_address'] . ">\r\n";
-        $headers .= "Reply-To: " . $config['company_support_email'] . "\r\n";
+        $headers .= "From: " . $senderName . " <" . $senderEmail . ">\r\n";
+        $headers .= "Reply-To: " . $replyToEmail . "\r\n";
 
         $transport = strtolower($config['transport']);
         $sent = false;

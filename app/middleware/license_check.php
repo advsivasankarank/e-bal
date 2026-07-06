@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../helpers/plan_helper.php';
 
 $currentScript = basename($_SERVER['SCRIPT_NAME'] ?? '');
-$publicAllowList = ['upgrade.php', 'login.php', 'logout.php', 'forgot_password.php', 'reset_password.php'];
+$publicAllowList = ['upgrade.php', 'login.php', 'logout.php', 'forgot_password.php', 'reset_password.php', 'demo_consent.php', 'demo_upgrade.php'];
 
 if (in_array($currentScript, $publicAllowList, true)) {
     return;
@@ -23,6 +23,21 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
 
 if (isSuperAdmin($pdo, $userId)) {
     return;
+}
+
+/* Demo users bypass license check */
+if (isset($_SESSION['is_demo']) && $_SESSION['is_demo']) {
+    return;
+}
+try {
+    $demoCheckStmt = $pdo->prepare("SELECT is_demo FROM users WHERE id = ?");
+    $demoCheckStmt->execute([$userId]);
+    if ((int) ($demoCheckStmt->fetchColumn() ?: 0) === 1) {
+        $_SESSION['is_demo'] = true;
+        return;
+    }
+} catch (Throwable $e) {
+    // Column may not exist yet
 }
 
 ensureGracePeriodSchema($pdo);

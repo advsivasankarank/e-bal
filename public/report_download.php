@@ -23,6 +23,9 @@ use Dompdf\Options;
 
 requireFullContext();
 
+require_once __DIR__ . '/../app/helpers/demo_helper.php';
+$_isDemoExport = isDemoUser($pdo);
+
 /* HARDENED: Timeout and memory protection for large report generation */
 set_time_limit(120);
 ini_set('memory_limit', '256M');
@@ -38,6 +41,12 @@ $allowedFormats = ['pdf', 'word', 'excel', 'docx', 'xlsx', 'html'];
 if (!in_array($format, $allowedFormats, true)) {
     http_response_code(400);
     exit('Unsupported export format.');
+}
+
+/* DEMO: Server-side enforcement — only allow PDF */
+if ($_isDemoExport && in_array($format, ['word', 'docx', 'xlsx', 'excel', 'html'], true)) {
+    http_response_code(403);
+    exit('Demo access allows PDF demo copy only. Please upgrade to generate final deliverables.');
 }
 
 $manualBundle = loadManualInputsWithCarryForward($pdo, $company_id, $fy_id, $fyName);
@@ -81,15 +90,33 @@ if ($format === 'pdf') {
         $options->set('defaultFont', 'DejaVu Sans');
 
         $dompdf = new Dompdf($options);
+
+        /* DEMO: Inject watermark into HTML before rendering */
+        if ($_isDemoExport) {
+            $demoWatermarkCss = getDemoWatermarkCss();
+            $demoWatermarkHtml = getDemoWatermarkHtml();
+            $htmlDocument = str_replace('</head>', '<style>' . $demoWatermarkCss . '</style></head>', $htmlDocument);
+            $htmlDocument = str_replace('<body>', '<body>' . $demoWatermarkHtml, $htmlDocument);
+        }
+
         $dompdf->loadHtml($htmlDocument, 'UTF-8');
         $dompdf->setPaper('A4', 'portrait');
         $dompdf->render();
-        $dompdf->stream(buildReportExportFilename($companyName, $fyName, 'pdf'), ['Attachment' => true]);
+
+        /* DEMO: Use DEMO-COPY filename */
+        $exportFilename = $_isDemoExport
+            ? buildDemoExportFilename($companyName, $fyName, 'pdf')
+            : buildReportExportFilename($companyName, $fyName, 'pdf');
+
+        $dompdf->stream($exportFilename, ['Attachment' => true]);
     } else {
         appLog('WARN', 'Dompdf not available, using fallback PDF export', ['company_id' => $company_id, 'fy_id' => $fy_id]);
         $pdfPath = createFallbackPdf($htmlDocument, $title);
+        $exportFilename = $_isDemoExport
+            ? buildDemoExportFilename($companyName, $fyName, 'pdf')
+            : buildReportExportFilename($companyName, $fyName, 'pdf');
         header('Content-Type: application/pdf');
-        header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'pdf') . '"');
+        header('Content-Disposition: attachment; filename="' . $exportFilename . '"');
         header('Content-Length: ' . filesize($pdfPath));
         header('X-eBAL-Export-Notice: Advanced export library unavailable. Basic export format generated.');
         readfile($pdfPath);

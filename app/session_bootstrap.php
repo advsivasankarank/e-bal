@@ -30,6 +30,8 @@ $publicAllowList = [
     'logout.php',
     'bridge_download.php',
     'support.php',
+    'demo_request.php',
+    'demo_expired.php',
 ];
 
 if (!in_array($currentScript, $publicAllowList, true)) {

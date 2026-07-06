@@ -318,6 +318,7 @@ ul{list-style:none}
       <span class="topbar-tagline">Financial Statement Platform</span>
     </div>
     <div class="topbar-links">
+      <a href="demo_request.php" style="color:var(--teal-light);font-weight:600;">Start Demo</a>
       <a href="login.php">Login</a>
       <a href="https://etaxadv.com/contact">Contact</a>
       <a href="#bridge" class="btn-topbar">Download Bridge</a>
@@ -351,7 +352,11 @@ ul{list-style:none}
         </div>
       </div>
       <div class="hero-actions">
-        <a href="#pricing" class="btn-primary">
+        <a href="demo_request.php" class="btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Start Free Demo
+        </a>
+        <a href="#pricing" class="btn-secondary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           Choose Your Plan
         </a>
@@ -933,7 +938,11 @@ ul{list-style:none}
     <h2>Ready to Prepare Financial Statements Faster?</h2>
     <p>No accounting software migration required. Start with your Tally data today.</p>
     <div class="cta-actions">
-      <a href="#pricing" class="btn-primary">
+      <a href="demo_request.php" class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Start Free Demo
+      </a>
+      <a href="#pricing" class="btn-outline-light">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         Choose Your Plan
       </a>
@@ -942,7 +951,6 @@ ul{list-style:none}
         Login
       </a>
       <a href="#bridge" class="btn-outline-light">Download Smart Bridge</a>
-      <a href="https://etaxadv.com/contact" class="btn-outline-light">Request a Demo</a>
     </div>
   </div>
 </section>
@@ -984,16 +992,18 @@ ul{list-style:none}
 <div class="sticky-cta">
   <div class="container">
     <span>Start preparing statements in minutes:</span>
-    <a href="#pricing" class="btn-primary">
+    <a href="demo_request.php" class="btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Start Free Demo
+    </a>
+    <a href="#pricing" class="btn-outline-light">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      Choose Your Plan
+      Choose Plan
     </a>
     <a href="login.php" class="btn-outline-light">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
       Login
     </a>
-    <a href="#bridge" class="btn-outline-light">Download Smart Bridge</a>
-    <a href="https://etaxadv.com/contact" class="btn-outline-light">Contact Sales</a>
   </div>
 </div>
 

@@ -37,6 +37,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Silently fail - column may not exist yet
             }
 
+            // Demo user handling
+            $isDemoUser = false;
+            try {
+                $demoCheck = $pdo->prepare("SELECT is_demo FROM users WHERE id = ?");
+                $demoCheck->execute([(int) $user['id']]);
+                $isDemoUser = ((int) ($demoCheck->fetchColumn() ?: 0)) === 1;
+            } catch (Throwable $e) {
+                // Column may not exist yet
+            }
+
+            if ($isDemoUser) {
+                require_once __DIR__ . '/../app/helpers/demo_helper.php';
+                $_SESSION['is_demo'] = true;
+
+                // Check if consent already accepted
+                $consentCheck = $pdo->prepare("SELECT demo_consent_accepted_at FROM users WHERE id = ?");
+                $consentCheck->execute([(int) $user['id']]);
+                $consentAccepted = !empty($consentCheck->fetchColumn());
+
+                if (!$consentAccepted) {
+                    // Redirect to consent page
+                    header('Location: ' . BASE_URL . 'demo_consent.php');
+                    exit;
+                }
+
+                // Check if demo expired
+                $expiryCheck = $pdo->prepare("SELECT demo_expires_at, demo_status FROM users WHERE id = ?");
+                $expiryCheck->execute([(int) $user['id']]);
+                $demoInfo = $expiryCheck->fetch(PDO::FETCH_ASSOC);
+                $demoStatus = (string) ($demoInfo['demo_status'] ?? '');
+                $demoExpiresAt = (string) ($demoInfo['demo_expires_at'] ?? '');
+
+                if ($demoStatus !== 'upgrade_pending' && $demoStatus !== 'paid_active' && !empty($demoExpiresAt) && strtotime($demoExpiresAt) < time()) {
+                    // Demo expired — purge and redirect
+                    purgeDemoUserData($pdo, (int) $user['id']);
+                    $_SESSION['demo_status'] = 'expired';
+                    header('Location: ' . BASE_URL . 'demo_expired.php');
+                    exit;
+                }
+
+                $_SESSION['demo_status'] = $demoStatus;
+                header('Location: ' . BASE_URL . 'index.php');
+                exit;
+            }
+
             if (($user['role'] ?? '') === 'superadmin') {
                 header('Location: ' . BASE_URL . 'superadmin/index.php');
             } else {
