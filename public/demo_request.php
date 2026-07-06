@@ -35,17 +35,16 @@ if (!empty($_SESSION['demo_success'])) {
     unset($_SESSION['demo_success']);
 }
 
-/* Send pending demo credentials email (after redirect, non-blocking) */
+/* Phase 1: Log pending demo credential email — do NOT send SMTP during page render.
+   SMTP is configured in mail_helper.php and ready for manual/test sending.
+   Re-enable automatic sending in a separate controlled step after SMTP is verified. */
 if (!empty($_SESSION['demo_send_email'])) {
     $emailTask = $_SESSION['demo_send_email'];
     unset($_SESSION['demo_send_email']);
-    /* Phase 1: Log email task — do not block page response with mail().
-       SMTP must be configured for reliable delivery. */
     if (function_exists('appLog')) {
-        appLog('INFO', 'Demo credential email queued', [
+        appLog('INFO', 'Demo credential email pending — SMTP configured, awaiting verification', [
             'email' => $emailTask['email'],
             'name' => $emailTask['name'],
-            'note' => 'SMTP not configured — email delivery pending',
         ]);
     }
 }

@@ -162,25 +162,46 @@ function sendViaSmtp(string $to, string $subject, string $body, string $headers)
         $password = $config['smtp_password'];
         $encryption = $config['smtp_encryption'];
 
+        if (!$host || !$username || !$password) {
+            appLog('WARN', 'SMTP not configured — missing host/username/password');
+            return false;
+        }
+
         $errno = 0;
         $errstr = '';
-        $socket = @fsockopen($host, $port, $errno, $errstr, 30);
+
+        /* SSL on port 465: connect via ssl:// wrapper */
+        if ($encryption === 'ssl') {
+            $context = stream_context_create([
+                'ssl' => [
+                    'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT,
+                    'allow_self_signed' => true,
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                ],
+            ]);
+            $socket = @stream_socket_client('ssl://' . $host . ':' . $port, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $context);
+        } else {
+            $socket = @fsockopen($host, $port, $errno, $errstr, 30);
+        }
 
         if (!$socket) {
             appLog('ERROR', 'SMTP connection failed', [
                 'host' => $host,
                 'port' => $port,
+                'encryption' => $encryption,
                 'error' => $errstr,
             ]);
             return false;
         }
 
-        stream_set_timeout($socket, 5);
+        stream_set_timeout($socket, 10);
         fgets($socket);
 
         fputs($socket, "EHLO " . gethostname() . "\r\n");
         fgets($socket);
 
+        /* STARTTLS only for tls encryption (not ssl — already encrypted) */
         if ($encryption === 'tls') {
             fputs($socket, "STARTTLS\r\n");
             fgets($socket);
