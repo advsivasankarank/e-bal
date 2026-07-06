@@ -5,6 +5,7 @@
  */
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../app/helpers/security_helper.php';
 require_once __DIR__ . '/../app/helpers/demo_helper.php';
 
 ensureDemoTables($pdo);
@@ -13,7 +14,6 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_once __DIR__ . '/../app/helpers/security_helper.php';
     requireCsrfToken();
 
     $name = trim((string) ($_POST['name'] ?? ''));
