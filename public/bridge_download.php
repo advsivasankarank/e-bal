@@ -186,7 +186,7 @@ $page_title = 'Smart Bridge for Tally';
             <div class="hero-meta">
                 <div class="hero-meta-item">
                     <span>Version</span>
-                    <strong>1.0.0</strong>
+                    <strong>2.0.0</strong>
                 </div>
                 <div class="hero-meta-item">
                     <span>Released</span>
@@ -194,7 +194,7 @@ $page_title = 'Smart Bridge for Tally';
                 </div>
                 <div class="hero-meta-item">
                     <span>Size</span>
-                    <strong>~15 MB</strong>
+                    <strong>~23 MB</strong>
                 </div>
             </div>
         </div>
@@ -244,12 +244,12 @@ $page_title = 'Smart Bridge for Tally';
         <div class="version-box">
             <div class="version-header">
                 <h3>Smart Bridge for Tally</h3>
-                <span class="version-tag">v1.0.0</span>
+                <span class="version-tag">v2.0.0</span>
             </div>
             <div class="version-details">
                 <div class="version-detail">
                     <span>Version</span>
-                    <strong>1.0.0</strong>
+                    <strong>2.0.0</strong>
                 </div>
                 <div class="version-detail">
                     <span>Release Date</span>
@@ -257,11 +257,11 @@ $page_title = 'Smart Bridge for Tally';
                 </div>
                 <div class="version-detail">
                     <span>File Size</span>
-                    <strong>~15 MB</strong>
+                    <strong>~23 MB</strong>
                 </div>
             </div>
             <div class="version-changelog">
-                <h4>What's New in v1.0.0</h4>
+                <h4>What's New in v2.0.0</h4>
                 <ul>
                     <li>Initial public release of Smart Bridge for Tally</li>
                     <li>Auto-sync trial balance from Tally.ERP 9 and Tally Prime</li>
@@ -283,7 +283,7 @@ $page_title = 'Smart Bridge for Tally';
         <p>Download the Smart Bridge installer and connect Tally to e-BAL in minutes.</p>
         <a href="<?= BASE_URL ?>downloads/e-bal-bridge-setup.exe" class="btn-primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Download e-BAL Bridge Setup (v1.0.0)
+            Download e-BAL Bridge Setup (v2.0.0)
         </a>
     </div>
 </section>
