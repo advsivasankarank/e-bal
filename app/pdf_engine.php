@@ -20,9 +20,11 @@ function generatePDF($html)
         return;
     }
 
+    $pdfHtml = str_replace("\xE2\x82\xB9", 'INR ', $html);
+
     $dompdf = new Dompdf();
 
-    $dompdf->loadHtml($html);
+    $dompdf->loadHtml($pdfHtml);
     $dompdf->setPaper('A4', 'portrait');
 
     $dompdf->render();

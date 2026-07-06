@@ -74,7 +74,7 @@ $prevHNote = $isFirstYear ? '' : '<th class="figure" data-prev>Previous</th>';
         <table class="note-table" border="1" width="100%" cellpadding="5">
             <thead>
             <tr>
-                <th>Particulars</th>
+                <th class="particulars">Particulars</th>
                 <th class="figure">Current Year</th>
                 <?php if (!$isFirstYear): ?><th class="figure" data-prev>Previous Year</th><?php endif; ?>
             </tr>
@@ -117,7 +117,7 @@ $prevHNote = $isFirstYear ? '' : '<th class="figure" data-prev>Previous</th>';
         <table class="note-table" border="1" width="100%" cellpadding="5">
             <thead>
             <tr>
-                <th>Particulars</th>
+                <th class="particulars">Particulars</th>
                 <th class="figure">Current Year</th>
                 <?php if (!$isFirstYear): ?><th class="figure" data-prev>Previous Year</th><?php endif; ?>
             </tr>
@@ -160,7 +160,7 @@ $prevHNote = $isFirstYear ? '' : '<th class="figure" data-prev>Previous</th>';
         <table class="note-table" border="1" width="100%" cellpadding="5">
             <thead>
             <tr>
-                <th>Ledger / Particulars</th>
+                <th class="particulars">Ledger / Particulars</th>
                 <th class="figure">Current Year</th>
                 <?php if (!$isFirstYear): ?><th class="figure" data-prev>Previous Year</th><?php endif; ?>
             </tr>

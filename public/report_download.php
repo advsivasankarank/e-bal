@@ -80,8 +80,10 @@ if ($format === 'pdf') {
         $options->set('isRemoteEnabled', false);
         $options->set('defaultFont', 'Garamond');
 
+        $pdfHtml = str_replace("\xE2\x82\xB9", 'INR ', $htmlDocument);
+
         $dompdf = new Dompdf($options);
-        $dompdf->loadHtml($htmlDocument, 'UTF-8');
+        $dompdf->loadHtml($pdfHtml, 'UTF-8');
         $dompdf->setPaper('A4', 'portrait');
         $dompdf->render();
         $dompdf->stream(buildReportExportFilename($companyName, $fyName, 'pdf'), ['Attachment' => true]);
