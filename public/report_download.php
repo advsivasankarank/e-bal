@@ -78,12 +78,10 @@ if ($format === 'pdf') {
     if (class_exists('Dompdf\\Dompdf')) {
         $options = new Options();
         $options->set('isRemoteEnabled', false);
-        $options->set('defaultFont', 'Garamond');
-
-        $pdfHtml = str_replace("\xE2\x82\xB9", 'INR ', $htmlDocument);
+        $options->set('defaultFont', 'DejaVu Sans');
 
         $dompdf = new Dompdf($options);
-        $dompdf->loadHtml($pdfHtml, 'UTF-8');
+        $dompdf->loadHtml($htmlDocument, 'UTF-8');
         $dompdf->setPaper('A4', 'portrait');
         $dompdf->render();
         $dompdf->stream(buildReportExportFilename($companyName, $fyName, 'pdf'), ['Attachment' => true]);

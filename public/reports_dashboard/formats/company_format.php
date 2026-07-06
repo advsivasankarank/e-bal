@@ -3,10 +3,10 @@
 // $company_meta = company reporting meta (name, cin, registered_address, etc.)
 // Example: $data['share_capital'], $data['inventory'], etc.
 $isFirstYear = (bool) ($isFirstYear ?? false);
-$prevHNote = $isFirstYear ? '' : '<th class="figure" data-prev>Previous</th>';
+$prevHNote = $isFirstYear ? '' : '<th class="figure previous-year">Previous Year</th>';
 $reportSubtitle = $isFirstYear ? ' (First Year Financial Statements)' : '';
-if (!function_exists('pv')) { function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . \format_inr($val) . '</td>'; } }
-if (!function_exists('pvRaw')) { function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure" data-prev>' . $val . '</td>'; } }
+if (!function_exists('pv')) { function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure previous-year">' . \format_inr($val) . '</td>'; } }
+if (!function_exists('pvRaw')) { function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure previous-year">' . $val . '</td>'; } }
 
 $ebalCompanyName = $company_meta['company_name'] ?? '';
 $ebalCin = $company_meta['cin'] ?? '';
@@ -33,8 +33,8 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
 <h2 class="report-page-title">Balance Sheet as at <?= htmlspecialchars($data['date']) ?></h2>
 <p class="report-page-subtitle">(Figures in Indian Rupees unless otherwise stated)<?= $reportSubtitle ?></p>
 
-<table border="1" width="100%" cellpadding="5">
-<tr><th class="particulars">Particulars</th><th class="note-col">Note</th><th class="figure">Current</th><?= $prevHNote ?></tr>
+<table class="statement-table" border="1" width="100%" cellpadding="5">
+<tr><th class="particulars">Particulars</th><th class="note-col">Note</th><th class="figure current-year">Current Year</th><?= $prevHNote ?></tr>
 
 <tr><td colspan="<?= $isFirstYear ? 3 : 4 ?>"><b>I. EQUITY AND LIABILITIES</b></td></tr>
 
@@ -124,8 +124,8 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
 <h2 class="report-page-title">Statement of Profit &amp; Loss</h2>
 <p class="report-page-subtitle">For the year ended <?= htmlspecialchars($data['date']) ?>.<?= $reportSubtitle ?></p>
 
-<table border="1" width="100%" cellpadding="5">
-<tr><th class="particulars">Particulars</th><th class="note-col">Note</th><th class="figure">Current</th><?= $prevHNote ?></tr>
+<table class="statement-table" border="1" width="100%" cellpadding="5">
+<tr><th class="particulars">Particulars</th><th class="note-col">Note</th><th class="figure current-year">Current Year</th><?= $prevHNote ?></tr>
 
 <tr><td>Revenue</td><td class="note-col"><a href="#note-20"><?= $data['note_refs']['Revenue from Operations'] ?? 20 ?></a></td><td class="figure"><?= format_inr($data['revenue']) ?></td><?= pv($data['prev_revenue']) ?></tr>
 <tr><td>Other Income</td><td class="note-col"><a href="#note-21"><?= $data['note_refs']['Other Income'] ?? 21 ?></a></td><td class="figure"><?= format_inr($data['other_income']) ?></td><?= pv($data['prev_other_income']) ?></tr>

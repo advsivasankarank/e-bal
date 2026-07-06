@@ -20,14 +20,9 @@ function generatePDF($html)
         return;
     }
 
-    $pdfHtml = str_replace("\xE2\x82\xB9", 'INR ', $html);
-
     $dompdf = new Dompdf();
-
-    $dompdf->loadHtml($pdfHtml);
+    $dompdf->loadHtml($html);
     $dompdf->setPaper('A4', 'portrait');
-
     $dompdf->render();
-
     $dompdf->stream("financial_statements.pdf", ["Attachment" => true]);
 }
