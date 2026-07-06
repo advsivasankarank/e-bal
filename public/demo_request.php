@@ -9,7 +9,9 @@ require_once __DIR__ . '/../app/helpers/security_helper.php';
 require_once __DIR__ . '/../app/helpers/demo_helper.php';
 
 /* Start session early so flash messages persist across redirects */
-secureSessionStart();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 /* Prevent LiteSpeed/CDN caching — demo form must always render fresh */
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
