@@ -30,6 +30,20 @@ if (!empty($_SESSION['demo_success'])) {
     unset($_SESSION['demo_success']);
 }
 
+/* Send pending demo credentials email (after redirect, non-blocking) */
+if (!empty($_SESSION['demo_send_email'])) {
+    $emailTask = $_SESSION['demo_send_email'];
+    unset($_SESSION['demo_send_email']);
+    try {
+        require_once __DIR__ . '/../app/helpers/mail_helper.php';
+        sendDemoCredentialsEmail($pdo, $emailTask['email'], $emailTask['password'], $emailTask['name']);
+    } catch (Throwable $e) {
+        if (function_exists('appLog')) {
+            appLog('WARN', 'Demo credential email failed after redirect', ['error' => $e->getMessage()]);
+        }
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     /* Validate CSRF — on failure, redirect back with error instead of raw die() */
     if (!isValidCsrfToken(csrfRequestToken())) {
@@ -60,9 +74,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $result = handleDemoRequest($pdo, $name, $mobile, $email, $addressCity, $professionType, $firmCompanyName);
 
-            // Send credentials email
-            $emailSent = sendDemoCredentialsEmail($pdo, $email, $result['password'], $name);
-
             // Log the user in automatically
             session_regenerate_id(true);
             $_SESSION['user_id'] = $result['user_id'];
@@ -72,6 +83,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['demo_status'] = 'credentials_sent';
 
             $success = 'Your e-BAL demo access has been created. Login credentials have been sent to your email address. Please check your inbox and login to explore e-BAL.';
+
+            /* Defer email sending to after redirect — prevents mail() from blocking response */
+            $_SESSION['demo_send_email'] = [
+                'email' => $email,
+                'password' => $result['password'],
+                'name' => $name,
+            ];
 
             /* PRG: redirect after POST to prevent browser resubmit on refresh */
             $_SESSION['demo_success'] = $success;
