@@ -60,10 +60,10 @@ body {
     overflow-wrap: break-word;
 }
 .report-shell tr.section td, .report-shell tr.section th { background: #f5f8fc; font-weight: 700; }
-/* Statement table: Particulars 46%, Note 8%, Current 23%, Previous 23% */
+/* Statement table: Particulars 44%, Note 8%, Current 24%, Previous 24% */
 .report-shell table.statement-table th.particulars,
 .report-shell table.statement-table td.particulars {
-    width: 46%;
+    width: 44%;
     white-space: normal;
     word-break: normal;
     overflow-wrap: anywhere;
@@ -75,7 +75,7 @@ body {
 }
 .report-shell table.statement-table th.figure,
 .report-shell table.statement-table td.figure {
-    width: 23%;
+    width: 24%;
     text-align: right;
     white-space: nowrap;
 }
@@ -83,7 +83,21 @@ body {
 .report-shell td.figure, .report-shell th.figure {
     text-align: right;
     white-space: nowrap;
-    width: 23%;
+    width: 24%;
+}
+.report-shell td.previous-year, .report-shell th.previous-year {
+    display: table-cell !important;
+    visibility: visible !important;
+    width: 24%;
+    text-align: right;
+    white-space: nowrap;
+}
+.report-shell td.current-year, .report-shell th.current-year {
+    display: table-cell !important;
+    visibility: visible !important;
+    width: 24%;
+    text-align: right;
+    white-space: nowrap;
 }
 .report-shell td.note-col, .report-shell th.note-col {
     width: 8%;
@@ -118,17 +132,33 @@ body {
     border: 1px solid #d9e5f2;
     table-layout: fixed;
 }
-/* Notes table: Ledger 54%, Current 23%, Previous 23% */
+/* Notes table: Ledger 52%, Current 24%, Previous 24% */
 .note-table th.particulars,
 .note-table td.particulars {
-    width: 54%;
+    width: 52%;
     white-space: normal;
     word-break: normal;
     overflow-wrap: anywhere;
 }
 .note-table th.figure,
 .note-table td.figure {
-    width: 23%;
+    width: 24%;
+    text-align: right;
+    white-space: nowrap;
+}
+.note-table th.previous-year,
+.note-table td.previous-year {
+    display: table-cell !important;
+    visibility: visible !important;
+    width: 24%;
+    text-align: right;
+    white-space: nowrap;
+}
+.note-table th.current-year,
+.note-table td.current-year {
+    display: table-cell !important;
+    visibility: visible !important;
+    width: 24%;
     text-align: right;
     white-space: nowrap;
 }
@@ -231,6 +261,119 @@ body {
 .ebal-footer-brand { font-size: 7px; color: #94a3b8; text-align: center; margin-top: 12px; padding-top: 6px; border-top: 1px solid #e2e8f0; }
 .ebal-empty-note { font-size: 9px; color: #64748b; font-style: italic; padding: 4px 0; }
 .ebal-disclosure-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 8px; margin-top: 6px; font-size: 9px; color: #334155; }
+/* Premium Cover Page */
+.cover-page {
+    width: 100%;
+    min-height: 267mm;
+    page-break-after: always;
+    position: relative;
+    overflow: hidden;
+    font-family: "DejaVu Sans", "DejaVu Sans Condensed", sans-serif;
+    background: linear-gradient(160deg, #e8f6f8 0%, #ffffff 35%, #fff8eb 100%);
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+.cover-wave-teal {
+    position: absolute;
+    left: -50mm;
+    top: 80mm;
+    width: 200mm;
+    height: 100mm;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(0,121,145,0.70), rgba(0,174,190,0.30));
+}
+.cover-wave-orange {
+    position: absolute;
+    right: -55mm;
+    top: 100mm;
+    width: 200mm;
+    height: 105mm;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(255,180,52,0.40), rgba(245,116,32,0.75));
+}
+.cover-wave-light {
+    position: absolute;
+    left: 20mm;
+    top: 60mm;
+    width: 160mm;
+    height: 80mm;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(255,255,255,0.5), rgba(200,240,245,0.25));
+}
+.cover-company-block {
+    position: absolute;
+    top: 28mm;
+    left: 20mm;
+    right: 20mm;
+    text-align: center;
+    z-index: 2;
+}
+.cover-company-name {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f3d4e;
+    letter-spacing: 0.5px;
+    line-height: 1.3;
+    margin-bottom: 6mm;
+}
+.cover-company-meta {
+    font-size: 9.5px;
+    line-height: 1.6;
+    color: #3d6070;
+}
+.cover-company-meta span {
+    display: block;
+}
+.cover-title-block {
+    position: absolute;
+    top: 105mm;
+    left: 0;
+    right: 0;
+    text-align: center;
+    z-index: 2;
+}
+.cover-title {
+    font-size: 42px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 8px rgba(0,80,100,0.25);
+    margin-bottom: 6mm;
+}
+.cover-fy {
+    font-size: 28px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+    text-shadow: 0 2px 6px rgba(0,80,100,0.20);
+}
+.cover-divider {
+    width: 60mm;
+    height: 2px;
+    background: rgba(255,255,255,0.6);
+    margin: 8mm auto;
+}
+.cover-footer {
+    position: absolute;
+    bottom: 25mm;
+    left: 0;
+    right: 0;
+    text-align: center;
+    z-index: 2;
+}
+.cover-footer-text {
+    font-size: 13px;
+    font-style: italic;
+    color: #3d6070;
+    letter-spacing: 0.3px;
+}
+.cover-footer-brand {
+    font-size: 11px;
+    font-weight: 700;
+    color: #0f766e;
+    margin-top: 3mm;
+}
 </style>
 CSS;
 }
@@ -242,17 +385,47 @@ function renderFinancialReportDocument(array $fs, string $companyName, string $f
     $company_meta = $fs['company_meta'] ?? [];
     $formatTemplate = $fs['format_template'];
     $notesTemplate = $fs['notes_template'];
-    $isFirstYear = (bool) ($fs['is_first_year'] ?? false);
 
     $plLabel = ($fs['entity_subcategory'] ?? '') === 'trust' ? 'Income & Expenditure Account' : 'Profit & Loss Account';
     $noteSections = $notes['sections'] ?? [];
 
+    $cin = trim((string) ($company_meta['cin'] ?? ''));
+    $registeredAddress = trim((string) ($company_meta['registered_address'] ?? ''));
+
     ob_start();
     ?>
-    <div class="report-export-cover">
-        <h1><?= htmlspecialchars($companyName) ?></h1>
-        <p><?= htmlspecialchars($fs['title'] ?? 'Financial Statements') ?></p>
-        <p>Financial Year: <?= htmlspecialchars($fyName) ?></p>
+    <!-- Premium Cover Page -->
+    <div class="cover-page">
+        <div class="cover-wave-teal"></div>
+        <div class="cover-wave-orange"></div>
+        <div class="cover-wave-light"></div>
+
+        <div class="cover-company-block">
+            <div class="cover-company-name"><?= htmlspecialchars($companyName) ?></div>
+            <div class="cover-company-meta">
+                <?php if ($cin): ?>
+                    <span>CIN: <?= htmlspecialchars($cin) ?></span>
+                <?php else: ?>
+                    <span style="font-style:italic;">CIN: Not configured</span>
+                <?php endif; ?>
+                <?php if ($registeredAddress): ?>
+                    <span>Registered Office: <?= htmlspecialchars($registeredAddress) ?></span>
+                <?php else: ?>
+                    <span style="font-style:italic;">Registered Office: Not configured</span>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="cover-title-block">
+            <div class="cover-title">Annual Report</div>
+            <div class="cover-divider"></div>
+            <div class="cover-fy"><?= htmlspecialchars($fyName) ?></div>
+        </div>
+
+        <div class="cover-footer">
+            <div class="cover-footer-text">Prepared by</div>
+            <div class="cover-footer-brand">e-BAL</div>
+        </div>
     </div>
 
     <div class="toc-page">

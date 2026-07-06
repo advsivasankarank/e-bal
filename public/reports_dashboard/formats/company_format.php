@@ -2,11 +2,11 @@
 // Expected: $data = associative array from SQL
 // $company_meta = company reporting meta (name, cin, registered_address, etc.)
 // Example: $data['share_capital'], $data['inventory'], etc.
-$isFirstYear = (bool) ($isFirstYear ?? false);
-$prevHNote = $isFirstYear ? '' : '<th class="figure previous-year">Previous Year</th>';
-$reportSubtitle = $isFirstYear ? ' (First Year Financial Statements)' : '';
-if (!function_exists('pv')) { function pv($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure previous-year">' . \format_inr($val) . '</td>'; } }
-if (!function_exists('pvRaw')) { function pvRaw($val) { global $isFirstYear; if ($isFirstYear) return ''; return '<td class="figure previous-year">' . $val . '</td>'; } }
+// Previous Year column is ALWAYS shown — use ₹0.00 if no prior data.
+$prevHNote = '<th class="figure previous-year">Previous Year</th>';
+$reportSubtitle = '';
+if (!function_exists('pv')) { function pv($val) { return '<td class="figure previous-year">' . \format_inr($val ?? 0) . '</td>'; } }
+if (!function_exists('pvRaw')) { function pvRaw($val) { return '<td class="figure previous-year">' . ($val ?? '') . '</td>'; } }
 
 $ebalCompanyName = $company_meta['company_name'] ?? '';
 $ebalCin = $company_meta['cin'] ?? '';
@@ -31,12 +31,12 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
 </div>
 
 <h2 class="report-page-title">Balance Sheet as at <?= htmlspecialchars($data['date']) ?></h2>
-<p class="report-page-subtitle">(Figures in Indian Rupees unless otherwise stated)<?= $reportSubtitle ?></p>
+<p class="report-page-subtitle">(Figures in Indian Rupees unless otherwise stated)</p>
 
 <table class="statement-table" border="1" width="100%" cellpadding="5">
 <tr><th class="particulars">Particulars</th><th class="note-col">Note</th><th class="figure current-year">Current Year</th><?= $prevHNote ?></tr>
 
-<tr><td colspan="<?= $isFirstYear ? 3 : 4 ?>"><b>I. EQUITY AND LIABILITIES</b></td></tr>
+<tr><td colspan="4"><b>I. EQUITY AND LIABILITIES</b></td></tr>
 
 <tr><td><b>Shareholders' Funds</b></td><td></td><td></td><td></td></tr>
 <tr><td>Share Capital</td><td class="note-col"><a href="#note-1"><?= $data['note_refs']['Share Capital'] ?? 1 ?></a></td><td class="figure"><?= format_inr($data['share_capital']) ?></td><?= pv($data['prev_share_capital']) ?></tr>
@@ -56,7 +56,7 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
 
 <tr><td><b>TOTAL</b></td><td></td><td class="figure"><?= format_inr($data['total_liabilities']) ?></td><?= pv($data['prev_total_liabilities']) ?></tr>
 
-<tr><td colspan="<?= $isFirstYear ? 3 : 4 ?>"><b>II. ASSETS</b></td></tr>
+<tr><td colspan="4"><b>II. ASSETS</b></td></tr>
 
 <tr><td><b>Non-Current Assets</b></td><td></td><td></td><td></td></tr>
 <tr><td>Property, Plant & Equipment</td><td class="note-col"><a href="#note-11"><?= $data['note_refs']['Property, Plant & Equipment'] ?? 11 ?></a></td><td class="figure"><?= format_inr($data['fixed_assets']) ?></td><?= pv($data['prev_fixed_assets']) ?></tr>
@@ -122,7 +122,7 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
 </div>
 
 <h2 class="report-page-title">Statement of Profit &amp; Loss</h2>
-<p class="report-page-subtitle">For the year ended <?= htmlspecialchars($data['date']) ?>.<?= $reportSubtitle ?></p>
+<p class="report-page-subtitle">For the year ended <?= htmlspecialchars($data['date']) ?>.</p>
 
 <table class="statement-table" border="1" width="100%" cellpadding="5">
 <tr><th class="particulars">Particulars</th><th class="note-col">Note</th><th class="figure current-year">Current Year</th><?= $prevHNote ?></tr>
