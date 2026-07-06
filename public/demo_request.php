@@ -8,13 +8,35 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/helpers/security_helper.php';
 require_once __DIR__ . '/../app/helpers/demo_helper.php';
 
+/* Prevent LiteSpeed/CDN caching — demo form must always render fresh */
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 ensureDemoTables($pdo);
 
 $error = '';
 $success = '';
 
+/* Read flash error from CSRF redirect */
+if (!empty($_SESSION['demo_error'])) {
+    $error = $_SESSION['demo_error'];
+    unset($_SESSION['demo_error']);
+}
+
+/* Read flash success from PRG redirect */
+if (!empty($_SESSION['demo_success'])) {
+    $success = $_SESSION['demo_success'];
+    unset($_SESSION['demo_success']);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    requireCsrfToken();
+    /* Validate CSRF — on failure, redirect back with error instead of raw die() */
+    if (!isValidCsrfToken(csrfRequestToken())) {
+        $_SESSION['demo_error'] = 'Invalid security token. Please refresh the page and try again.';
+        header('Location: ' . BASE_URL . 'demo_request.php');
+        exit;
+    }
 
     $name = trim((string) ($_POST['name'] ?? ''));
     $mobile = trim((string) ($_POST['mobile'] ?? ''));
@@ -50,6 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['demo_status'] = 'credentials_sent';
 
             $success = 'Your e-BAL demo access has been created. Login credentials have been sent to your email address. Please check your inbox and login to explore e-BAL.';
+
+            /* PRG: redirect after POST to prevent browser resubmit on refresh */
+            $_SESSION['demo_success'] = $success;
+            header('Location: ' . BASE_URL . 'demo_request.php?success=1');
+            exit;
         } catch (Throwable $e) {
             $error = 'An error occurred while creating your demo access. Please try again.';
             if (function_exists('appLog')) {
