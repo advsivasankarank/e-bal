@@ -23,7 +23,8 @@ Desktop.ini
 
 # ===== Node / Composer =====
 /node_modules/
-/vendor/
+/vendor/*
+!/vendor/phpmailer/
 composer.phar
 
 # ===== Logs & cache =====

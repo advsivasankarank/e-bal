@@ -154,8 +154,7 @@ function sendViaSmtp(string $to, string $subject, string $body, string $headers)
 {
     try {
         $config = getMailConfig();
-        
-        $from = $config['from_address'];
+
         $host = $config['smtp_host'];
         $port = $config['smtp_port'];
         $username = $config['smtp_username'];
@@ -167,77 +166,27 @@ function sendViaSmtp(string $to, string $subject, string $body, string $headers)
             return false;
         }
 
-        $errno = 0;
-        $errstr = '';
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $mail->isSMTP();
+        $mail->Host = $host;
+        $mail->Port = $port;
+        $mail->SMTPAuth = true;
+        $mail->Username = $username;
+        $mail->Password = $password;
+        $mail->SMTPSecure = ($encryption === 'ssl') ? 'ssl' : 'tls';
+        $mail->CharSet = 'UTF-8';
+        $mail->Encoding = 'base64';
 
-        /* SSL on port 465: connect via ssl:// wrapper */
-        if ($encryption === 'ssl') {
-            $context = stream_context_create([
-                'ssl' => [
-                    'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT,
-                    'allow_self_signed' => true,
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
-                ],
-            ]);
-            $socket = @stream_socket_client('ssl://' . $host . ':' . $port, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $context);
-        } else {
-            $socket = @fsockopen($host, $port, $errno, $errstr, 30);
-        }
+        $mail->setFrom($config['from_address'], $config['from_name']);
+        $mail->addReplyTo($config['company_support_email']);
+        $mail->addAddress($to);
 
-        if (!$socket) {
-            appLog('ERROR', 'SMTP connection failed', [
-                'host' => $host,
-                'port' => $port,
-                'encryption' => $encryption,
-                'error' => $errstr,
-            ]);
-            return false;
-        }
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body = $body;
 
-        stream_set_timeout($socket, 10);
-        fgets($socket);
-
-        fputs($socket, "EHLO " . gethostname() . "\r\n");
-        fgets($socket);
-
-        /* STARTTLS only for tls encryption (not ssl — already encrypted) */
-        if ($encryption === 'tls') {
-            fputs($socket, "STARTTLS\r\n");
-            fgets($socket);
-            stream_context_set_option($socket, 'ssl', 'allow_self_signed', true);
-            stream_context_set_option($socket, 'ssl', 'verify_peer', false);
-            stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
-            fputs($socket, "EHLO " . gethostname() . "\r\n");
-            fgets($socket);
-        }
-
-        if ($username && $password) {
-            fputs($socket, "AUTH LOGIN\r\n");
-            fgets($socket);
-            fputs($socket, base64_encode($username) . "\r\n");
-            fgets($socket);
-            fputs($socket, base64_encode($password) . "\r\n");
-            fgets($socket);
-        }
-
-        fputs($socket, "MAIL FROM: <" . $from . ">\r\n");
-        fgets($socket);
-        fputs($socket, "RCPT TO: <" . $to . ">\r\n");
-        fgets($socket);
-        fputs($socket, "DATA\r\n");
-        fgets($socket);
-
-        fputs($socket, "To: " . $to . "\r\n");
-        fputs($socket, "Subject: " . $subject . "\r\n");
-        fputs($socket, $headers . "\r\n");
-        fputs($socket, $body . "\r\n.\r\n");
-        $response = fgets($socket);
-
-        fputs($socket, "QUIT\r\n");
-        fclose($socket);
-
-        return strpos($response, '250') !== false;
+        $mail->send();
+        return true;
     } catch (Throwable $e) {
         appLog('ERROR', 'SMTP send failed', ['error' => $e->getMessage()]);
         return false;
