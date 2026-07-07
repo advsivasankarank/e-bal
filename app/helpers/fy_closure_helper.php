@@ -462,7 +462,7 @@ function createOpeningBalances(PDO $pdo, int $company_id, int $target_fy_id, int
     $carryForwardCount = 0;
     $upsertStmt = $pdo->prepare("
         INSERT INTO tally_ledgers
-            (company_id, fy_id, ledger_name, parent_group, amount, dr_cr, opening_amount, opening_dr_cr, created_at)
+            (company_id, fy_id, ledger_name, parent_group, amount, dr_cr, opening_amount, opening_dr_cr)
         VALUES (?, ?, ?, ?, 0, 'DR', ?, ?)
         ON DUPLICATE KEY UPDATE
             opening_amount = VALUES(opening_amount),
