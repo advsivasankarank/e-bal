@@ -174,16 +174,28 @@ function validateFYClosure(PDO $pdo, int $company_id, int $fy_id): array
     }
 
     $mappedCount = 0;
-    $totalLedgers = 0;
+    $totalBalanceLedgers = 0;
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM ledger_mapping WHERE company_id = ? AND schedule_code IS NOT NULL AND schedule_code != ''");
     $stmt->execute([$company_id]);
     $mappedCount = (int) $stmt->fetchColumn();
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM tally_ledger_master WHERE company_id = ?");
-    $stmt->execute([$company_id]);
-    $totalLedgers = (int) $stmt->fetchColumn();
-    if ($totalLedgers > 0 && $mappedCount < $totalLedgers) {
-        $unmapped = $totalLedgers - $mappedCount;
-        $failures[] = ['check_name' => 'unmapped_ledgers', 'severity' => 'error', 'message' => "{$unmapped} ledger(s) remain unmapped. All ledgers must be mapped before closure.", 'details' => json_encode(['mapped' => $mappedCount, 'total' => $totalLedgers])];
+
+    /* Count only ledgers with non-zero opening or closing balance for this FY */
+    $tbColumns = $pdo->query("SHOW COLUMNS FROM tally_ledgers")->fetchAll(PDO::FETCH_COLUMN);
+    $hasOpeningDebit = in_array('opening_debit', $tbColumns);
+    $hasClosingDebit = in_array('closing_debit', $tbColumns);
+
+    if ($hasOpeningDebit && $hasClosingDebit) {
+        $stmt = $pdo->prepare("SELECT COUNT(DISTINCT ledger_name) FROM tally_ledgers WHERE company_id = ? AND fy_id = ? AND (ABS(COALESCE(opening_debit,0) - COALESCE(opening_credit,0)) > 0 OR ABS(COALESCE(closing_debit,0) - COALESCE(closing_credit,0)) > 0)");
+        $stmt->execute([$company_id, $fy_id]);
+    } else {
+        $stmt = $pdo->prepare("SELECT COUNT(DISTINCT ledger_name) FROM tally_ledgers WHERE company_id = ? AND fy_id = ? AND (ABS(COALESCE(opening_amount,0)) > 0 OR ABS(COALESCE(amount,0)) > 0)");
+        $stmt->execute([$company_id, $fy_id]);
+    }
+    $totalBalanceLedgers = (int) $stmt->fetchColumn();
+
+    if ($totalBalanceLedgers > 0 && $mappedCount < $totalBalanceLedgers) {
+        $unmapped = $totalBalanceLedgers - $mappedCount;
+        $failures[] = ['check_name' => 'unmapped_ledgers', 'severity' => 'error', 'message' => "Closure Validation failed. {$unmapped} ledger(s) having opening or closing balance remain unmapped. Please map these ledgers before closing the financial year.", 'details' => json_encode(['mapped' => $mappedCount, 'total_balance_ledgers' => $totalBalanceLedgers])];
     }
 
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM workflow_status WHERE company_id = ? AND fy_id = ? AND reports_generated = 1");
