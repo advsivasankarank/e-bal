@@ -56,6 +56,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $consentCheck->execute([(int) $user['id']]);
                 $consentAccepted = !empty($consentCheck->fetchColumn());
 
+                if ($consentAccepted) {
+                    $_SESSION['demo_consent_accepted'] = true;
+                }
+
                 if (!$consentAccepted) {
                     // Redirect to consent page
                     header('Location: ' . BASE_URL . 'demo_consent.php');

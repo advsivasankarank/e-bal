@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['is_demo'] = true;
             $_SESSION['demo_status'] = 'credentials_sent';
 
-            $success = 'Your e-BAL demo access has been created. Login credentials will be sent to your email address. If you do not receive the email, please contact support@etaxadv.com.';
+            $success = 'Your e-BAL demo access has been created. Click below to start your 24-hour demo. Your demo data is temporary and may be deleted after the demo period.';
 
             /* Store email task for deferred sending after response */
             $_SESSION['demo_send_email'] = [
@@ -160,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="auth-success">
                     <?= htmlspecialchars($success) ?>
                     <div style="margin-top:12px;">
-                        <a href="<?= BASE_URL ?>login.php" class="auth-button" style="display:inline-block;width:auto;padding:10px 24px;text-decoration:none;">Login to e-BAL</a>
+                        <a href="<?= BASE_URL ?>login.php" class="auth-button" style="display:inline-block;width:auto;padding:10px 24px;text-decoration:none;">Start e-BAL Demo</a>
                     </div>
                 </div>
             <?php else: ?>

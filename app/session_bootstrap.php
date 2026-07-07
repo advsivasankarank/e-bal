@@ -40,4 +40,20 @@ if (!in_array($currentScript, $publicAllowList, true)) {
         header('Location: ' . BASE_URL . 'login.php');
         exit;
     }
+
+    /* Demo consent enforcement — redirect to consent page if not yet accepted */
+    $consentAllowList = [
+        'demo_consent.php',
+        'demo_request.php',
+        'demo_expired.php',
+        'demo_upgrade.php',
+        'logout.php',
+    ];
+    if (!in_array($currentScript, $consentAllowList, true)
+        && !empty($_SESSION['is_demo'])
+        && empty($_SESSION['demo_consent_accepted'])
+    ) {
+        header('Location: ' . BASE_URL . 'demo_consent.php');
+        exit;
+    }
 }

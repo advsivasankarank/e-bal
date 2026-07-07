@@ -44,6 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $accepted = acceptDemoConsent($pdo, $userId);
         if ($accepted) {
+            $_SESSION['demo_consent_accepted'] = true;
+            $_SESSION['demo_status'] = 'active';
             header('Location: ' . BASE_URL . 'index.php');
             exit;
         } else {
