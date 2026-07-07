@@ -33,6 +33,10 @@ if (isDemoConsentAccepted($pdo)) {
 }
 
 $error = '';
+$justCreated = !empty($_SESSION['demo_created_success']);
+if ($justCreated) {
+    unset($_SESSION['demo_created_success']);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_once __DIR__ . '/../app/helpers/security_helper.php';
@@ -59,14 +63,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Demo Consent | e-BAL</title>
+    <title>Start Demo | e-BAL</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/app.css">
     <style>
         body { min-height:100vh; margin:0; background:linear-gradient(180deg, #eef7f7 0%, #f7fbff 100%); font-family:Arial, sans-serif; color:#0f172a; }
         .auth-shell { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px 16px; }
         .auth-card { width:min(520px, 100%); background:#fff; border:1px solid #d8e2ef; border-radius:18px; box-shadow:0 24px 50px rgba(15, 23, 42, 0.08); padding:32px; }
         .auth-card h1 { margin:0 0 4px; font-size:24px; color:#12355B; }
-        .auth-card .subtitle { margin:0 0 18px; color:#64748b; font-size:14px; }
+        .auth-card .subtitle { margin:0 0 18px; color:#64748b; font-size:14px; line-height:1.5; }
+        .auth-success { margin-bottom:16px; padding:14px; border-radius:10px; background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; font-size:13px; line-height:1.6; }
         .notice-box { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:18px 20px; margin-bottom:18px; }
         .notice-box h3 { margin:0 0 8px; font-size:15px; color:#12355B; }
         .notice-box p { margin:0 0 10px; font-size:13px; color:#475569; line-height:1.6; }
@@ -85,8 +90,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="auth-shell">
         <div class="auth-card">
             <div class="demo-badge">Demo Mode</div>
-            <h1>Welcome to e-BAL Demo</h1>
-            <p class="subtitle">Please review and accept the following before proceeding.</p>
+            <h1>Start Your e-BAL Demo</h1>
+
+            <?php if ($justCreated): ?>
+                <div class="auth-success">Your e-BAL demo access has been created.</div>
+            <?php endif; ?>
+
+            <p class="subtitle">Please review and accept the demo terms below to start your 24-hour demo.</p>
 
             <?php if ($error !== ''): ?>
                 <div class="auth-error"><?= htmlspecialchars($error) ?></div>
@@ -96,8 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <h3>Data &amp; Privacy Notice</h3>
                 <p>Your contact details have been saved for demo support and sales follow-up.</p>
                 <p>Any entity, financial year, uploaded data, financial statements, reports or files created during this demo session will be <strong>automatically deleted</strong> when you logout or when the demo expires, for your data security and privacy.</p>
-                <p>Demo access is valid for <strong>24 hours</strong> from your first login.</p>
-                <p>You may now explore e-BAL.</p>
+                <p>Demo access is valid for <strong>24 hours</strong> from the time you proceed.</p>
             </div>
 
             <form method="post">
@@ -105,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="consent-check">
                     <input type="checkbox" id="consent" name="consent" value="1" required>
-                    <label for="consent">I understand that my contact details will be retained for demo support and sales follow-up, and that all financial/demo working data entered during this session will be deleted on logout or expiry.</label>
+                    <label for="consent">I understand that my contact details will be retained for demo support and sales follow-up, and all financial/demo working data entered during this session will be deleted on logout or expiry.</label>
                 </div>
 
                 <button class="auth-button" type="submit">Proceed to Demo Workspace</button>

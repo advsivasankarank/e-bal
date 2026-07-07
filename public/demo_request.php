@@ -21,7 +21,6 @@ header('Expires: 0');
 ensureDemoTables($pdo);
 
 $error = '';
-$success = '';
 
 /* Read flash error from CSRF redirect */
 if (!empty($_SESSION['demo_error'])) {
@@ -95,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['is_demo'] = true;
             $_SESSION['demo_status'] = 'credentials_sent';
 
-            $success = 'Your e-BAL demo access has been created. Click below to start your 24-hour demo. Your demo data is temporary and may be deleted after the demo period.';
+            $success = 'Your e-BAL demo access has been created.';
 
             /* Store email task for deferred sending after response */
             $_SESSION['demo_send_email'] = [
@@ -104,9 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'name' => $name,
             ];
 
-            /* PRG: redirect after POST to prevent browser resubmit on refresh */
-            $_SESSION['demo_success'] = $success;
-            header('Location: ' . BASE_URL . 'demo_request.php?success=1');
+            /* Redirect to merged consent/onboarding screen */
+            $_SESSION['demo_created_success'] = true;
+            header('Location: ' . BASE_URL . 'demo_consent.php');
             exit;
         } catch (Throwable $e) {
             $error = 'An error occurred while creating your demo access. Please try again.';
@@ -156,14 +155,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="auth-error"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
-            <?php if ($success !== ''): ?>
-                <div class="auth-success">
-                    <?= htmlspecialchars($success) ?>
-                    <div style="margin-top:12px;">
-                        <a href="<?= BASE_URL ?>login.php" class="auth-button" style="display:inline-block;width:auto;padding:10px 24px;text-decoration:none;">Start e-BAL Demo</a>
-                    </div>
-                </div>
-            <?php else: ?>
                 <form method="post">
                     <?= csrfInput() ?>
 
@@ -207,7 +198,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <button class="auth-button" type="submit">Create Demo Access</button>
                 </form>
-            <?php endif; ?>
 
             <div class="auth-links">
                 Already have an account? <a href="<?= BASE_URL ?>login.php">Login</a>
