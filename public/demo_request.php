@@ -35,18 +35,26 @@ if (!empty($_SESSION['demo_success'])) {
     unset($_SESSION['demo_success']);
 }
 
-/* Phase 1: Log pending demo credential email — do NOT send SMTP during page render.
-   SMTP is configured in mail_helper.php and ready for manual/test sending.
-   Re-enable automatic sending in a separate controlled step after SMTP is verified. */
+/* Send demo credential email after response — uses register_shutdown_function.
+   Single email path: only sendDemoCredentialsEmail() from demo_helper. */
 if (!empty($_SESSION['demo_send_email'])) {
     $emailTask = $_SESSION['demo_send_email'];
     unset($_SESSION['demo_send_email']);
-    if (function_exists('appLog')) {
-        appLog('INFO', 'Demo credential email pending — SMTP configured, awaiting verification', [
-            'email' => $emailTask['email'],
-            'name' => $emailTask['name'],
-        ]);
-    }
+
+    register_shutdown_function(function () use ($emailTask) {
+        global $pdo;
+        try {
+            require_once __DIR__ . '/../app/helpers/demo_helper.php';
+            if (!isset($pdo) || !($pdo instanceof PDO)) {
+                require_once __DIR__ . '/../config/database.php';
+            }
+            sendDemoCredentialsEmail($pdo, $emailTask['email'], $emailTask['password'], $emailTask['name']);
+        } catch (Throwable $e) {
+            if (function_exists('appLog')) {
+                appLog('WARN', 'Demo credential email failed', ['error' => $e->getMessage()]);
+            }
+        }
+    });
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -89,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $success = 'Your e-BAL demo access has been created. Login credentials will be sent to your email address. If you do not receive the email, please contact support@etaxadv.com.';
 
-            /* Defer email sending to after redirect — prevents mail() from blocking response */
+            /* Store email task for deferred sending after response */
             $_SESSION['demo_send_email'] = [
                 'email' => $email,
                 'password' => $result['password'],
