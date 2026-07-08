@@ -68,7 +68,7 @@ function getWorkflowNavigation(PDO $pdo, int $companyId, int $fyId): array
     $stages = getWorkflowStages();
     $currentStage = resolveWorkflowStage();
 
-    $companyParam = $companyId > 0 ? '&entity_id=' . $companyId : '';
+    $companyParam = $companyId > 0 ? '?entity_id=' . $companyId : '';
     $fyParam      = $fyId > 0 ? '&fy_id=' . $fyId : '';
 
     $defaultNav = [
