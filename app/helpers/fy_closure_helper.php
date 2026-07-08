@@ -242,27 +242,40 @@ function captureClosingSnapshot(PDO $pdo, int $company_id, int $fy_id): int
             if (abs($amount) < 0.005) {
                 continue;
             }
+            /* Determine original DR/CR direction from raw totals instead of classified sign.
+               classified amount can be positive for CR-driven buckets (equity, borrowings,
+               current_liabilities, revenue) which would wrongly map to DR in the snapshot. */
+            $drTotal = (float) ($row['dr_total'] ?? 0);
+            $crTotal = (float) ($row['cr_total'] ?? 0);
+            if ($crTotal > $drTotal) {
+                $snapshotDrCr = 'CR';
+                $snapshotAmount = $crTotal - $drTotal;
+            } else {
+                $snapshotDrCr = 'DR';
+                $snapshotAmount = $drTotal - $crTotal;
+            }
             $ins->execute([
                 $company_id,
                 $fy_id,
                 $code,
                 (string) ($row['ledger_name'] ?? ''),
                 (string) ($row['parent_group'] ?? ''),
-                $amount,
-                $amount >= 0 ? 'DR' : 'CR',
+                $snapshotAmount,
+                $snapshotDrCr,
             ]);
             $count++;
         }
         $totalAmount = (float) ($item['amount'] ?? 0);
         if (abs($totalAmount) >= 0.005) {
+            $totalDrCr = $totalAmount >= 0 ? 'DR' : 'CR';
             $ins->execute([
                 $company_id,
                 $fy_id,
                 $code . '_total',
                 '__TOTAL__',
                 '',
-                $totalAmount,
-                $totalAmount >= 0 ? 'DR' : 'CR',
+                abs($totalAmount),
+                $totalDrCr,
             ]);
             $count++;
         }

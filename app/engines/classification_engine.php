@@ -249,6 +249,8 @@ function getClassifiedData(PDO $pdo, int $company_id, int $fy_id): array
                 'ledger_name' => (string) $row['ledger_name'],
                 'amount' => $amount,
                 'previous_amount' => $previousAmount,
+                'dr_total' => $drTotal,
+                'cr_total' => $crTotal,
             ];
         }
 
