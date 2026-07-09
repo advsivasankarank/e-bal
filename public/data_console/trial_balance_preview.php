@@ -734,7 +734,7 @@ $mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) 
     for (var i = 0; i < selects.length; i++) {
         originalValues[selects[i].name] = selects[i].value;
     }
-    var form = document.querySelector('.tb-preview-form');
+    var form = document.querySelector('form[method="post"].tb-preview-form');
     if (form) {
         form.addEventListener('submit', function() {
             for (var i = 0; i < selects.length; i++) {
