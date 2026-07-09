@@ -29,5 +29,5 @@ if (ini_get('session.use_cookies')) {
 
 session_destroy();
 
-header('Location: ' . BASE_URL . 'login.php');
+header('Location: /');
 exit;
