@@ -528,6 +528,15 @@ error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}
 
 $pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
+/* Pagination: limit gridData passed to JavaScript for performance */
+$perPage = max(50, min(500, (int) ($_GET['per_page'] ?? 50)));
+$currentPage = max(1, (int) ($_GET['page'] ?? 1));
+$totalGridRows = count($gridData);
+$totalPages = max(1, (int) ceil($totalGridRows / $perPage));
+$currentPage = min($currentPage, $totalPages);
+$gridOffset = ($currentPage - 1) * $perPage;
+$paginatedGridData = array_slice($gridData, $gridOffset, $perPage);
+
 $page_title = $isLedgerMode ? "Ledger-wise Mapping" : "ReconHub";
 $showSidebar = true;
 require_once __DIR__ . '/../layouts/header_v2.php';
@@ -829,6 +838,30 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     </div>
 </div>
 
+<!-- Pagination Controls -->
+<?php if ($totalGridRows > $perPage): ?>
+<div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0;padding:10px 16px;background:var(--panel);border:1px solid var(--border);border-radius:8px;font-size:0.82rem;">
+    <div style="display:flex;align-items:center;gap:8px;">
+        <span style="color:var(--muted);">Showing <?= number_format($gridOffset + 1) ?>–<?= number_format(min($gridOffset + $perPage, $totalGridRows)) ?> of <?= number_format($totalGridRows) ?> ledgers</span>
+        <label style="color:var(--muted);">Per page:</label>
+        <select onchange="var u=new URL(window.location);u.searchParams.set('per_page',this.value);u.searchParams.set('page','1');window.location=u;" style="padding:2px 6px;font-size:0.8rem;">
+            <option value="25" <?= $perPage === 25 ? 'selected' : '' ?>>25</option>
+            <option value="50" <?= $perPage === 50 ? 'selected' : '' ?>>50</option>
+            <option value="100" <?= $perPage === 100 ? 'selected' : '' ?>>100</option>
+        </select>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+        <?php if ($currentPage > 1): ?>
+        <a href="<?= BASE_URL ?>data_console/mapping_workbench.php?<?= http_build_query(array_merge($_GET, ['page' => $currentPage - 1, 'per_page' => $perPage])) ?>" style="padding:4px 10px;border:1px solid var(--border);border-radius:4px;text-decoration:none;color:var(--text);">&#8592; Prev</a>
+        <?php endif; ?>
+        <span style="color:var(--muted);"><?= $currentPage ?> / <?= $totalPages ?></span>
+        <?php if ($currentPage < $totalPages): ?>
+        <a href="<?= BASE_URL ?>data_console/mapping_workbench.php?<?= http_build_query(array_merge($_GET, ['page' => $currentPage + 1, 'per_page' => $perPage])) ?>" style="padding:4px 10px;border:1px solid var(--border);border-radius:4px;text-decoration:none;color:var(--text);">Next &#8594;</a>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Schedule III Group Mapping Panel -->
 <div id="groupMappingPanel" style="background:var(--panel-strong);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:12px;box-shadow:var(--shadow-sm);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -950,7 +983,11 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     var ebalBaseUrl = <?= json_encode(BASE_URL) ?>;
     var csrfToken = <?= json_encode(csrfToken()) ?>;
     var mappingOptions = <?= json_encode($mappingOptionsJson) ?>;
-    var allData = <?= json_encode($gridData) ?>;
+    var allData = <?= json_encode($paginatedGridData) ?>;
+    var totalGridRows = <?= (int) $totalGridRows ?>;
+    var currentPage = <?= (int) $currentPage ?>;
+    var totalPages = <?= (int) $totalPages ?>;
+    var perPage = <?= (int) $perPage ?>;
     var tbImpactCount = <?= (int) $tbImpactCount ?>;
     var totalCount = <?= (int) $totalLedgerCount ?>;
     var defaultView = <?= $defaultViewTbImpact ? "'tb_impact'" : "'all'" ?>;
