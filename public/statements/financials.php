@@ -222,11 +222,113 @@ echo renderWorkflowNavigation($navData);
 <?php if (!empty($validationIssues)): ?>
 <div class="fs-validation-strip">
     <?php foreach ($validationIssues as $vi): ?>
-    <span class="item <?= $vi['type'] ?>"><?= $vi['type'] === 'error' ? '&#10060;' : '&#9888;&#65039;' ?> <?= htmlspecialchars($vi['text']) ?></span>
+    <span class="item <?= $vi['type'] ?>" style="cursor:pointer;" onclick="document.getElementById('validationModal').style.display='flex';"><?= $vi['type'] === 'error' ? '&#10060;' : '&#9888;&#65039;' ?> <?= htmlspecialchars($vi['text']) ?></span>
     <?php endforeach; ?>
     <?php if (abs($currentDiff) <= 0.01 && abs($previousDiff) <= 0.01): ?>
     <span style="color:#16a34a;">&#9989; BS Identity: Balanced</span>
     <?php endif; ?>
+</div>
+
+<!-- Validation Issues Modal -->
+<div id="validationModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;justify-content:center;align-items:center;" onclick="if(event.target===this)this.style.display='none'">
+<div style="background:#fff;border-radius:12px;max-width:700px;width:95%;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h3 style="margin:0;font-size:1.1rem;">&#9888;&#65039; Validation Issues</h3>
+    <button onclick="document.getElementById('validationModal').style.display='none'" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#666;">&times;</button>
+</div>
+
+<!-- BS Difference -->
+<?php if (abs($currentDiff) > 0.01 || abs($previousDiff) > 0.01): ?>
+<div style="border:1px solid #fca5a5;background:#fef2f2;border-radius:8px;padding:14px;margin-bottom:12px;">
+    <div style="font-weight:700;color:#991b1b;margin-bottom:6px;">&#10060; Balance Sheet Not Balanced</div>
+    <div style="font-size:0.88rem;color:#475569;margin-bottom:8px;">
+        Current year difference: <strong><?= format_inr($currentDiff) ?></strong>
+        <?php if (abs($previousDiff) > 0.01): ?><br>Previous year difference: <strong><?= format_inr($previousDiff) ?></strong><?php endif; ?>
+    </div>
+    <div style="font-size:0.82rem;color:#666;margin-bottom:10px;">Suggested causes: parent-group conflict, unmapped ledger, duplicate ledger, or data mismatch.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn" href="<?= BASE_URL ?>data_console/mapping_workbench.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;">Open Mapping Workbench</a>
+        <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;">Open Trial Balance</a>
+        <button onclick="window.location.reload()" style="font-size:0.78rem;padding:5px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;cursor:pointer;">Rebuild</button>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Parent Group Conflicts -->
+<?php if (!empty($parentGroupConflicts)): ?>
+<div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;padding:14px;margin-bottom:12px;">
+    <div style="font-weight:700;color:#92400e;margin-bottom:6px;">&#128681; Parent-Group Conflicts (<?= count($parentGroupConflicts) ?>)</div>
+    <div style="font-size:0.88rem;color:#475569;margin-bottom:8px;">Ledgers with conflicting parent-group mappings are excluded from classification.</div>
+    <?php if (count($parentGroupConflicts) <= 5): ?>
+    <ul style="font-size:0.82rem;color:#666;margin:0 0 10px 16px;">
+        <?php foreach (array_slice($parentGroupConflicts, 0, 5) as $c): ?>
+        <li><?= htmlspecialchars($c['ledger_name'] ?? '?') ?> (<?= htmlspecialchars($c['parent_group'] ?? '') ?> → <?= htmlspecialchars($c['schedule_code'] ?? '') ?>)</li>
+        <?php endforeach; ?>
+    </ul>
+    <?php else: ?>
+    <div style="font-size:0.82rem;color:#666;margin-bottom:8px;"><?= count($parentGroupConflicts) ?> ledgers affected. Open Mapping Workbench to review.</div>
+    <?php endif; ?>
+    <a class="btn" href="<?= BASE_URL ?>data_console/mapping_workbench.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;display:inline-block;">Open Mapping Workbench</a>
+</div>
+<?php endif; ?>
+
+<!-- Missing Note Headings -->
+<?php if (!($noteCompleteness['is_complete'] ?? true) && !empty($noteCompleteness['missing'])): ?>
+<div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;padding:14px;margin-bottom:12px;">
+    <div style="font-weight:700;color:#92400e;margin-bottom:6px;">&#128221; Missing Note Headings (<?= count($noteCompleteness['missing']) ?>)</div>
+    <div style="font-size:0.88rem;color:#475569;margin-bottom:8px;">Expected note sections are missing from the report.</div>
+    <ul style="font-size:0.82rem;color:#666;margin:0 0 10px 16px;">
+        <?php foreach (array_slice($noteCompleteness['missing'] ?? [], 0, 8) as $m): ?>
+        <li><?= htmlspecialchars(is_array($m) ? ($m['title'] ?? $m['label'] ?? '?') : (string)$m) ?></li>
+        <?php endforeach; ?>
+        <?php if (count($noteCompleteness['missing'] ?? []) > 8): ?>
+        <li>+<?= count($noteCompleteness['missing']) - 8 ?> more</li>
+        <?php endif; ?>
+    </ul>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn" href="<?= BASE_URL ?>data_console/mapping_workbench.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;">Open Mapping Workbench</a>
+        <button onclick="window.location.reload()" style="font-size:0.78rem;padding:5px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;cursor:pointer;">Rebuild</button>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Validation Errors -->
+<?php if (!empty($validationResult['errors'])): ?>
+<div style="border:1px solid #fca5a5;background:#fef2f2;border-radius:8px;padding:14px;margin-bottom:12px;">
+    <div style="font-weight:700;color:#991b1b;margin-bottom:6px;">&#10060; Validation Errors (<?= count($validationResult['errors']) ?>)</div>
+    <ul style="font-size:0.82rem;color:#666;margin:0 0 10px 16px;">
+        <?php foreach (array_slice($validationResult['errors'], 0, 8) as $err): ?>
+        <li><?= htmlspecialchars($err['message'] ?? $err['check'] ?? '?') ?></li>
+        <?php endforeach; ?>
+        <?php if (count($validationResult['errors']) > 8): ?>
+        <li>+<?= count($validationResult['errors']) - 8 ?> more</li>
+        <?php endif; ?>
+    </ul>
+    <div style="font-size:0.82rem;color:#666;margin-bottom:8px;">Open Mapping Workbench and Data Console to review ledger mapping and note classification.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn" href="<?= BASE_URL ?>data_console/mapping_workbench.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;">Open Mapping Workbench</a>
+        <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;">Open Trial Balance</a>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Validation Warnings -->
+<?php if (!empty($validationResult['warnings'])): ?>
+<div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;padding:14px;margin-bottom:12px;">
+    <div style="font-weight:700;color:#92400e;margin-bottom:6px;">&#9888;&#65039; Validation Warnings (<?= count($validationResult['warnings']) ?>)</div>
+    <ul style="font-size:0.82rem;color:#666;margin:0 0 10px 16px;">
+        <?php foreach (array_slice($validationResult['warnings'], 0, 8) as $warn): ?>
+        <li><?= htmlspecialchars($warn['message'] ?? $warn['check'] ?? '?') ?></li>
+        <?php endforeach; ?>
+        <?php if (count($validationResult['warnings']) > 8): ?>
+        <li>+<?= count($validationResult['warnings']) - 8 ?> more</li>
+        <?php endif; ?>
+    </ul>
+    <div style="font-size:0.82rem;color:#666;">Review these warnings in Mapping Workbench or Data Console.</div>
+</div>
+<?php endif; ?>
+
+</div>
 </div>
 <?php endif; ?>
 
