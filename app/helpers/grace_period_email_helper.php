@@ -215,7 +215,7 @@ function renderGracePeriodReminderEmailTemplate(string $userName, string $planNa
             <p>Click the button below to renew your subscription immediately and regain full access:</p>
             
             <center>
-                <a href="{$renewalLink}" class="button">Renew Now - Only {$daysRemaining} Day{$daysRemaining === 1 ? '' : 's'} Left!</a>
+                <a href="{$renewalLink}" class="button">Renew Now - Only {$daysRemaining} {$dayText} Left!</a>
             </center>
             
             <p style="color: #666; font-size: 13px; margin-top: 20px;">

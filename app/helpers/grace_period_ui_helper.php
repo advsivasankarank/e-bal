@@ -102,14 +102,14 @@ function renderGracePeriodBanner(PDO $pdo, int $userId): string
         default => 'ℹ️',
     };
 
-    return <<<HTML
+    $html = <<<HTML
 <div class="grace-period-banner {$severityClass}">
     <div style="display: flex; align-items: center; gap: 12px;">
         <span style="font-size: 20px;">{$icon}</span>
         <div style="flex: 1;">
             <strong>{$status['message']}</strong>
             <div style="font-size: 12px; margin-top: 6px; opacity: 0.9;">
-                HTML;
+HTML;
 
     if ($status['status'] === 'grace_period' || $status['status'] === 'expiring_soon') {
         $html .= '<a href="' . BASE_URL . 'upgrade.php" style="color: inherit; text-decoration: underline; font-weight: 600;">Renew now →</a>';
