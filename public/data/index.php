@@ -234,15 +234,67 @@ echo renderWorkflowNavigation($navData);
     <?= uiButton('← Back to My Assignments', BASE_URL . 'my_assignments.php', 'outline') ?>
 </div>
 
+<!-- Import Method Modal -->
+<div id="importModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;justify-content:center;align-items:center;" onclick="if(event.target===this)this.style.display='none'">
+<div style="background:#fff;border-radius:12px;max-width:600px;width:95%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h3 style="margin:0;font-size:1.1rem;">&#128229; Choose Import Method</h3>
+    <button onclick="document.getElementById('importModal').style.display='none'" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#666;">&times;</button>
+</div>
+<p style="font-size:0.88rem;color:#475569;margin:0 0 16px;">Select how you would like to import ledger and trial balance data.</p>
+
+<a href="<?= BASE_URL ?>data_console/tally_online.php?company_id=<?= (int)$v2CompanyId ?>&fy_id=<?= (int)$v2FyId ?>" style="display:flex;align-items:center;gap:14px;padding:16px;border:2px solid var(--border);border-radius:10px;text-decoration:none;color:inherit;margin-bottom:10px;transition:all .15s;" onmouseover="this.style.borderColor='var(--brand)';this.style.boxShadow='var(--shadow)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+    <span style="font-size:1.6rem;">&#128279;</span>
+    <div style="flex:1;">
+        <div style="font-weight:700;font-size:0.95rem;">Tally Online Sync <span style="background:#dcfce7;color:#166534;font-size:0.68rem;padding:2px 8px;border-radius:99px;margin-left:6px;">Recommended</span></div>
+        <div style="font-size:0.82rem;color:#666;margin-top:3px;">Connect directly to Tally via Smart Bridge / ODBC. Real-time ledger and trial balance sync.</div>
+    </div>
+    <span style="color:var(--brand);font-size:1.2rem;">&#8250;</span>
+</a>
+
+<a href="<?= BASE_URL ?>data_console/xml_import.php?company_id=<?= (int)$v2CompanyId ?>&fy_id=<?= (int)$v2FyId ?>" style="display:flex;align-items:center;gap:14px;padding:16px;border:2px solid var(--border);border-radius:10px;text-decoration:none;color:inherit;margin-bottom:10px;transition:all .15s;" onmouseover="this.style.borderColor='var(--brand)';this.style.boxShadow='var(--shadow)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+    <span style="font-size:1.6rem;">&#128196;</span>
+    <div style="flex:1;">
+        <div style="font-weight:700;font-size:0.95rem;">XML Upload <span style="background:#dbeafe;color:#1e40af;font-size:0.68rem;padding:2px 8px;border-radius:99px;margin-left:6px;">Popular</span></div>
+        <div style="font-size:0.82rem;color:#666;margin-top:3px;">Upload Tally-exported XML files for ledgers and trial balance.</div>
+    </div>
+    <span style="color:var(--brand);font-size:1.2rem;">&#8250;</span>
+</a>
+
+<a href="<?= BASE_URL ?>data_console/tally_offline.php?company_id=<?= (int)$v2CompanyId ?>&fy_id=<?= (int)$v2FyId ?>" style="display:flex;align-items:center;gap:14px;padding:16px;border:2px solid var(--border);border-radius:10px;text-decoration:none;color:inherit;margin-bottom:16px;transition:all .15s;" onmouseover="this.style.borderColor='var(--brand)';this.style.boxShadow='var(--shadow)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+    <span style="font-size:1.6rem;">&#128203;</span>
+    <div style="flex:1;">
+        <div style="font-weight:700;font-size:0.95rem;">CSV / Excel / Manual <span style="background:#fef3c7;color:#92400e;font-size:0.68rem;padding:2px 8px;border-radius:99px;margin-left:6px;">Standard</span></div>
+        <div style="font-size:0.82rem;color:#666;margin-top:3px;">Import from CSV/Excel or enter data manually.</div>
+    </div>
+    <span style="color:var(--brand);font-size:1.2rem;">&#8250;</span>
+</a>
+
+<div style="text-align:right;">
+    <button onclick="document.getElementById('importModal').style.display='none'" style="padding:8px 20px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:0.85rem;">Cancel</button>
+</div>
+</div>
+</div>
+
 <script>
 (function() {
-    /* Tiles are direct links — no tab switching needed */
-    var tiles = document.querySelectorAll('.v2-dw-tile');
-    for (var i = 0; i < tiles.length; i++) {
-        tiles[i].addEventListener('click', function(e) {
-            /* Allow default link navigation */
+    /* Intercept Ledger Import tile click to show modal */
+    var importTile = document.querySelector('.v2-dw-tile[data-tile="import"]');
+    if (importTile) {
+        importTile.addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('importModal').style.display = 'flex';
         });
     }
+    /* Close modal on Escape */
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var modal = document.getElementById('importModal');
+            if (modal && modal.style.display === 'flex') {
+                modal.style.display = 'none';
+            }
+        }
+    });
 })();
 </script>
 
