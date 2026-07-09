@@ -532,6 +532,7 @@ if ($conflictLedgers > 0) {
 $reviewColor = $reviewStatus === 'ready' ? 'var(--success)' : ($reviewStatus === 'needs_review' ? 'var(--warning)' : 'var(--danger)');
 
 $cardBase = BASE_URL . 'data_console/trial_balance_preview.php?company_id=' . (int)$company_id . '&fy_id=' . (int)$fy_id;
+$perPage = max(25, min(100, (int) ($_GET['per_page'] ?? 50)));
 $cardParams = ['company_id' => (int)$company_id, 'fy_id' => (int)$fy_id, 'per_page' => $perPage];
 ?>
 
@@ -590,7 +591,7 @@ $cardParams = ['company_id' => (int)$company_id, 'fy_id' => (int)$fy_id, 'per_pa
         <span class="step-label">Map Notes</span>
     </a>
     <div class="step-line"></div>
-    <a href="<?= BASE_URL ?>statements/financials.php?entity_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" class="step" style="text-decoration:none;color:<?= $mappingHealthStatus === 'ready' ? 'inherit' : 'var(--muted)' ?>;">
+    <a href="<?= BASE_URL ?>statements/financials.php?entity_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" class="step" style="text-decoration:none;color:<?= ($reviewStatus ?? 'ready') === 'ready' ? 'inherit' : 'var(--muted)' ?>;">
         <span class="step-circle pending">4</span>
         <span class="step-label muted">Complete</span>
     </a>
