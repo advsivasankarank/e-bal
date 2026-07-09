@@ -178,11 +178,11 @@ if (!($noteCompleteness['is_complete'] ?? true)) {
 $validationSummary = [];
 if (!empty($validationResult['errors'])) {
     $validationSummary['errors'] = count($validationResult['errors']);
-    $validationIssues[] = ['type' => 'error', 'text' => count($validationResult['errors']) . ' validation error(s)', 'link' => BASE_URL . 'review_centre.php'];
+    $validationIssues[] = ['type' => 'error', 'text' => count($validationResult['errors']) . ' validation error(s)', 'link' => BASE_URL . 'review/index.php'];
 }
 if (!empty($validationResult['warnings'])) {
     $validationSummary['warnings'] = count($validationResult['warnings']);
-    $validationIssues[] = ['type' => 'warning', 'text' => count($validationResult['warnings']) . ' validation warning(s)', 'link' => BASE_URL . 'review_centre.php'];
+    $validationIssues[] = ['type' => 'warning', 'text' => count($validationResult['warnings']) . ' validation warning(s)', 'link' => BASE_URL . 'review/index.php'];
 }
 
 /* ---- All redirects complete, safe to output HTML ---- */
@@ -225,7 +225,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
     <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
         <a class="btn" href="<?= BASE_URL ?>reconciliation_console.php" style="font-size:0.78rem;padding:6px 14px;background:#fff;border:1px solid <?= $readinessBorder ?>;">Open Reconciliation Console</a>
         <a class="btn" href="<?= BASE_URL ?>data_console/mapping_workbench.php" style="font-size:0.78rem;padding:6px 14px;background:#fff;border:1px solid <?= $readinessBorder ?>;">Open ReconHub</a>
-        <a class="btn" href="<?= BASE_URL ?>review_centre.php" style="font-size:0.78rem;padding:6px 14px;background:#fff;border:1px solid <?= $readinessBorder ?>;">Open Review Centre</a>
+        <a class="btn" href="<?= BASE_URL ?>review/index.php" style="font-size:0.78rem;padding:6px 14px;background:#fff;border:1px solid <?= $readinessBorder ?>;">Open Review Centre</a>
         <a class="btn" href="<?= BASE_URL ?>data_console/ai_mapping.php?context=fs_review" style="font-size:0.78rem;padding:6px 14px;background:#fff;border:1px solid <?= $readinessBorder ?>;">Ask IntelAI</a>
     </div>
 </div>
@@ -740,14 +740,14 @@ require_once __DIR__ . '/layouts/header_v2.php';
                     <li class="fs-issue-item error">
                         <div class="fs-issue-title">&#10060; <?= htmlspecialchars($err['check'] ?? 'Error') ?></div>
                         <div class="fs-issue-reason"><?= htmlspecialchars($err['message'] ?? '') ?></div>
-                        <div class="fs-issue-action"><a href="<?= BASE_URL ?>review_centre.php">Open Review Centre</a></div>
+                        <div class="fs-issue-action"><a href="<?= BASE_URL ?>review/index.php">Open Review Centre</a></div>
                     </li>
                     <?php endforeach; ?>
                     <?php foreach ($validationResult['warnings'] as $warn): ?>
                     <li class="fs-issue-item warning">
                         <div class="fs-issue-title">&#9888;&#65039; <?= htmlspecialchars($warn['check'] ?? 'Warning') ?></div>
                         <div class="fs-issue-reason"><?= htmlspecialchars($warn['message'] ?? '') ?></div>
-                        <div class="fs-issue-action"><a href="<?= BASE_URL ?>review_centre.php">Open Review Centre</a></div>
+                        <div class="fs-issue-action"><a href="<?= BASE_URL ?>review/index.php">Open Review Centre</a></div>
                     </li>
                     <?php endforeach; ?>
                 </ul>

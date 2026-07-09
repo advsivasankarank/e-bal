@@ -570,7 +570,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
     <div class="rc-next-btns">
         <a class="btn btn-primary" href="<?= htmlspecialchars($nextProcessUrl) ?>"><?= htmlspecialchars($nextProcessLabel) ?></a>
         <a class="btn btn-outline" href="<?= htmlspecialchars(BASE_URL . 'data_console/mapping_workbench.php') ?>">Open ReconHub</a>
-        <a class="btn btn-outline" href="<?= htmlspecialchars(BASE_URL . 'review_centre.php') ?>">Review Centre</a>
+        <a class="btn btn-outline" href="<?= BASE_URL ?>review/index.php">Review Centre</a>
         <a class="btn btn-outline" href="<?= htmlspecialchars(buildReconLink($companyId, $fyId, '')) ?>&format=json" target="_blank">Export Report</a>
     </div>
 </div>
