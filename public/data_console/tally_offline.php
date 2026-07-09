@@ -44,7 +44,7 @@ $nextProcessUrl = BASE_URL . 'data_console/xml_ledger_upload.php';
 $nextProcessHelp = 'Start by uploading the ledger master XML so the mapping base can be created.';
 
 if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
-    $nextProcessLabel = 'Go to Mapping Console';
+    $nextProcessLabel = 'Go to Mapping Workbench';
     $nextProcessUrl = BASE_URL . 'data_console/mapping_console.php';
     $nextProcessHelp = 'Ledger import is complete. Review and confirm the schedule mapping as the next process.';
 } elseif ((int) $mappingDone === 1 && (int) $tallyFetched !== 1) {

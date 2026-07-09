@@ -49,7 +49,7 @@ $tallyFetched = (int) ($workflow['tally_fetched'] ?? 0);
         'href' => BASE_URL . 'data_console/tally_console.php',
     ],
     [
-        'label' => 'Mapping Console',
+        'label' => 'Mapping Workbench',
         'desc' => 'Map imported ledgers to schedule heads and review the data before final trial balance import.',
         'href' => $ledgerFetched ? BASE_URL . 'data_console/mapping_console.php' : '#',
         'disabled' => !$ledgerFetched,

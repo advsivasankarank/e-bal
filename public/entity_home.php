@@ -101,7 +101,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
 ?>
 
 <?= uiBreadcrumb([
-    ['label' => 'Entity Dashboard', 'href' => BASE_URL . 'dashboard_company.php'],
+    ['label' => 'e-BAL Gateway', 'href' => BASE_URL . 'dashboard_company.php'],
     ['label' => htmlspecialchars($company['name'])],
 ]) ?>
 
@@ -157,7 +157,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
                     <?= uiButton('Create FY 2024-2025', '', 'primary', '➕') ?>
                 </div>
                 <div style="margin-top:16px;">
-                    <?= uiButton('Back to Entity Dashboard', BASE_URL . 'dashboard_company.php', 'outline', '←') ?>
+                    <?= uiButton('Back to e-BAL Gateway', BASE_URL . 'dashboard_company.php', 'outline', '←') ?>
                 </div>
             </div>
         </form>

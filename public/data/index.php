@@ -1,6 +1,6 @@
 <?php
 /**
- * e-BAL V2 — Data Centre
+ * e-BAL V2 — Data Console
  *
  * Unified Data workspace with 4 sub-sections:
  *   1. Ledger Import
@@ -24,7 +24,7 @@ $v2CompanyName = (string) ($_SESSION['company_name'] ?? '');
 $v2FyName = (string) ($_SESSION['fy_name'] ?? '');
 
 if ($v2CompanyId <= 0 || $v2FyId <= 0) {
-    /* Context missing — redirect to Entity Dashboard */
+    /* Context missing — redirect to e-BAL Gateway */
     header('Location: ' . BASE_URL . 'dashboard_company.php');
     exit;
 }
@@ -157,7 +157,7 @@ foreach ($v2SubSections as $ss) {
 
 <?= uiBreadcrumb([
     ['label' => 'My Assignments', 'href' => BASE_URL . 'my_assignments.php'],
-    ['label' => 'Data Centre'],
+    ['label' => 'Data Console'],
 ]) ?>
 
 <?= uiPageHero('Data Console', htmlspecialchars($v2CompanyName) . ' · FY ' . htmlspecialchars($v2FyName)) ?>

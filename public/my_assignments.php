@@ -108,7 +108,7 @@ if ($status === 'completed') {
     $nextAction = 'Generate Deliverables';
     $nextHref = BASE_URL . 'deliverables/';
 } elseif ($status === 'new') {
-    $nextAction = 'Go to Data Centre';
+    $nextAction = 'Go to Data Console';
     $nextHref = BASE_URL . 'data/';
 } elseif ($nextIdx < $totalSteps) {
     $nextAction = 'Continue to ' . $steps[$nextIdx]['label'];
@@ -123,7 +123,7 @@ if ($status === 'completed') {
 ?>
 
 <?= uiBreadcrumb([
-    ['label' => 'Entity Dashboard', 'href' => BASE_URL . 'dashboard_company.php'],
+    ['label' => 'e-BAL Gateway', 'href' => BASE_URL . 'dashboard_company.php'],
     ['label' => htmlspecialchars($company['name']), 'href' => BASE_URL . 'entity_home.php?company_id=' . $activeCompanyId],
     ['label' => 'My Assignments'],
 ]) ?>
@@ -172,7 +172,7 @@ if ($status === 'completed') {
     <?php if ($nextHref): ?>
         <?= uiButton($nextAction, $nextHref, 'primary', '→') ?>
     <?php endif; ?>
-    <?= uiButton('Data Centre', BASE_URL . 'data/', 'outline', '📥') ?>
+    <?= uiButton('Data Console', BASE_URL . 'data/', 'outline', '📥') ?>
     <?= uiButton('Financial Statements', BASE_URL . 'statements/financials.php', 'outline', '📊') ?>
     <?= uiButton('Review', BASE_URL . 'review/', 'outline', '✅') ?>
     <?= uiButton('Deliverables', BASE_URL . 'deliverables/', 'outline', '📦') ?>

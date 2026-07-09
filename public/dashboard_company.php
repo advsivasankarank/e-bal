@@ -127,7 +127,7 @@ $entityLabelMap = [
 <!-- Help Text -->
 <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:16px;">
     <div style="font-size:.82rem;color:var(--muted);line-height:1.6;">
-        <strong>Getting Started:</strong> Create an entity or select an existing one. Then choose a financial year to enter the workspace with Data Centre, Financial Statements, Review Centre, and Deliverables.
+        <strong>Getting Started:</strong> Create an entity or select an existing one. Then choose a financial year to enter the workspace with Data Console, Financial Statements, Review Centre, and Deliverables.
     </div>
 </div>
 

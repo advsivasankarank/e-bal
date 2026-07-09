@@ -47,7 +47,7 @@ $nextProcessUrl = BASE_URL . 'data_console/connector.php?bridge=1';
 $nextProcessHelp = 'Start the ledger sync to bring the live Tally ledger master into e-BAL.';
 
 if ((int) $ledgerFetched === 1 && (int) $mappingDone !== 1) {
-    $nextProcessLabel = 'Go to Mapping Console';
+    $nextProcessLabel = 'Go to Mapping Workbench';
     $nextProcessUrl = BASE_URL . 'data_console/mapping_console.php';
     $nextProcessHelp = 'Ledger sync is complete. Review and confirm the schedule mapping as the next process.';
 } elseif ((int) $mappingDone === 1 && (int) $tallyFetched !== 1) {

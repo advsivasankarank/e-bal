@@ -1,6 +1,6 @@
 <?php
 /**
- * e-BAL V2 — Mapping Console (Legacy Redirect)
+ * e-BAL V2 — Mapping Workbench (Legacy Redirect)
  *
  * This page redirects to the Bulk Mapping Workbench.
  * The old mapping console has been superseded by mapping_workbench.php.
