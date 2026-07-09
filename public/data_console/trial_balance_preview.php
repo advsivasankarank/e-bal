@@ -244,6 +244,7 @@ if ($selectedNote !== '') {
     }));
 }
 
+$cardFilter = strtolower(trim((string) ($_GET['filter'] ?? '')));
 $filterSlFrom = (int) ($_GET['sl_from'] ?? 0);
 $filterSlTo = (int) ($_GET['sl_to'] ?? 0);
 $filterLedger = trim((string) ($_GET['filter_ledger'] ?? ''));
@@ -254,6 +255,21 @@ $filterDrMin = is_numeric($_GET['dr_min'] ?? null) ? (float) $_GET['dr_min'] : n
 $filterDrMax = is_numeric($_GET['dr_max'] ?? null) ? (float) $_GET['dr_max'] : null;
 $filterCrMin = is_numeric($_GET['cr_min'] ?? null) ? (float) $_GET['cr_min'] : null;
 $filterCrMax = is_numeric($_GET['cr_max'] ?? null) ? (float) $_GET['cr_max'] : null;
+
+/* Apply card filter first */
+if ($cardFilter !== '' && in_array($cardFilter, ['all', 'mapped', 'unmapped', 'conflicts', 'debit', 'credit'], true)) {
+    $currentPage = 1; /* Reset to page 1 when card filter is clicked */
+    $rows = array_values(array_filter($rows, static function (array $row) use ($cardFilter): bool {
+        switch ($cardFilter) {
+            case 'mapped': return $row['schedule_code'] !== '';
+            case 'unmapped': return $row['schedule_code'] === '';
+            case 'conflicts': return !empty($row['parent_group_conflict']);
+            case 'debit': return (float) ($row['dr'] ?? 0) > 0;
+            case 'credit': return (float) ($row['cr'] ?? 0) > 0;
+            default: return true;
+        }
+    }));
+}
 
 if (
     $filterSlFrom > 0
@@ -504,52 +520,58 @@ $mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) 
 <?php
 /* Compute mapping health */
 $mappingHealthPct = $mappingPct;
-$mappingHealthStatus = 'ready';
-$mappingHealthLabel = 'Ready';
+$reviewStatus = 'ready';
+$reviewLabel = 'Ready — No mapping issues found';
 if ($conflictLedgers > 0) {
-    $mappingHealthStatus = 'critical';
-    $mappingHealthLabel = 'Critical — Conflicts Found';
+    $reviewStatus = 'critical';
+    $reviewLabel = 'Critical — ' . $conflictLedgers . ' Conflict' . ($conflictLedgers !== 1 ? 's' : '') . ' Found';
 } elseif ($unmappedLedgers > 0) {
-    $mappingHealthStatus = 'needs_review';
-    $mappingHealthLabel = 'Needs Review — Unmapped Ledgers';
+    $reviewStatus = 'needs_review';
+    $reviewLabel = 'Needs Review — ' . $unmappedLedgers . ' Unmapped Ledger' . ($unmappedLedgers !== 1 ? 's' : '');
 }
-$mappingHealthColor = $mappingHealthStatus === 'ready' ? 'var(--success)' : ($mappingHealthStatus === 'needs_review' ? 'var(--warning)' : 'var(--danger)');
+$reviewColor = $reviewStatus === 'ready' ? 'var(--success)' : ($reviewStatus === 'needs_review' ? 'var(--warning)' : 'var(--danger)');
+
+$cardBase = BASE_URL . 'data_console/trial_balance_preview.php?company_id=' . (int)$company_id . '&fy_id=' . (int)$fy_id;
+$cardParams = ['company_id' => (int)$company_id, 'fy_id' => (int)$fy_id, 'per_page' => $perPage];
 ?>
 
 <div class="stats-row" style="grid-template-columns: repeat(7, 1fr);">
-    <div class="stat-card">
+    <a href="<?= $cardBase ?>&filter=all" class="stat-card" style="text-decoration:none;color:inherit;<?= $cardFilter === 'all' ? 'border:2px solid var(--brand);box-shadow:0 0 0 3px rgba(15,76,129,0.15);' : '' ?>" title="Show all ledgers">
         <div class="num"><?= $totalLedgers ?></div>
         <div class="lbl">Total Ledgers</div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="<?= $cardBase ?>&filter=mapped" class="stat-card" style="text-decoration:none;color:inherit;<?= $cardFilter === 'mapped' ? 'border:2px solid var(--success);box-shadow:0 0 0 3px rgba(22,163,74,0.15);' : '' ?>" title="Show mapped ledgers">
         <div class="num" style="color:var(--success);"><?= $mappedLedgers ?></div>
         <div class="lbl">Mapped</div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="<?= $cardBase ?>&filter=unmapped" class="stat-card" style="text-decoration:none;color:inherit;<?= $cardFilter === 'unmapped' ? 'border:2px solid var(--warning);box-shadow:0 0 0 3px rgba(217,119,6,0.15);' : '' ?>" title="Show unmapped ledgers">
         <div class="num" style="color:var(--warning);"><?= $unmappedLedgers ?></div>
         <div class="lbl">Unmapped</div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="<?= $cardBase ?>&filter=conflicts" class="stat-card" style="text-decoration:none;color:inherit;<?= $cardFilter === 'conflicts' ? 'border:2px solid var(--danger);box-shadow:0 0 0 3px rgba(220,38,38,0.15);' : '' ?>" title="Show conflicting ledgers">
         <div class="num" style="color:var(--danger);"><?= $conflictLedgers ?></div>
         <div class="lbl">Conflicts</div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="<?= $cardBase ?>&filter=debit" class="stat-card" style="text-decoration:none;color:inherit;<?= $cardFilter === 'debit' ? 'border:2px solid var(--brand);box-shadow:0 0 0 3px rgba(15,76,129,0.15);' : '' ?>" title="Show debit balance ledgers">
         <div class="num"><?= format_inr($drTotal) ?></div>
         <div class="lbl">Debit Total</div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="<?= $cardBase ?>&filter=credit" class="stat-card" style="text-decoration:none;color:inherit;<?= $cardFilter === 'credit' ? 'border:2px solid var(--brand);box-shadow:0 0 0 3px rgba(15,76,129,0.15);' : '' ?>" title="Show credit balance ledgers">
         <div class="num"><?= format_inr($crTotal) ?></div>
         <div class="lbl">Credit Total</div>
-    </div>
+    </a>
     <div class="stat-card">
-        <div class="num" style="color:<?= $mappingHealthColor ?>;"><?= $mappingHealthPct ?>%</div>
-        <div class="lbl">Mapping Health</div>
+        <div class="num" style="color:var(--success);"><?= $mappingHealthPct ?>%</div>
+        <div class="lbl">Mapping Completion</div>
     </div>
 </div>
 
-<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:10px 16px;background:<?= $mappingHealthStatus === 'ready' ? '#dcfce7' : ($mappingHealthStatus === 'needs_review' ? '#fef3c7' : '#fee2e2') ?>;border-radius:8px;font-size:0.85rem;">
-    <strong style="color:<?= $mappingHealthColor ?>;">Mapping Health: <?= $mappingHealthPct ?>%</strong>
-    <span style="color:#475569;">— <?= htmlspecialchars($mappingHealthLabel) ?></span>
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:10px 16px;background:<?= $reviewStatus === 'ready' ? '#dcfce7' : ($reviewStatus === 'needs_review' ? '#fef3c7' : '#fee2e2') ?>;border-radius:8px;font-size:0.85rem;">
+    <strong style="color:<?= $reviewColor ?>;">Review Status: <?= htmlspecialchars($reviewLabel) ?></strong>
+    <?php if ($cardFilter !== '' && $cardFilter !== 'all'): ?>
+        <span style="color:#475569;">&middot; Active Filter: <?= htmlspecialchars(ucfirst($cardFilter)) ?></span>
+        <a href="<?= $cardBase ?>&filter=all" style="color:var(--brand);font-weight:600;text-decoration:none;font-size:0.82rem;">Clear Filter</a>
+    <?php endif; ?>
 </div>
 
 <div class="stepper">
@@ -710,7 +732,7 @@ $mappingHealthColor = $mappingHealthStatus === 'ready' ? 'var(--success)' : ($ma
 
         <?php if (empty($rows)): ?>
             <tr>
-                <td colspan="7" style="text-align:center;">No trial balance rows found for the selected company and financial year.</td>
+                <td colspan="7" style="text-align:center;"><?= $cardFilter !== '' && $cardFilter !== 'all' ? 'No ledgers found for this filter.' : 'No trial balance rows found for the selected company and financial year.' ?></td>
             </tr>
         <?php else: ?>
             <?php foreach ($pageRows as $index => $row): ?>
