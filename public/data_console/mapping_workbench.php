@@ -228,7 +228,6 @@ if ($defaultViewTbImpact && !empty($tbImpactLedgerNames)) {
     $processingError = 'Showing TB-impact ledgers only (' . count($processingLedgers) . ' of ' . count($allLedgers) . '). Switch to "All Ledger Master" to view all.';
 }
 
-try {
 /* Safety: limit processing for very large datasets */
 $maxLedgers = 20000;
 if (count($processingLedgers) > $maxLedgers) {
@@ -236,9 +235,19 @@ if (count($processingLedgers) > $maxLedgers) {
     $processingLedgers = array_slice($processingLedgers, 0, $maxLedgers);
 }
 
+/* Pagination: apply BEFORE heavy processing for performance */
+$perPage = max(25, min(100, (int) ($_GET['per_page'] ?? 50)));
+$currentPage = max(1, (int) ($_GET['page'] ?? 1));
+$totalLedgerRows = count($processingLedgers);
+$totalPages = max(1, (int) ceil($totalLedgerRows / $perPage));
+$currentPage = min($currentPage, $totalPages);
+$gridOffset = ($currentPage - 1) * $perPage;
+$currentPageLedgers = array_slice($processingLedgers, $gridOffset, $perPage);
+
 $timeQuery = round((microtime(true) - $timeStart) * 1000);
 
-foreach ($processingLedgers as $row) {
+try {
+foreach ($currentPageLedgers as $row) {
     $name = $row['ledger_name'];
     $group = $row['parent_group'] ?? '';
     $mappedCode = $row['mapped_code'] ?? '';
