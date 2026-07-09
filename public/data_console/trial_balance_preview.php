@@ -501,45 +501,77 @@ $conflictLedgers = count($inlineConflicts);
 $mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) : 0;
 ?>
 
-<div class="stats-row">
+<?php
+/* Compute mapping health */
+$mappingHealthPct = $mappingPct;
+$mappingHealthStatus = 'ready';
+$mappingHealthLabel = 'Ready';
+if ($conflictLedgers > 0) {
+    $mappingHealthStatus = 'critical';
+    $mappingHealthLabel = 'Critical — Conflicts Found';
+} elseif ($unmappedLedgers > 0) {
+    $mappingHealthStatus = 'needs_review';
+    $mappingHealthLabel = 'Needs Review — Unmapped Ledgers';
+}
+$mappingHealthColor = $mappingHealthStatus === 'ready' ? 'var(--success)' : ($mappingHealthStatus === 'needs_review' ? 'var(--warning)' : 'var(--danger)');
+?>
+
+<div class="stats-row" style="grid-template-columns: repeat(7, 1fr);">
     <div class="stat-card">
         <div class="num"><?= $totalLedgers ?></div>
-        <div class="lbl">Ledgers Synced</div>
+        <div class="lbl">Total Ledgers</div>
     </div>
     <div class="stat-card">
-        <div class="num"><?= $mappedLedgers ?></div>
-        <div class="lbl">Ledgers Mapped</div>
+        <div class="num" style="color:var(--success);"><?= $mappedLedgers ?></div>
+        <div class="lbl">Mapped</div>
     </div>
     <div class="stat-card">
-        <div class="num"><?= $mappingPct ?>%</div>
-        <div class="lbl">Mapping Complete</div>
+        <div class="num" style="color:var(--warning);"><?= $unmappedLedgers ?></div>
+        <div class="lbl">Unmapped</div>
     </div>
     <div class="stat-card">
-        <div class="num"><?= $conflictLedgers ?></div>
-        <div class="lbl" style="color:var(--danger);">Conflicts</div>
+        <div class="num" style="color:var(--danger);"><?= $conflictLedgers ?></div>
+        <div class="lbl">Conflicts</div>
+    </div>
+    <div class="stat-card">
+        <div class="num"><?= format_inr($drTotal) ?></div>
+        <div class="lbl">Debit Total</div>
+    </div>
+    <div class="stat-card">
+        <div class="num"><?= format_inr($crTotal) ?></div>
+        <div class="lbl">Credit Total</div>
+    </div>
+    <div class="stat-card">
+        <div class="num" style="color:<?= $mappingHealthColor ?>;"><?= $mappingHealthPct ?>%</div>
+        <div class="lbl">Mapping Health</div>
     </div>
 </div>
 
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:10px 16px;background:<?= $mappingHealthStatus === 'ready' ? '#dcfce7' : ($mappingHealthStatus === 'needs_review' ? '#fef3c7' : '#fee2e2') ?>;border-radius:8px;font-size:0.85rem;">
+    <strong style="color:<?= $mappingHealthColor ?>;">Mapping Health: <?= $mappingHealthPct ?>%</strong>
+    <span style="color:#475569;">— <?= htmlspecialchars($mappingHealthLabel) ?></span>
+</div>
+
 <div class="stepper">
-    <div class="step">
+    <a href="<?= BASE_URL ?>data/index.php?entity_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" class="step" style="text-decoration:none;color:inherit;">
         <span class="step-circle done">&#10003;</span>
         <span class="step-label">Import</span>
-    </div>
+    </a>
     <div class="step-line done"></div>
-    <div class="step">
+    <a href="<?= BASE_URL ?>data_console/trial_balance_preview.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>#validation" class="step" style="text-decoration:none;color:inherit;">
         <span class="step-circle done">&#10003;</span>
         <span class="step-label">Validate</span>
-    </div>
+    </a>
     <div class="step-line done"></div>
-    <div class="step">
+    <a href="<?= BASE_URL ?>data_console/trial_balance_preview.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>#mapping" class="step" style="text-decoration:none;color:inherit;">
         <span class="step-circle active">3</span>
         <span class="step-label">Map Notes</span>
-    </div>
+    </a>
     <div class="step-line"></div>
-    <div class="step">
+    <a href="<?= BASE_URL ?>statements/financials.php?entity_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" class="step" style="text-decoration:none;color:<?= $mappingHealthStatus === 'ready' ? 'inherit' : 'var(--muted)' ?>;">
         <span class="step-circle pending">4</span>
         <span class="step-label muted">Complete</span>
-    </div>
+    </a>
 </div>
 
 <h2 style="font-size:1rem; margin-bottom:12px;">Import Method</h2>
@@ -665,14 +697,26 @@ $mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) 
             <th style="text-align:right; white-space:nowrap;">Cr</th>
         </tr>
 
+        <?php
+        /* Pagination */
+        $perPage = max(25, min(100, (int) ($_GET['per_page'] ?? 50)));
+        $currentPage = max(1, (int) ($_GET['page'] ?? 1));
+        $totalRows = count($rows);
+        $totalPages = max(1, (int) ceil($totalRows / $perPage));
+        $currentPage = min($currentPage, $totalPages);
+        $offset = ($currentPage - 1) * $perPage;
+        $pageRows = array_slice($rows, $offset, $perPage);
+        ?>
+
         <?php if (empty($rows)): ?>
             <tr>
                 <td colspan="7" style="text-align:center;">No trial balance rows found for the selected company and financial year.</td>
             </tr>
         <?php else: ?>
-            <?php foreach ($rows as $index => $row): ?>
+            <?php foreach ($pageRows as $index => $row): ?>
+                <?php $globalIndex = $offset + $index + 1; ?>
                 <tr>
-                    <td><?= $index + 1 ?></td>
+                    <td><?= $globalIndex ?></td>
                     <td><?= htmlspecialchars($row['ledger_name']) ?></td>
                     <td><?= htmlspecialchars($row['parent_group'] !== '' ? $row['parent_group'] : '-') ?></td>
                     <td>
@@ -696,9 +740,11 @@ $mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) 
                     </td>
                     <td>
                         <?php if ($row['parent_group_conflict']): ?>
-                            <span style="color:#b42318; font-weight:700;">Conflict</span>
+                            <span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;">Conflict</span>
+                        <?php elseif ($row['schedule_code'] === ''): ?>
+                            <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;">Unmapped</span>
                         <?php else: ?>
-                            <span style="color:#157347; font-weight:700;">OK</span>
+                            <span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:600;">OK</span>
                         <?php endif; ?>
                     </td>
                     <td style="text-align:right; white-space:nowrap;"><?= $row['dr'] != 0.0 ? format_inr($row['dr']) : '' ?></td>
@@ -715,25 +761,78 @@ $mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) 
     </table>
     </div>
 
+    <?php if ($totalRows > $perPage): ?>
+    <div style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+        <div style="font-size:0.82rem; color:var(--muted);">
+            Showing <?= $offset + 1 ?>–<?= min($offset + $perPage, $totalRows) ?> of <?= number_format($totalRows) ?> ledgers
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <label style="font-size:0.8rem; color:var(--muted);">Per page:</label>
+            <select id="perPageSelect" onchange="var u=new URL(window.location);u.searchParams.set('per_page',this.value);u.searchParams.set('1','1');window.location=u;" style="padding:4px 8px; font-size:0.8rem;">
+                <option value="25" <?= $perPage === 25 ? 'selected' : '' ?>>25</option>
+                <option value="50" <?= $perPage === 50 ? 'selected' : '' ?>>50</option>
+                <option value="100" <?= $perPage === 100 ? 'selected' : '' ?>>100</option>
+            </select>
+            <?php if ($currentPage > 1): ?>
+                <a class="btn-outline btn-sm" href="<?= BASE_URL ?>data_console/trial_balance_preview.php?<?= http_build_query(array_merge($_GET, ['page' => $currentPage - 1, 'per_page' => $perPage])) ?>" style="padding:4px 10px;">&#8592; Prev</a>
+            <?php endif; ?>
+            <span style="font-size:0.82rem; color:var(--muted);"><?= $currentPage ?> / <?= $totalPages ?></span>
+            <?php if ($currentPage < $totalPages): ?>
+                <a class="btn-outline btn-sm" href="<?= BASE_URL ?>data_console/trial_balance_preview.php?<?= http_build_query(array_merge($_GET, ['page' => $currentPage + 1, 'per_page' => $perPage])) ?>" style="padding:4px 10px;">Next &#8594;</a>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div style="margin-top:18px; display:flex; gap:12px; flex-wrap:wrap;">
         <label style="display:flex; align-items:center; gap:8px;">
             <input type="checkbox" name="allow_override" value="1">
             Allow parent group override
         </label>
         <button type="submit" class="btn">Save Note Changes</button>
-        <a class="btn" href="<?= BASE_URL ?>dashboard_report.php">Go to Reports</a>
-        <a class="btn-outline btn-sm" href="<?= BASE_URL ?>data_console/process_result.php">Back to Summary</a>
+        <a class="btn" href="<?= BASE_URL ?>statements/financials.php?entity_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>">Go to Financial Statements</a>
+        <a class="btn-outline btn-sm" href="<?= BASE_URL ?>data/index.php?entity_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>">Back to Data Console</a>
     </div>
 </form>
 
+<!-- Sticky Save Bar -->
+<div id="stickySaveBar" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid var(--brand);padding:10px 24px;z-index:999;box-shadow:0 -4px 12px rgba(0,0,0,0.1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;max-width:1200px;margin:0 auto;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span id="pendingCount" style="font-size:0.85rem;font-weight:600;color:var(--warning);">0 changes pending</span>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button type="button" onclick="document.querySelector('form[method=\"post\"].tb-preview-form').submit();" class="btn" style="font-size:0.82rem;padding:6px 16px;">Save Note Changes</button>
+            <button type="button" onclick="window.location.reload();" class="btn-outline btn-sm" style="font-size:0.82rem;padding:6px 12px;">Revalidate</button>
+            <a href="<?= BASE_URL ?>statements/financials.php?entity_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" class="btn-outline btn-sm" style="font-size:0.82rem;padding:6px 12px;text-decoration:none;">Financial Statements</a>
+        </div>
+    </div>
+</div>
+
 <script>
 (function() {
-    /* Track original values and only submit changed selects to avoid large POST / 406 */
     var selects = document.querySelectorAll('.tb-preview-note-select');
     var originalValues = {};
+    var pendingCount = 0;
+    var pendingEl = document.getElementById('pendingCount');
+    var stickyBar = document.getElementById('stickySaveBar');
+
+    function updatePendingCount() {
+        pendingCount = 0;
+        for (var i = 0; i < selects.length; i++) {
+            if (originalValues[selects[i].name] !== selects[i].value) {
+                pendingCount++;
+            }
+        }
+        if (pendingEl) pendingEl.textContent = pendingCount + ' change' + (pendingCount !== 1 ? 's' : '') + ' pending';
+        if (stickyBar) stickyBar.style.display = pendingCount > 0 ? 'block' : 'none';
+    }
+
     for (var i = 0; i < selects.length; i++) {
         originalValues[selects[i].name] = selects[i].value;
+        selects[i].addEventListener('change', updatePendingCount);
     }
+
     var form = document.querySelector('form[method="post"].tb-preview-form');
     if (form) {
         form.addEventListener('submit', function() {
@@ -745,6 +844,14 @@ $mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) 
             }
         });
     }
+
+    /* Warn before leaving with unsaved changes */
+    window.addEventListener('beforeunload', function(e) {
+        if (pendingCount > 0) {
+            e.preventDefault();
+            e.returnValue = 'You have unsaved changes. Please save before leaving.';
+        }
+    });
 })();
 </script>
 
