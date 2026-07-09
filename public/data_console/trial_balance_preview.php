@@ -726,6 +726,28 @@ $mappingPct = $totalLedgers > 0 ? round(($mappedLedgers / $totalLedgers) * 100) 
     </div>
 </form>
 
+<script>
+(function() {
+    /* Track original values and only submit changed selects to avoid large POST / 406 */
+    var selects = document.querySelectorAll('.tb-preview-note-select');
+    var originalValues = {};
+    for (var i = 0; i < selects.length; i++) {
+        originalValues[selects[i].name] = selects[i].value;
+    }
+    var form = document.querySelector('.tb-preview-form');
+    if (form) {
+        form.addEventListener('submit', function() {
+            for (var i = 0; i < selects.length; i++) {
+                var s = selects[i];
+                if (originalValues[s.name] === s.value) {
+                    s.disabled = true;
+                }
+            }
+        });
+    }
+})();
+</script>
+
 <?= uiWorkspaceEnd() ?>
 
 <?php

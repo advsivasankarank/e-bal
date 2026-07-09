@@ -476,7 +476,8 @@ foreach ($parentGroupCounts as $pg => $cnt) {
     }
     if (!empty($mappingCounts)) {
         arsort($mappingCounts);
-        $dominantMapping = reset(array_keys($mappingCounts));
+        $mappingKeys = array_keys($mappingCounts);
+        $dominantMapping = reset($mappingKeys);
     }
 
     /* Get suggested mapping from parent group rules */
