@@ -124,7 +124,7 @@ try {
         $_SESSION['company_name'] = $compStmt->fetchColumn() ?: 'Unknown';
     }
     if (empty($_SESSION['fy_name'])) {
-        $fyStmt = $pdo->prepare("SELECT label FROM financial_years WHERE id = ?");
+        $fyStmt = $pdo->prepare("SELECT fy_label FROM financial_years WHERE id = ?");
         $fyStmt->execute([$fy_id]);
         $_SESSION['fy_name'] = $fyStmt->fetchColumn() ?: 'Unknown';
     }
