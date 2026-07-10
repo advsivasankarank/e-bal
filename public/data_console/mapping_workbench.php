@@ -604,6 +604,7 @@ error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}
 
 $pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
+$totalGridRows = $totalLedgerRows;
 $paginatedGridData = $gridData;
 
 $page_title = $isLedgerMode ? "Ledger-wise Mapping" : "ReconHub";
