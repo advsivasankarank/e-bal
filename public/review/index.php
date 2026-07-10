@@ -12,10 +12,16 @@ require_once __DIR__ . '/../../app/helpers/workflow_navigation_helper.php';
 $page_title = 'Review Centre';
 requireAssignmentAccess();
 
-$company_id = $_SESSION['company_id'];
-$fy_id = $_SESSION['fy_id'];
+$company_id = (int) ($_GET['company_id'] ?? $_SESSION['company_id'] ?? 0);
+$fy_id = (int) ($_GET['fy_id'] ?? $_SESSION['fy_id'] ?? 0);
 $companyName = $_SESSION['company_name'] ?? 'Not Selected';
 $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
+$issueParam = trim((string) ($_GET['issue'] ?? ''));
+
+if ($company_id <= 0 || $fy_id <= 0) {
+    header('Location: ' . BASE_URL . 'dashboard_company.php');
+    exit;
+}
 
 $companyMeta = getCompanyReportingMeta($pdo, $company_id);
 $entityCategory = getEntityCategory($pdo, $company_id);
@@ -255,6 +261,111 @@ echo renderWorkflowNavigation($navData);
         <?php include __DIR__ . '/_validation_centre.php'; ?>
     </div>
 </div>
+
+<!-- Difference Analysis (shown when issue=bs_difference) -->
+<?php if ($issueParam === 'bs_difference'): ?>
+<?php
+$currentDiff = (float) ($fs['validation']['current_balance_difference'] ?? 0);
+$previousDiff = (float) ($fs['validation']['previous_balance_difference'] ?? 0);
+$conflicts = $fs['validation']['parent_group_conflicts'] ?? [];
+$noteComplete = $fs['validation']['note_completeness'] ?? ['missing' => []];
+$validationErrors = $validationResult['errors'] ?? [];
+$validationWarnings = $validationResult['warnings'] ?? [];
+$bsStatus = abs($currentDiff) > 0.01 ? 'critical' : (abs($previousDiff) > 0.01 ? 'warning' : 'ready');
+$bsStatusLabel = $bsStatus === 'critical' ? 'Critical — Statement is not ready for final deliverables.' : ($bsStatus === 'warning' ? 'Warning — Previous year difference detected.' : 'Ready — Balance Sheet is balanced.');
+?>
+
+<div class="rw-section" style="border-left:4px solid #dc2626;">
+    <div class="rw-section-header">
+        <h3>&#128269; Balance Sheet Difference Analysis</h3>
+    </div>
+    <div class="rw-section-body">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+            <div style="flex:1;min-width:200px;padding:14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;">
+                <div style="font-size:0.82rem;color:#991b1b;font-weight:600;">Current Year Difference</div>
+                <div style="font-size:1.4rem;font-weight:700;color:#dc2626;margin-top:4px;"><?= format_inr_number($currentDiff) ?></div>
+            </div>
+            <?php if (abs($previousDiff) > 0.01): ?>
+            <div style="flex:1;min-width:200px;padding:14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;">
+                <div style="font-size:0.82rem;color:#92400e;font-weight:600;">Previous Year Difference</div>
+                <div style="font-size:1.4rem;font-weight:700;color:#d97706;margin-top:4px;"><?= format_inr_number($previousDiff) ?></div>
+            </div>
+            <?php endif; ?>
+            <div style="flex:1;min-width:200px;padding:14px;background:<?= $bsStatus === 'critical' ? '#fef2f2' : ($bsStatus === 'warning' ? '#fffbeb' : '#dcfce7') ?>;border:1px solid <?= $bsStatus === 'critical' ? '#fca5a5' : ($bsStatus === 'warning' ? '#fcd34d' : '#86efac') ?>;border-radius:8px;">
+                <div style="font-size:0.82rem;color:<?= $bsStatus === 'critical' ? '#991b1b' : ($bsStatus === 'warning' ? '#92400e' : '#166534') ?>;font-weight:600;">Status</div>
+                <div style="font-size:0.95rem;font-weight:600;color:<?= $bsStatus === 'critical' ? '#dc2626' : ($bsStatus === 'warning' ? '#d97706' : '#16a34a') ?>;margin-top:4px;"><?= htmlspecialchars($bsStatusLabel) ?></div>
+            </div>
+        </div>
+
+        <p style="font-size:0.85rem;color:#475569;margin-bottom:16px;">Detected possible causes are listed below. Review each ledger and fix the mapping/classification where required.</p>
+
+        <!-- Parent-Group Conflicts -->
+        <?php if (!empty($conflicts)): ?>
+        <div style="margin-bottom:16px;">
+            <h4 style="font-size:0.95rem;margin:0 0 10px;color:#991b1b;">&#128681; Parent-Group Conflicts (<?= count($conflicts) ?>)</h4>
+            <div style="overflow-x:auto;">
+            <table border="1" cellpadding="8" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                <tr style="background:#fef2f2;">
+                    <th>Ledger Name</th>
+                    <th>Tally Group</th>
+                    <th>Current Mapping</th>
+                    <th>Issue</th>
+                    <th>Action</th>
+                </tr>
+                <?php foreach ($conflicts as $c): ?>
+                <tr>
+                    <td><?= htmlspecialchars($c['ledger_name'] ?? '?') ?></td>
+                    <td><?= htmlspecialchars($c['parent_group'] ?? '') ?></td>
+                    <td><?= htmlspecialchars($c['schedule_code'] ?? '') ?></td>
+                    <td style="color:#991b1b;">Parent-group conflict</td>
+                    <td><a href="<?= BASE_URL ?>data_console/mapping_workbench.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>&search=<?= urlencode($c['ledger_name'] ?? '') ?>" style="color:#0f4c81;text-decoration:none;font-weight:600;">Fix Mapping</a></td>
+                </tr>
+                <?php endforeach; ?>
+            </table>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Missing Note Headings -->
+        <?php if (!empty($noteComplete['missing'])): ?>
+        <div style="margin-bottom:16px;">
+            <h4 style="font-size:0.95rem;margin:0 0 10px;color:#92400e;">&#128221; Missing Note Headings (<?= count($noteComplete['missing']) ?>)</h4>
+            <ul style="font-size:0.85rem;color:#475569;margin:0 0 10px 18px;">
+                <?php foreach (array_slice($noteComplete['missing'], 0, 10) as $m): ?>
+                <li><?= htmlspecialchars(is_array($m) ? ($m['title'] ?? $m['label'] ?? '?') : (string)$m) ?></li>
+                <?php endforeach; ?>
+            </ul>
+            <a href="<?= BASE_URL ?>data_console/mapping_workbench.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="color:#0f4c81;text-decoration:none;font-weight:600;font-size:0.85rem;">Review Mapping Rules</a>
+        </div>
+        <?php endif; ?>
+
+        <!-- Validation Errors -->
+        <?php if (!empty($validationErrors)): ?>
+        <div style="margin-bottom:16px;">
+            <h4 style="font-size:0.95rem;margin:0 0 10px;color:#991b1b;">&#10060; Validation Errors (<?= count($validationErrors) ?>)</h4>
+            <ul style="font-size:0.85rem;color:#475569;margin:0 0 10px 18px;">
+                <?php foreach (array_slice($validationErrors, 0, 8) as $err): ?>
+                <li><?= htmlspecialchars($err['message'] ?? $err['check'] ?? '?') ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <?php endif; ?>
+
+        <?php if (empty($conflicts) && empty($noteComplete['missing']) && empty($validationErrors)): ?>
+        <div style="padding:16px;text-align:center;color:#475569;font-size:0.85rem;background:#f8fafc;border-radius:8px;">
+            No ledger-level cause was detected from available validation data. Please run Rebuild and review mapping rules.
+        </div>
+        <?php endif; ?>
+
+        <!-- Action Buttons -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
+            <a class="btn" href="<?= BASE_URL ?>data_console/mapping_workbench.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.82rem;padding:6px 14px;">Open Mapping Workbench</a>
+            <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.82rem;padding:6px 14px;">Open Trial Balance</a>
+            <a class="btn" href="<?= BASE_URL ?>statements/financials.php?entity_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.82rem;padding:6px 14px;">Back to Financial Statements</a>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Review Remarks -->
 <div class="rw-section">

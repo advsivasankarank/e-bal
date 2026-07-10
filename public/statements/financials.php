@@ -247,6 +247,7 @@ echo renderWorkflowNavigation($navData);
     </div>
     <div style="font-size:0.82rem;color:#666;margin-bottom:10px;">Suggested causes: parent-group conflict, unmapped ledger, duplicate ledger, or data mismatch.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn" href="<?= BASE_URL ?>review/index.php?issue=bs_difference&company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;background:#dc2626;color:#fff;">View Difference Analysis</a>
         <a class="btn" href="<?= BASE_URL ?>data_console/mapping_workbench.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;">Open Mapping Workbench</a>
         <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;">Open Trial Balance</a>
         <button onclick="window.location.reload()" style="font-size:0.78rem;padding:5px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;cursor:pointer;">Rebuild</button>
