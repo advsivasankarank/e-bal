@@ -53,121 +53,39 @@ require_once '../../app/helpers/mapping_ai_helper.php';
 require_once '../../app/helpers/parent_group_validation_helper.php';
 require_once '../../app/helpers/hierarchy_ai_mapping.php';
 require_once '../../app/helpers/bulk_mapping_helper.php';
+require_once '../../app/helpers/reconhub_context_resolver.php';
 
-/* ---- Safe context resolution (GET → session → fallback) ---- */
-$rawCompanyId = isset($_GET['company_id']) ? (int) $_GET['company_id'] : 0;
-$rawEntityId  = isset($_GET['entity_id']) ? (int) $_GET['entity_id'] : 0;
-$rawFyId      = isset($_GET['fy_id']) ? (int) $_GET['fy_id'] : 0;
+/* ---- Context resolution via dedicated resolver ---- */
+$contextResolver = new ReconHubContextResolver($pdo);
+$ctx = $contextResolver->resolve($_GET, $_SESSION);
 
-$effectiveCompanyId = $rawCompanyId > 0 ? $rawCompanyId : ($rawEntityId > 0 ? $rawEntityId : 0);
+error_log("ReconHub context timing: total={$ctx['timing_ms']}ms, queries={$ctx['query_count']}, company_id={$ctx['company']['id']}, fy_id={$ctx['financial_year']['id']}, page={$ctx['pagination']['page']}, limit={$ctx['pagination']['per_page']}, result=" . ($ctx['error'] ?? 'success'));
 
-if ($effectiveCompanyId > 0) {
-    $_SESSION['company_id'] = $effectiveCompanyId;
-}
-if ($rawFyId > 0) {
-    $_SESSION['fy_id'] = $rawFyId;
-}
-
-$company_id = isset($_SESSION['company_id']) ? (int) $_SESSION['company_id'] : 0;
-$fy_id      = isset($_SESSION['fy_id']) ? (int) $_SESSION['fy_id'] : 0;
-$userId     = (int) ($_SESSION['user_id'] ?? 0);
-
-if ($userId <= 0) {
+/* Handle auth redirect */
+if ($ctx['error'] === 'authentication_required') {
     header('Location: ' . BASE_URL . 'login.php');
     exit;
 }
 
-if ($company_id <= 0 || $fy_id <= 0) {
-    $page_title = "ReconHub \u2014 Select Context";
-    $showSidebar = true;
-    require_once __DIR__ . '/../layouts/header_v2.php';
-    ?>
-    <div style="max-width:500px;margin:60px auto;text-align:center;padding:40px;background:var(--panel-strong);border:1px solid var(--border);border-radius:12px;">
-        <h2 style="margin-bottom:12px;">ReconHub \u2014 Mapping Workbench</h2>
-        <p style="font-size:0.95rem;color:var(--text);margin-bottom:20px;">Please select an entity and financial year to continue.</p>
-        <a href="<?= BASE_URL ?>dashboard_company.php" class="btn btn-primary" style="padding:10px 24px;font-size:0.9rem;text-decoration:none;">Go to e-BAL Gateway</a>
-    </div>
-    <?php
-    require_once __DIR__ . '/../layouts/footer_v2.php';
+/* Handle access denied or archived — redirect to entity selector */
+if ($ctx['error'] === 'company_access_denied' || $ctx['error'] === 'company_archived') {
+    $_SESSION['error'] = $ctx['error_message'] ?? 'You do not have permission to access this entity.';
+    header('Location: ' . BASE_URL . 'dashboard_company.php');
     exit;
 }
 
-$fyValid = false;
-try {
-    $fyCheckStmt = $pdo->prepare("SELECT COUNT(*) FROM financial_years WHERE id = ? AND company_id = ?");
-    $fyCheckStmt->execute([$fy_id, $company_id]);
-    $fyValid = (int) $fyCheckStmt->fetchColumn() > 0;
-} catch (Throwable $e) {
-    error_log('Mapping Workbench: FY validation query failed: ' . $e->getMessage());
-}
-
-if (!$fyValid) {
-    unset($_SESSION['fy_id'], $_SESSION['fy_name']);
-    $page_title = "ReconHub \u2014 Invalid Financial Year";
-    $showSidebar = true;
-    require_once __DIR__ . '/../layouts/header_v2.php';
-    ?>
-    <div style="max-width:500px;margin:60px auto;text-align:center;padding:40px;background:var(--panel-strong);border:1px solid var(--border);border-radius:12px;">
-        <h2 style="margin-bottom:12px;">Invalid Financial Year</h2>
-        <p style="font-size:0.95rem;color:var(--text);margin-bottom:20px;">The selected financial year is not valid for this entity. Please select a valid entity and financial year.</p>
-        <a href="<?= BASE_URL ?>dashboard_company.php" class="btn btn-primary" style="padding:10px 24px;font-size:0.9rem;text-decoration:none;">Go to e-BAL Gateway</a>
-    </div>
-    <?php
-    require_once __DIR__ . '/../layouts/footer_v2.php';
-    exit;
-}
-
-try {
-    if (empty($_SESSION['company_name'])) {
-        $compStmt = $pdo->prepare("SELECT name FROM companies WHERE id = ?");
-        $compStmt->execute([$company_id]);
-        $_SESSION['company_name'] = $compStmt->fetchColumn() ?: 'Unknown';
-    }
-    if (empty($_SESSION['fy_name'])) {
-        $fyStmt = $pdo->prepare("SELECT fy_label FROM financial_years WHERE id = ?");
-        $fyStmt->execute([$fy_id]);
-        $_SESSION['fy_name'] = $fyStmt->fetchColumn() ?: 'Unknown';
-    }
-} catch (Throwable $e) {
-    error_log('Mapping Workbench: Session label load failed: ' . $e->getMessage());
-}
-
-/* Mode detection: group (default) or ledger */
-$mode = isset($_GET['mode']) && $_GET['mode'] === 'ledger' ? 'ledger' : 'group';
-$isGroupMode = ($mode === 'group');
-$isLedgerMode = ($mode === 'ledger');
-
-/* ---- Safe schema check (no DDL on page load) ---- */
-$mappingSchemaReady = true;
-try {
-    $requiredCols = ['mapping_source', 'confidence_score', 'mapping_reason', 'override_parent_group'];
-    $existingCols = $pdo->query("SHOW COLUMNS FROM ledger_mapping")->fetchAll(PDO::FETCH_COLUMN);
-    foreach ($requiredCols as $col) {
-        if (!in_array($col, $existingCols, true)) {
-            $mappingSchemaReady = false;
-            break;
-        }
-    }
-    if ($mappingSchemaReady) {
-        $tblCheck = $pdo->query("SHOW TABLES LIKE 'mapping_learning'");
-        if ($tblCheck->rowCount() === 0) {
-            $mappingSchemaReady = false;
-        }
-    }
-} catch (Throwable $e) {
-    error_log('Mapping Workbench: Schema check failed: ' . $e->getMessage());
-    $mappingSchemaReady = false;
-}
-
-if (!$mappingSchemaReady) {
-    $page_title = "ReconHub \u2014 Schema Required";
+/* Handle context/fy/schema error pages */
+if ($ctx['error'] !== null) {
+    $page_title = $ctx['error_page_title'] ?? 'ReconHub Error';
     $showSidebar = true;
     require_once __DIR__ . '/../layouts/header_v2.php';
     ?>
     <div style="max-width:560px;margin:60px auto;text-align:center;padding:40px;background:var(--panel-strong);border:1px solid var(--border);border-radius:12px;">
-        <h2 style="margin-bottom:12px;">Mapping Schema Not Ready</h2>
-        <p style="font-size:0.95rem;color:var(--text);margin-bottom:16px;">The Mapping Workbench requires additional database columns that have not been applied yet.</p>
-        <p style="font-size:0.85rem;color:var(--muted);margin-bottom:20px;">Please ask your administrator to run migration <strong>007_mapping_workbench_schema.sql</strong> before using this page.</p>
+        <h2 style="margin-bottom:12px;"><?= htmlspecialchars($ctx['error_page_title'] ?? 'Error') ?></h2>
+        <p style="font-size:0.95rem;color:var(--text);margin-bottom:20px;"><?= htmlspecialchars($ctx['error_message'] ?? 'An error occurred.') ?></p>
+        <?php if ($ctx['error'] === 'schema'): ?>
+            <p style="font-size:0.85rem;color:var(--muted);margin-bottom:20px;">Please ask your administrator to run migration <strong>007_mapping_workbench_schema.sql</strong> before using this page.</p>
+        <?php endif; ?>
         <a href="<?= BASE_URL ?>dashboard_company.php" class="btn btn-primary" style="padding:10px 24px;font-size:0.9rem;text-decoration:none;">Go to e-BAL Gateway</a>
     </div>
     <?php
@@ -175,9 +93,17 @@ if (!$mappingSchemaReady) {
     exit;
 }
 
-$companyStmt = $pdo->prepare("SELECT category FROM companies WHERE id = ?");
-$companyStmt->execute([$company_id]);
-$companyCategory = strtolower((string) $companyStmt->fetchColumn());
+/* ---- Extract validated context into page variables ---- */
+$company_id  = $ctx['company']['id'];
+$companyCategory = $ctx['company']['category'];
+$fy_id       = $ctx['financial_year']['id'];
+$userId      = $ctx['user']['id'];
+$mode        = $ctx['screen']['mode'];
+$isGroupMode = $ctx['screen']['is_group_mode'];
+$isLedgerMode = $ctx['screen']['is_ledger_mode'];
+$mappingSchemaReady = $ctx['schema']['mapping_ready'];
+
+// Step 3 boundary: ReconHub data loading begins below.
 $mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
 $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
@@ -353,9 +279,9 @@ if (count($processingLedgers) > $maxLedgers) {
     $processingLedgers = array_slice($processingLedgers, 0, $maxLedgers);
 }
 
-/* Pagination: apply BEFORE heavy processing for performance */
-$perPage = max(25, min(100, (int) ($_GET['per_page'] ?? 50)));
-$currentPage = max(1, (int) ($_GET['page'] ?? 1));
+/* Pagination: apply BEFORE heavy processing for performance (values from context resolver) */
+$perPage = $ctx['pagination']['per_page'];
+$currentPage = $ctx['pagination']['page'];
 $totalLedgerRows = count($processingLedgers);
 $totalPages = max(1, (int) ceil($totalLedgerRows / $perPage));
 $currentPage = min($currentPage, $totalPages);
@@ -530,56 +456,28 @@ foreach ($currentPageLedgers as $row) {
 
 $timeSuggestions = round((microtime(true) - $timeStart - ($timeQuery / 1000)) * 1000);
 
-/* ---- Parent group counts via SQL aggregation (fast) ---- */
+$timePgStart = microtime(true);
+
+/* ---- Parent group counts from current-page gridData only (fast) ---- */
 $parentGroupCounts = [];
 $parentGroupData = [];
-try {
-    $pgStmt = $pdo->prepare("
-        SELECT
-            COALESCE(tlm.parent_group, t.parent_group) AS parent_group,
-            COUNT(*) AS ledger_count,
-            SUM(CASE WHEN tb.dr_cr = 'DR' THEN tb.amount ELSE 0 END) AS closing_dr,
-            SUM(CASE WHEN tb.dr_cr = 'CR' THEN tb.amount ELSE 0 END) AS closing_cr
-        FROM tally_ledger_master t
-        LEFT JOIN tally_ledger_master tlm ON tlm.company_id = t.company_id AND tlm.ledger_name = t.parent_group
-        LEFT JOIN tally_ledgers tb ON tb.company_id = t.company_id AND tb.ledger_name = t.ledger_name AND tb.fy_id = ?
-        WHERE t.company_id = ?
-        GROUP BY COALESCE(tlm.parent_group, t.parent_group)
-        ORDER BY ledger_count DESC
-    ");
-    $pgStmt->execute([$fy_id, $company_id]);
-    while ($pgRow = $pgStmt->fetch(PDO::FETCH_ASSOC)) {
-        $pg = $pgRow['parent_group'] ?: '(none)';
-        $parentGroupCounts[$pg] = (int) $pgRow['ledger_count'];
+foreach ($gridData as $row) {
+    $pg = $row['parent_group'] ?: '(none)';
+    if (!isset($parentGroupCounts[$pg])) {
+        $parentGroupCounts[$pg] = 0;
         $parentGroupData[$pg] = [
-            'count' => (int) $pgRow['ledger_count'],
-            'opening_dr' => 0,
-            'opening_cr' => 0,
-            'closing_dr' => (float) ($pgRow['closing_dr'] ?? 0),
-            'closing_cr' => (float) ($pgRow['closing_cr'] ?? 0),
-            'net_balance' => (float) (($pgRow['closing_dr'] ?? 0) - ($pgRow['closing_cr'] ?? 0)),
+            'count' => 0,
+            'opening_dr' => 0, 'opening_cr' => 0,
+            'closing_dr' => 0, 'closing_cr' => 0,
+            'net_balance' => 0,
         ];
     }
-} catch (Throwable $e) {
-    /* Fallback: build from gridData if SQL fails */
-    foreach ($gridData as $row) {
-        $pg = $row['parent_group'] ?: '(none)';
-        if (!isset($parentGroupCounts[$pg])) {
-            $parentGroupCounts[$pg] = 0;
-            $parentGroupData[$pg] = [
-                'count' => 0,
-                'opening_dr' => 0, 'opening_cr' => 0,
-                'closing_dr' => 0, 'closing_cr' => 0,
-                'net_balance' => 0,
-            ];
-        }
-        $parentGroupCounts[$pg]++;
-        $parentGroupData[$pg]['opening_dr'] += $row['opening_dr'];
-        $parentGroupData[$pg]['opening_cr'] += $row['opening_cr'];
-        $parentGroupData[$pg]['closing_dr'] += $row['closing_dr'];
-        $parentGroupData[$pg]['closing_cr'] += $row['closing_cr'];
-        $parentGroupData[$pg]['net_balance'] += $row['net_balance'];
-    }
+    $parentGroupCounts[$pg]++;
+    $parentGroupData[$pg]['opening_dr'] += $row['opening_dr'];
+    $parentGroupData[$pg]['opening_cr'] += $row['opening_cr'];
+    $parentGroupData[$pg]['closing_dr'] += $row['closing_dr'];
+    $parentGroupData[$pg]['closing_cr'] += $row['closing_cr'];
+    $parentGroupData[$pg]['net_balance'] += $row['net_balance'];
 }
 arsort($parentGroupCounts);
 $topParentGroups = array_slice($parentGroupCounts, 0, 25, true);
@@ -663,8 +561,9 @@ foreach ($mappingOptions as $code => $label) {
     $mappingOptionsJson[] = ['id' => $code, 'label' => $label . ' (' . $code . ')', 'code' => $code, 'fullLabel' => $label];
 }
 
+$timePg = round((microtime(true) - $timePgStart) * 1000);
 $timeTotal = round((microtime(true) - $timeStart) * 1000);
-error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}ms, total={$timeTotal}ms, processed=" . count($currentPageLedgers) . " of " . count($processingLedgers));
+error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}ms, parent_groups={$timePg}ms, total={$timeTotal}ms, processed=" . count($currentPageLedgers) . " of " . count($processingLedgers));
 
 $pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
