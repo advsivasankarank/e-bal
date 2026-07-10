@@ -121,8 +121,43 @@ $mode = isset($_GET['mode']) && $_GET['mode'] === 'ledger' ? 'ledger' : 'group';
 $isGroupMode = ($mode === 'group');
 $isLedgerMode = ($mode === 'ledger');
 
-ensureMappingAiSchema($pdo);
-ensureLedgerMappingOverrideColumn($pdo);
+/* ---- Safe schema check (no DDL on page load) ---- */
+$mappingSchemaReady = true;
+try {
+    $requiredCols = ['mapping_source', 'confidence_score', 'mapping_reason', 'override_parent_group'];
+    $existingCols = $pdo->query("SHOW COLUMNS FROM ledger_mapping")->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($requiredCols as $col) {
+        if (!in_array($col, $existingCols, true)) {
+            $mappingSchemaReady = false;
+            break;
+        }
+    }
+    if ($mappingSchemaReady) {
+        $tblCheck = $pdo->query("SHOW TABLES LIKE 'mapping_learning'");
+        if ($tblCheck->rowCount() === 0) {
+            $mappingSchemaReady = false;
+        }
+    }
+} catch (Throwable $e) {
+    error_log('Mapping Workbench: Schema check failed: ' . $e->getMessage());
+    $mappingSchemaReady = false;
+}
+
+if (!$mappingSchemaReady) {
+    $page_title = "ReconHub \u2014 Schema Required";
+    $showSidebar = true;
+    require_once __DIR__ . '/../layouts/header_v2.php';
+    ?>
+    <div style="max-width:560px;margin:60px auto;text-align:center;padding:40px;background:var(--panel-strong);border:1px solid var(--border);border-radius:12px;">
+        <h2 style="margin-bottom:12px;">Mapping Schema Not Ready</h2>
+        <p style="font-size:0.95rem;color:var(--text);margin-bottom:16px;">The Mapping Workbench requires additional database columns that have not been applied yet.</p>
+        <p style="font-size:0.85rem;color:var(--muted);margin-bottom:20px;">Please ask your administrator to run migration <strong>007_mapping_workbench_schema.sql</strong> before using this page.</p>
+        <a href="<?= BASE_URL ?>dashboard_company.php" class="btn btn-primary" style="padding:10px 24px;font-size:0.9rem;text-decoration:none;">Go to e-BAL Gateway</a>
+    </div>
+    <?php
+    require_once __DIR__ . '/../layouts/footer_v2.php';
+    exit;
+}
 
 $companyStmt = $pdo->prepare("SELECT category FROM companies WHERE id = ?");
 $companyStmt->execute([$company_id]);
