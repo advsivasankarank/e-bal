@@ -29,6 +29,22 @@ set_error_handler(function (int $errno, string $errstr, string $errfile, int $er
     return false;
 });
 
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if ($err === null || !in_array($err['type'], [E_ERROR, E_PARSE, E_COMPILE_ERROR, E_CORE_ERROR], true)) {
+        return;
+    }
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
+    error_log('Mapping Workbench FATAL (shutdown): ' . $err['message'] . ' in ' . $err['file'] . ':' . $err['line']);
+    echo '<!DOCTYPE html><html><head><title>Error</title></head><body>';
+    echo '<h1>ReconHub Error</h1>';
+    echo '<p>The mapping workbench took too long or ran out of resources for this dataset. Please try a smaller "Per page" size or the "TB Impact" view, or contact support.</p>';
+    echo '<p><a href="' . (defined('BASE_URL') ? BASE_URL : '/') . '">Return to Dashboard</a></p>';
+    echo '</body></html>';
+});
+
 require_once '../../app/context_check.php';
 require_once '../../app/workflow_engine.php';
 require_once '../../config/database.php';
@@ -571,6 +587,28 @@ $topParentGroups = array_slice($parentGroupCounts, 0, 25, true);
 /* Build Schedule III Group Mapping panel data */
 $groupMappingData = [];
 try {
+/* Precompute per-group aggregates in a single pass over gridData instead of
+   rescanning gridData once per parent group (was O(distinct groups * grid rows)
+   and could exceed max_execution_time for companies with many distinct groups). */
+$assetSchedulesForRisk = ['ppe', 'inventory', 'receivables', 'cash', 'bank_balances_other', 'other_current_assets', 'investments_non_current', 'loans_non_current', 'intangible_assets', 'cwip', 'deferred_tax_asset', 'other_non_current_assets', 'investments_current', 'loans_current'];
+$liabilitySchedulesForRisk = ['trade_payables', 'lt_borrowings', 'st_borrowings', 'other_current_liabilities', 'short_term_provisions', 'share_capital', 'reserves', 'deferred_tax_liability', 'other_non_current_liabilities', 'long_term_provisions'];
+$mappingCountsByGroup = [];
+$crPositiveCountByGroup = [];
+$drPositiveCountByGroup = [];
+foreach ($gridData as $row) {
+    $pg = $row['parent_group'] ?: '(none)';
+    if (!empty($row['current_mapping'])) {
+        $mc = $row['current_mapping'];
+        $mappingCountsByGroup[$pg][$mc] = ($mappingCountsByGroup[$pg][$mc] ?? 0) + 1;
+    }
+    if ($row['closing_cr'] > 0) {
+        $crPositiveCountByGroup[$pg] = ($crPositiveCountByGroup[$pg] ?? 0) + 1;
+    }
+    if ($row['closing_dr'] > 0) {
+        $drPositiveCountByGroup[$pg] = ($drPositiveCountByGroup[$pg] ?? 0) + 1;
+    }
+}
+
 foreach ($parentGroupCounts as $pg => $cnt) {
     $pgData = $parentGroupData[$pg];
     $netBal = $pgData['net_balance'];
@@ -578,13 +616,7 @@ foreach ($parentGroupCounts as $pg => $cnt) {
 
     /* Get dominant existing mapping */
     $dominantMapping = '';
-    $mappingCounts = [];
-    foreach ($gridData as $row) {
-        if ($row['parent_group'] === $pg && !empty($row['current_mapping'])) {
-            $mc = $row['current_mapping'];
-            $mappingCounts[$mc] = ($mappingCounts[$mc] ?? 0) + 1;
-        }
-    }
+    $mappingCounts = $mappingCountsByGroup[$pg] ?? [];
     if (!empty($mappingCounts)) {
         arsort($mappingCounts);
         $mappingKeys = array_keys($mappingCounts);
@@ -598,14 +630,11 @@ foreach ($parentGroupCounts as $pg => $cnt) {
 
     /* Risk count: ledgers with credit balance in asset group or debit in liability group */
     $riskCount = 0;
-    foreach ($gridData as $row) {
-        if ($row['parent_group'] !== $pg) continue;
-        if ($row['closing_cr'] > 0 && in_array($suggestedCode, ['ppe', 'inventory', 'receivables', 'cash', 'bank_balances_other', 'other_current_assets', 'investments_non_current', 'loans_non_current', 'intangible_assets', 'cwip', 'deferred_tax_asset', 'other_non_current_assets', 'investments_current', 'loans_current'])) {
-            $riskCount++;
-        }
-        if ($row['closing_dr'] > 0 && in_array($suggestedCode, ['trade_payables', 'lt_borrowings', 'st_borrowings', 'other_current_liabilities', 'short_term_provisions', 'share_capital', 'reserves', 'deferred_tax_liability', 'other_non_current_liabilities', 'long_term_provisions'])) {
-            $riskCount++;
-        }
+    if (in_array($suggestedCode, $assetSchedulesForRisk, true)) {
+        $riskCount += $crPositiveCountByGroup[$pg] ?? 0;
+    }
+    if (in_array($suggestedCode, $liabilitySchedulesForRisk, true)) {
+        $riskCount += $drPositiveCountByGroup[$pg] ?? 0;
     }
 
     $groupMappingData[] = [
