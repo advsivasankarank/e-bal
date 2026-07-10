@@ -45,7 +45,7 @@ $fy_id      = $_SESSION['fy_id'];
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 
 if ($company_id <= 0 || $fy_id <= 0) {
-    header('Location: ' . BASE_URL . 'data_console/tally_console.php');
+    header('Location: ' . BASE_URL . 'dashboard_company.php');
     exit;
 }
 
@@ -533,7 +533,7 @@ foreach ($mappingOptions as $code => $label) {
 }
 
 $timeTotal = round((microtime(true) - $timeStart) * 1000);
-error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}ms, total={$timeTotal}ms, ledgers=" . count($processingLedgers));
+error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}ms, total={$timeTotal}ms, processed=" . count($currentPageLedgers) . " of " . count($processingLedgers));
 
 $pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
@@ -1868,7 +1868,7 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     var csrfToken = <?= json_encode(csrfToken()) ?>;
     var mappingOptions = <?= json_encode($mappingOptionsJson) ?>;
     var groupMappingData = <?= json_encode($groupMappingData) ?>;
-    var gridData = <?= json_encode($gridData) ?>;
+    var gridData = <?= json_encode($paginatedGridData) ?>;
     var optionsMap = {};
     var optionList = [];
     mappingOptions.forEach(function(o) { optionsMap[o.id] = o.label; optionList.push(o); });
