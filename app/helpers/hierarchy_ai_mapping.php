@@ -14,6 +14,8 @@ class HierarchyAIMappingEngine
     private string $category;
     private array $hierarchyRules = [];
     private array $learnedMappings = [];
+    /** @var array<string, array> Preloaded hierarchy cache keyed by ledger name */
+    private array $hierarchyCache = [];
 
     public function __construct(PDO $pdo, int $companyId, string $category = 'corporate')
     {
@@ -194,7 +196,38 @@ class HierarchyAIMappingEngine
     }
 
     /**
+     * Preload hierarchy data for a set of ledger names.
+     * Eliminates per-row SQL by reusing already-loaded ledger data.
+     *
+     * Stores only the minimal fields required by getLedgerHierarchy().
+     * Request-local cache built from the existing company-scoped ledger dataset.
+     * Stores only minimal hierarchy fields and introduces no additional SQL fetch.
+     *
+     * @param array<int, array<string, mixed>> $ledgerRows  Rows from tally_ledger_master query
+     */
+    public function setHierarchyCache(array $ledgerRows): void
+    {
+        $this->hierarchyCache = [];
+        foreach ($ledgerRows as $row) {
+            $name = $row['ledger_name'] ?? '';
+            if ($name === '') continue;
+            $this->hierarchyCache[$name] = [
+                'parent_group' => $row['parent_group'] ?? '',
+                'primary_group' => $row['primary_group'] ?? '',
+                'group_path'    => $row['tally_group_path'] ?? '',
+                'group_depth'   => (int) ($row['tally_group_depth'] ?? 0),
+                'root_type'     => $row['tally_root_type'] ?? '',
+                'has_hierarchy' => !empty($row['tally_group_path']),
+            ];
+        }
+    }
+
+    /**
      * Get the Tally group hierarchy path for a ledger.
+     * Uses preloaded cache when available, falls back to SQL.
+     *
+     * Uses key-existence semantics (array_key_exists) so that cached rows
+     * with all-empty hierarchy fields still return from cache without SQL.
      */
     public function getLedgerHierarchy(string $ledgerName): array
     {
@@ -206,6 +239,11 @@ class HierarchyAIMappingEngine
             'root_type' => '',
             'has_hierarchy' => false,
         ];
+
+        /* Use preloaded cache if available — key-existence, not truthiness */
+        if (array_key_exists($ledgerName, $this->hierarchyCache)) {
+            return $this->hierarchyCache[$ledgerName];
+        }
 
         try {
             /* Check if hierarchy columns exist */

@@ -104,471 +104,54 @@ $isLedgerMode = $ctx['screen']['is_ledger_mode'];
 $mappingSchemaReady = $ctx['schema']['mapping_ready'];
 
 // Step 3 boundary: ReconHub data loading begins below.
-$mappingEngine = new AIMappingEngine($companyCategory, $pdo, (int) $company_id);
-$mappingOptions = $mappingEngine->getMappingOptions();
-asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
+require_once __DIR__ . '/../../app/services/reconhub_data_loading_service.php';
 
-$hierarchyEngine = null;
-$pageWarning = '';
-try {
-    $hierarchyEngine = new HierarchyAIMappingEngine($pdo, (int) $company_id, $companyCategory);
-} catch (Throwable $e) {
-    error_log('Mapping Workbench: hierarchy engine init failed: ' . $e->getMessage());
-    $pageWarning = 'Hierarchy AI mapping unavailable. Basic mapping mode active.';
+/* Inject company category into context for the data-loading service */
+$ctx['company']['category'] = $companyCategory;
+
+$dataService = new ReconHubDataLoadingService($pdo);
+$data = $dataService->load($ctx);
+
+/* Handle data-loading error */
+if ($data['error'] !== null) {
+    $page_title = 'ReconHub Error';
+    $showSidebar = true;
+    require_once __DIR__ . '/../layouts/header_v2.php';
+    ?>
+    <div style="max-width:560px;margin:60px auto;text-align:center;padding:40px;background:var(--panel-strong);border:1px solid var(--border);border-radius:12px;">
+        <h2 style="margin-bottom:12px;">ReconHub Error</h2>
+        <p style="font-size:0.95rem;color:var(--text);margin-bottom:20px;"><?= htmlspecialchars($data['error']['message'] ?? 'An error occurred.') ?></p>
+        <a href="<?= BASE_URL ?>dashboard_company.php" class="btn btn-primary" style="padding:10px 24px;font-size:0.9rem;text-decoration:none;">Go to e-BAL Gateway</a>
+    </div>
+    <?php
+    require_once __DIR__ . '/../layouts/footer_v2.php';
+    exit;
 }
 
-/* Previous FY info */
-$prevFy = getPreviousFyForCompany($pdo, (int) $company_id, (int) $fy_id);
-
-/* Check hierarchy columns */
-$hasHierarchyCols = false;
-try {
-    $chkStmt = $pdo->query("SHOW COLUMNS FROM tally_ledger_master LIKE 'tally_group_path'");
-    $hasHierarchyCols = $chkStmt->rowCount() > 0;
-} catch (Throwable $e) { /* ignore */ }
-
-/* ---- Determine TB-impact ledgers for default view ---- */
-$tbImpactLedgerNames = [];
-try {
-    $tbImpactStmt = $pdo->prepare("SELECT DISTINCT ledger_name FROM tally_ledgers WHERE company_id = ? AND fy_id = ?");
-    $tbImpactStmt->execute([$company_id, $fy_id]);
-    $tbImpactLedgerNames = $tbImpactStmt->fetchAll(PDO::FETCH_COLUMN);
-} catch (Throwable $e) {
-    /* If TB query fails, we'll load all ledgers */
-}
-
-$tbImpactCount = count($tbImpactLedgerNames);
-$totalLedgerCount = 0;
-try {
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM tally_ledger_master WHERE company_id = ?");
-    $countStmt->execute([$company_id]);
-    $totalLedgerCount = (int) $countStmt->fetchColumn();
-} catch (Throwable $e) { /* ignore */ }
-
-/* Default to TB-impact view if TB has fewer ledgers */
-$defaultViewTbImpact = ($tbImpactCount > 0 && $tbImpactCount < $totalLedgerCount);
-
-/* ---- Load ledgers based on view mode ---- */
-$ledgerStmt = $pdo->prepare("
-    SELECT
-        t.ledger_name,
-        COALESCE(tlm.parent_group, t.parent_group) AS parent_group,
-        " . ($hasHierarchyCols ? "
-        COALESCE(tlm.primary_group, '') AS primary_group,
-        COALESCE(tlm.tally_group_path, '') AS tally_group_path,
-        COALESCE(tlm.tally_root_type, '') AS tally_root_type,
-        " : "
-        '' AS primary_group,
-        '' AS tally_group_path,
-        '' AS tally_root_type,
-        ") . "
-        lm.schedule_code AS mapped_code,
-        lm.mapping_source,
-        lm.confidence_score,
-        lm.mapping_reason,
-        lm.override_parent_group
-    FROM tally_ledger_master t
-    LEFT JOIN tally_ledger_master tlm ON tlm.company_id = t.company_id AND tlm.ledger_name = t.parent_group
-    LEFT JOIN ledger_mapping lm ON lm.company_id = t.company_id AND lm.ledger_name = t.ledger_name
-    WHERE t.company_id = ?
-    ORDER BY t.ledger_name
-");
-$ledgerStmt->execute([$company_id]);
-$allLedgers = $ledgerStmt->fetchAll(PDO::FETCH_ASSOC);
-
-/* Load trial balance amounts - handle missing columns gracefully */
-$tbData = [];
-try {
-    $tbColumns = $pdo->query("SHOW COLUMNS FROM tally_ledgers")->fetchAll(PDO::FETCH_COLUMN);
-    $hasOpeningDebit = in_array('opening_debit', $tbColumns);
-    $hasOpeningCredit = in_array('opening_credit', $tbColumns);
-    $hasClosingDebit = in_array('closing_debit', $tbColumns);
-    $hasClosingCredit = in_array('closing_credit', $tbColumns);
-
-    if ($hasOpeningDebit && $hasOpeningCredit && $hasClosingDebit && $hasClosingCredit) {
-        /* New DR/CR columns exist */
-        $tbStmt = $pdo->prepare("
-            SELECT ledger_name,
-                   opening_debit, opening_credit,
-                   closing_debit, closing_credit,
-                   dr_cr,
-                   parent_group
-            FROM tally_ledgers
-            WHERE company_id = ? AND fy_id = ?
-        ");
-        $tbStmt->execute([$company_id, $fy_id]);
-        while ($row = $tbStmt->fetch(PDO::FETCH_ASSOC)) {
-            $tbData[$row['ledger_name']] = $row;
-        }
-    } else {
-        /* Fallback: old single amount column */
-        $tbStmt = $pdo->prepare("
-            SELECT ledger_name,
-                   opening_amount,
-                   amount AS closing_amount,
-                   dr_cr,
-                   parent_group
-            FROM tally_ledgers
-            WHERE company_id = ? AND fy_id = ?
-        ");
-        $tbStmt->execute([$company_id, $fy_id]);
-        while ($row = $tbStmt->fetch(PDO::FETCH_ASSOC)) {
-            $tbData[$row['ledger_name']] = $row;
-        }
-    }
-} catch (Throwable $e) {
-    error_log('Mapping Workbench: TB load failed: ' . $e->getMessage());
-}
-
-/* Compute debits/credits from voucher_entries (graceful fallback) */
-$veData = [];
-try {
-    $veStmt = $pdo->prepare("
-        SELECT ledger_name,
-               SUM(CASE WHEN dr_cr = 'DR' THEN amount ELSE 0 END) AS total_dr,
-               SUM(CASE WHEN dr_cr = 'CR' THEN amount ELSE 0 END) AS total_cr
-        FROM voucher_entries
-        WHERE company_id = ? AND fy_id = ?
-        GROUP BY ledger_name
-    ");
-    $veStmt->execute([$company_id, $fy_id]);
-    while ($row = $veStmt->fetch(PDO::FETCH_ASSOC)) {
-        $veData[$row['ledger_name']] = $row;
-    }
-} catch (Throwable $e) {
-    /* voucher_entries may not exist — use tally_ledgers as fallback */
-}
-
-/* Build grid data with suggestions */
-$previousFyMappings = $prevFy ? loadPreviousFyMappings($pdo, (int) $company_id, $prevFy['id']) : [];
-$globalMaster = loadGlobalMappingMaster($pdo);
-$keywordRules = getEnhancedKeywordRules();
-
-/* Current mappings lookup */
-$currentMappings = [];
-foreach ($allLedgers as $row) {
-    if (!empty($row['mapped_code'])) {
-        $currentMappings[$row['ledger_name']] = ['schedule_code' => $row['mapped_code']];
-    }
-}
-
-$gridData = [];
-$stats = ['total' => 0, 'mapped' => 0, 'unmapped' => 0, 'auto_suggested' => 0, 'high_confidence' => 0, 'manual_review' => 0, 'risk' => 0];
-$processingError = null;
-
-/* Performance timing */
-$timeStart = microtime(true);
-$timeQuery = 0;
-$timeSuggestions = 0;
-
-/* Filter to TB-impact ledgers by default for performance */
-$processingLedgers = $allLedgers;
-if ($defaultViewTbImpact && !empty($tbImpactLedgerNames)) {
-    $tbImpactSet = array_flip($tbImpactLedgerNames);
-    $processingLedgers = array_filter($allLedgers, function ($row) use ($tbImpactSet) {
-        return isset($tbImpactSet[$row['ledger_name']]);
-    });
-    $processingLedgers = array_values($processingLedgers);
-    $processingError = 'Showing TB-impact ledgers only (' . count($processingLedgers) . ' of ' . count($allLedgers) . '). Switch to "All Ledger Master" to view all.';
-}
-
-/* Safety: limit processing for very large datasets */
-$maxLedgers = 20000;
-if (count($processingLedgers) > $maxLedgers) {
-    $processingError = 'Dataset too large (' . count($processingLedgers) . ' ledgers). Processing first ' . number_format($maxLedgers) . ' only.';
-    $processingLedgers = array_slice($processingLedgers, 0, $maxLedgers);
-}
-
-/* Pagination: apply BEFORE heavy processing for performance (values from context resolver) */
-$perPage = $ctx['pagination']['per_page'];
-$currentPage = $ctx['pagination']['page'];
-$totalLedgerRows = count($processingLedgers);
-$totalPages = max(1, (int) ceil($totalLedgerRows / $perPage));
-$currentPage = min($currentPage, $totalPages);
-$gridOffset = ($currentPage - 1) * $perPage;
-$currentPageLedgers = array_slice($processingLedgers, $gridOffset, $perPage);
-
-$timeQuery = round((microtime(true) - $timeStart) * 1000);
-
-try {
-foreach ($currentPageLedgers as $row) {
-    $name = $row['ledger_name'];
-    $group = $row['parent_group'] ?? '';
-    $mappedCode = $row['mapped_code'] ?? '';
-    $isMapped = $mappedCode !== '';
-
-    $tb = $tbData[$name] ?? null;
-    $ve = $veData[$name] ?? null;
-
-    /* Compute DR/CR amounts from tally_ledgers (preferred) or voucher_entries (fallback) */
-    $openingDr = 0; $openingCr = 0;
-    $closingDr = 0; $closingCr = 0;
-    $drcr = '';
-
-    if ($tb) {
-        if (isset($tb['opening_debit'])) {
-            /* New DR/CR columns */
-            $openingDr = (float) $tb['opening_debit'];
-            $openingCr = (float) $tb['opening_credit'];
-            $closingDr = (float) $tb['closing_debit'];
-            $closingCr = (float) $tb['closing_credit'];
-        } else {
-            /* Fallback: use old amount + dr_cr */
-            $closingAmount = (float) ($tb['closing_amount'] ?? $tb['amount'] ?? 0);
-            $openingAmount = (float) ($tb['opening_amount'] ?? 0);
-            $drcr = $tb['dr_cr'] ?? '';
-            if ($drcr === 'DR') {
-                $closingDr = abs($closingAmount);
-                $openingDr = abs($openingAmount);
-            } else {
-                $closingCr = abs($closingAmount);
-                $openingCr = abs($openingAmount);
-            }
-        }
-        $drcr = $tb['dr_cr'] ?? ($closingDr > $closingCr ? 'DR' : ($closingCr > $closingDr ? 'CR' : ''));
-    }
-
-    if ($ve) {
-        $closingDr = max($closingDr, (float) $ve['total_dr']);
-        $closingCr = max($closingCr, (float) $ve['total_cr']);
-    }
-
-    $netBalance = $closingDr - $closingCr;
-
-    /* Get suggestion with safety fallback */
-    $suggestion = ['schedule_code' => '', 'confidence' => 0, 'source' => 'none', 'reason' => 'Suggestion generation failed.'];
-    try {
-        $suggestion = suggestBulkMapping(
-            $name, $group, $currentMappings,
-            $previousFyMappings, $globalMaster, $keywordRules,
-            $hierarchyEngine, $mappingEngine
-        );
-    } catch (\Throwable $e) {
-        /* Fallback: no suggestion */
-    }
-
-    $scheduleLabel = $mappedCode !== '' ? $mappingEngine->getLabel($mappedCode) : '';
-    $suggestedLabel = $suggestion['schedule_code'] !== '' ? $mappingEngine->getLabel($suggestion['schedule_code']) : '';
-
-    $status = $isMapped ? 'Mapped' : 'Unmapped';
-
-    /* ---- DR/CR Risk Detection ---- */
-    $riskLevel = 'none';
-    $riskReason = '';
-
-    $scheduleCode = $suggestion['schedule_code'] ?? '';
-    $assetSchedules = ['ppe', 'inventory', 'receivables', 'cash', 'bank_balances_other', 'other_current_assets', 'investments_non_current', 'loans_non_current', 'intangible_assets', 'cwip', 'deferred_tax_asset', 'other_non_current_assets', 'investments_current', 'loans_current'];
-    $liabilitySchedules = ['trade_payables', 'lt_borrowings', 'st_borrowings', 'other_current_liabilities', 'short_term_provisions', 'share_capital', 'reserves', 'deferred_tax_liability', 'other_non_current_liabilities', 'long_term_provisions'];
-
-    /* Critical: P&L A/c not mapped to reserves */
-    $plVariants = ['profit & loss a/c', 'profit and loss a/c', 'profit & loss account', 'profit and loss account', 'p&l a/c', 'p and l a/c', 'surplus in statement of profit and loss'];
-    if (in_array(strtolower($group), $plVariants) && $scheduleCode !== 'reserves') {
-        $riskLevel = 'critical';
-        $riskReason = 'Profit & Loss A/c should map to Reserves (Equity). Current mapping: ' . ($scheduleCode ?: 'Unmapped');
-    }
-
-    /* Critical: Bank OD / CC with credit balance mapped to cash */
-    $bankOdVariants = ['bank od', 'od account', 'overdraft', 'cash credit', 'bank overdraft', 'current account'];
-    if (in_array(strtolower($group), $bankOdVariants) && $closingCr > 0 && $scheduleCode === 'cash') {
-        $riskLevel = 'critical';
-        $riskReason = 'Bank OD/CC with credit balance should map to st_borrowings, not cash.';
-    }
-
-    /* Critical: Patient advance credit mapped to receivables */
-    $patientAdvanceVariants = ['advance in patient', 'patient advance'];
-    if (in_array(strtolower($group), $patientAdvanceVariants) && $closingCr > 0 && $scheduleCode === 'receivables') {
-        $riskLevel = 'critical';
-        $riskReason = 'Patient advance with credit balance is a liability, not a receivable.';
-    }
-
-    /* Critical: Insurance patient credit mapped to receivables */
-    if (strtolower($group) === 'insurance patient' && $closingCr > 0 && $scheduleCode === 'receivables') {
-        $riskLevel = 'critical';
-        $riskReason = 'Insurance patient with credit balance is a liability, not a receivable.';
-    }
-
-    /* Warning: Credit balance in asset schedule */
-    if ($riskLevel === 'none' && $closingCr > 0 && in_array($scheduleCode, $assetSchedules)) {
-        $riskLevel = 'warning';
-        $riskReason = 'Credit balance in asset schedule.';
-    }
-
-    /* Warning: Debit balance in liability/equity schedule */
-    if ($riskLevel === 'none' && $closingDr > 0 && in_array($scheduleCode, $liabilitySchedules)) {
-        $riskLevel = 'warning';
-        $riskReason = 'Debit balance in liability/equity schedule.';
-    }
-
-    /* Review: Nil balance */
-    if ($riskLevel === 'none' && $closingDr === 0 && $closingCr === 0 && !$isMapped) {
-        $riskLevel = 'review';
-        $riskReason = 'Nil balance, unclear mapping.';
-    }
-
-    $hasTb = isset($tbData[$name]) || isset($veData[$name]);
-
-    $gridData[] = [
-        'id' => $name,
-        'ledger_name' => $name,
-        'parent_group' => $group,
-        'opening_dr' => $openingDr,
-        'opening_cr' => $openingCr,
-        'closing_dr' => $closingDr,
-        'closing_cr' => $closingCr,
-        'net_balance' => $netBalance,
-        'drcr' => $drcr,
-        'current_mapping' => $mappedCode,
-        'current_label' => $scheduleLabel,
-        'suggested' => $suggestion['schedule_code'],
-        'suggested_label' => $suggestedLabel,
-        'suggestion_source' => $suggestion['source'],
-        'confidence' => $suggestion['confidence'],
-        'final_mapping' => $mappedCode,
-        'status' => $status,
-        'remarks' => '',
-        'risk_level' => $riskLevel,
-        'risk_reason' => $riskReason,
-        'has_tb' => $hasTb,
-    ];
-
-    $stats['total']++;
-    if ($isMapped) {
-        $stats['mapped']++;
-    } else {
-        $stats['unmapped']++;
-        if ($suggestion['confidence'] >= 90) {
-            $stats['auto_suggested']++;
-            $stats['high_confidence']++;
-        } elseif ($suggestion['confidence'] >= 70) {
-            $stats['auto_suggested']++;
-        } else {
-            $stats['manual_review']++;
-        }
-    }
-    if ($riskLevel === 'critical' || $riskLevel === 'warning') {
-        $stats['risk']++;
-    }
-}
-} catch (\Throwable $e) {
-    $processingError = $e->getMessage();
-    error_log('Mapping Workbench processing error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-}
-
-$timeSuggestions = round((microtime(true) - $timeStart - ($timeQuery / 1000)) * 1000);
-
-$timePgStart = microtime(true);
-
-/* ---- Parent group counts from current-page gridData only (fast) ---- */
-$parentGroupCounts = [];
-$parentGroupData = [];
-foreach ($gridData as $row) {
-    $pg = $row['parent_group'] ?: '(none)';
-    if (!isset($parentGroupCounts[$pg])) {
-        $parentGroupCounts[$pg] = 0;
-        $parentGroupData[$pg] = [
-            'count' => 0,
-            'opening_dr' => 0, 'opening_cr' => 0,
-            'closing_dr' => 0, 'closing_cr' => 0,
-            'net_balance' => 0,
-        ];
-    }
-    $parentGroupCounts[$pg]++;
-    $parentGroupData[$pg]['opening_dr'] += $row['opening_dr'];
-    $parentGroupData[$pg]['opening_cr'] += $row['opening_cr'];
-    $parentGroupData[$pg]['closing_dr'] += $row['closing_dr'];
-    $parentGroupData[$pg]['closing_cr'] += $row['closing_cr'];
-    $parentGroupData[$pg]['net_balance'] += $row['net_balance'];
-}
-arsort($parentGroupCounts);
-$topParentGroups = array_slice($parentGroupCounts, 0, 25, true);
-
-/* Build Schedule III Group Mapping panel data */
-$groupMappingData = [];
-try {
-/* Precompute per-group aggregates in a single pass over gridData instead of
-   rescanning gridData once per parent group (was O(distinct groups * grid rows)
-   and could exceed max_execution_time for companies with many distinct groups). */
-$assetSchedulesForRisk = ['ppe', 'inventory', 'receivables', 'cash', 'bank_balances_other', 'other_current_assets', 'investments_non_current', 'loans_non_current', 'intangible_assets', 'cwip', 'deferred_tax_asset', 'other_non_current_assets', 'investments_current', 'loans_current'];
-$liabilitySchedulesForRisk = ['trade_payables', 'lt_borrowings', 'st_borrowings', 'other_current_liabilities', 'short_term_provisions', 'share_capital', 'reserves', 'deferred_tax_liability', 'other_non_current_liabilities', 'long_term_provisions'];
-$mappingCountsByGroup = [];
-$crPositiveCountByGroup = [];
-$drPositiveCountByGroup = [];
-foreach ($gridData as $row) {
-    $pg = $row['parent_group'] ?: '(none)';
-    if (!empty($row['current_mapping'])) {
-        $mc = $row['current_mapping'];
-        $mappingCountsByGroup[$pg][$mc] = ($mappingCountsByGroup[$pg][$mc] ?? 0) + 1;
-    }
-    if ($row['closing_cr'] > 0) {
-        $crPositiveCountByGroup[$pg] = ($crPositiveCountByGroup[$pg] ?? 0) + 1;
-    }
-    if ($row['closing_dr'] > 0) {
-        $drPositiveCountByGroup[$pg] = ($drPositiveCountByGroup[$pg] ?? 0) + 1;
-    }
-}
-
-foreach ($parentGroupCounts as $pg => $cnt) {
-    $pgData = $parentGroupData[$pg];
-    $netBal = $pgData['net_balance'];
-    $drcr = $pgData['closing_dr'] > $pgData['closing_cr'] ? 'DR' : ($pgData['closing_cr'] > $pgData['closing_dr'] ? 'CR' : '');
-
-    /* Get dominant existing mapping */
-    $dominantMapping = '';
-    $mappingCounts = $mappingCountsByGroup[$pg] ?? [];
-    if (!empty($mappingCounts)) {
-        arsort($mappingCounts);
-        $mappingKeys = array_keys($mappingCounts);
-        $dominantMapping = reset($mappingKeys);
-    }
-
-    /* Get suggested mapping from parent group rules */
-    $suggested = matchParentGroupRule($pg);
-    $suggestedCode = $suggested ? $suggested['schedule_code'] : '';
-    $confidence = $suggested ? $suggested['confidence'] : 0;
-
-    /* Risk count: ledgers with credit balance in asset group or debit in liability group */
-    $riskCount = 0;
-    if (in_array($suggestedCode, $assetSchedulesForRisk, true)) {
-        $riskCount += $crPositiveCountByGroup[$pg] ?? 0;
-    }
-    if (in_array($suggestedCode, $liabilitySchedulesForRisk, true)) {
-        $riskCount += $drPositiveCountByGroup[$pg] ?? 0;
-    }
-
-    $groupMappingData[] = [
-        'parent_group' => $pg,
-        'ledger_count' => $cnt,
-        'opening_dr' => $pgData['opening_dr'],
-        'opening_cr' => $pgData['opening_cr'],
-        'closing_dr' => $pgData['closing_dr'],
-        'closing_cr' => $pgData['closing_cr'],
-        'net_balance' => $pgData['net_balance'],
-        'drcr' => $drcr,
-        'dominant_mapping' => $dominantMapping,
-        'suggested_code' => $suggestedCode,
-        'confidence' => $confidence,
-        'risk_count' => $riskCount,
-    ];
-}
-} catch (\Throwable $e) {
-    error_log('Mapping Workbench: Group mapping panel error: ' . $e->getMessage());
-    $groupMappingData = [];
-}
-
-/* Mapping options as JSON for JS */
-$mappingOptionsJson = [];
-foreach ($mappingOptions as $code => $label) {
-    $mappingOptionsJson[] = ['id' => $code, 'label' => $label . ' (' . $code . ')', 'code' => $code, 'fullLabel' => $label];
-}
-
-$timePg = round((microtime(true) - $timePgStart) * 1000);
-$timeTotal = round((microtime(true) - $timeStart) * 1000);
-error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}ms, parent_groups={$timePg}ms, total={$timeTotal}ms, processed=" . count($currentPageLedgers) . " of " . count($processingLedgers));
-
-$pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
-
+/* Extract variables from service result for the existing view */
+$gridData = $data['grid_data'];
+$stats = $data['stats'];
+$perPage = $data['pagination']['per_page'];
+$currentPage = $data['pagination']['page'];
+$totalLedgerRows = $data['pagination']['total_rows'];
+$totalPages = $data['pagination']['total_pages'];
+$gridOffset = $data['pagination']['offset'];
+$parentGroupCounts = $data['parent_groups']['counts'];
+$parentGroupData = $data['parent_groups']['data'];
+$topParentGroups = $data['parent_groups']['top'];
+$groupMappingData = $data['parent_groups']['mapping_data'];
+$mappingOptions = $data['mapping_options'];
+$mappingOptionsJson = $data['mapping_options_json'];
+$pageWarning = $data['meta']['page_warning'];
+$processingError = $data['meta']['processing_error'];
+$tbImpactCount = $data['meta']['tb_impact_count'];
+$totalLedgerCount = $data['meta']['total_ledger_count'];
+$defaultViewTbImpact = $data['meta']['default_view_tb_impact'];
+$pctComplete = $data['meta']['pct_complete'];
 $totalGridRows = $totalLedgerRows;
 $paginatedGridData = $gridData;
+
+// Step 4 boundary: ReconHub view rendering begins below.
 
 $page_title = $isLedgerMode ? "Ledger-wise Mapping" : "ReconHub";
 $showSidebar = true;
