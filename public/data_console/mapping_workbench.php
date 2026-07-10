@@ -717,15 +717,18 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 .hot-container {
     border: 1px solid var(--border);
     border-radius: 10px;
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: visible;
     box-shadow: var(--shadow-sm);
     min-height: 400px;
     position: relative;
+    max-width: 100%;
 }
 
 .recon-grid-wrap {
     width: 100%;
     max-width: 100%;
+    overflow: hidden;
 }
 
 #hotSearch {
@@ -737,11 +740,11 @@ require_once __DIR__ . '/../layouts/header_v2.php';
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 6px 14px;
+    padding: 8px 14px;
     background: var(--panel-strong);
     border: 1px solid var(--border);
     border-radius: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     font-size: 0.82rem;
     color: var(--text);
     flex-wrap: wrap;
@@ -749,6 +752,80 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 .recon-context-strip .rcs-sep { color: var(--muted); }
 .recon-context-strip .rcs-label { color: var(--muted); font-weight: 400; }
 .recon-context-strip .rcs-value { font-weight: 600; }
+
+/* ReconHub page heading */
+.rh-page-heading {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+.rh-page-heading h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+}
+.rh-page-heading .rh-subtitle {
+    font-size: 0.82rem;
+    color: var(--muted);
+    font-weight: 400;
+}
+
+/* Grid containment — prevent body-level horizontal overflow */
+.hot-container {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow-x: auto;
+    overflow-y: visible;
+    box-shadow: var(--shadow-sm);
+    min-height: 400px;
+    position: relative;
+    max-width: 100%;
+}
+
+.recon-grid-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* Tabulator cell text clamping — reduce row height */
+.tabulator-row .tabulator-cell {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 280px;
+}
+.tabulator-row .tabulator-cell[tabulator-field="final_mapping"],
+.tabulator-row .tabulator-cell[tabulator-field="suggested_label"],
+.tabulator-row .tabulator-cell[tabulator-field="current_label"] {
+    max-width: 220px;
+}
+.tabulator-row .tabulator-cell[tabulator-field="remarks"] {
+    max-width: 180px;
+}
+.tabulator-row .tabulator-cell[tabulator-field="ledger_name"] {
+    max-width: 260px;
+    font-weight: 500;
+}
+
+/* Action buttons — consistent sizing */
+.wb-actions .btn {
+    min-height: 32px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.wb-actions .btn-success { min-width: 80px; }
+.wb-actions .btn-outline { min-width: 70px; }
+.wb-actions select {
+    min-height: 32px;
+    flex-shrink: 0;
+}
 
 .toast {
     position: fixed;
@@ -780,6 +857,11 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 ]) ?>
 
 <?= uiPageHero('ReconHub', 'Ledger mapping, Schedule III group tagging, risk review and reconciliation readiness workspace.') ?>
+
+<!-- Compact Page Heading -->
+<div class="rh-page-heading">
+    <h2>ReconHub — <?= $isLedgerMode ? 'Ledger Mapping' : 'Group Mapping' ?></h2>
+</div>
 
 <?php if (!empty($pageWarning)): ?>
     <?= uiAlert($pageWarning, 'warning') ?>
@@ -1202,6 +1284,13 @@ require_once __DIR__ . '/../layouts/header_v2.php';
             pagination: 'local',
             paginationSize: 250,
             paginationSizeSelector: [100, 250, 500, 1000, true],
+            cellMouseOver: function(e, cell) {
+                var el = cell.getElement();
+                var field = cell.getField();
+                if (field && !el.title) {
+                    el.title = cell.getValue() || '';
+                }
+            },
             columns: [
                 {title:'', formatter:'rowSelection', titleFormatter:'rowSelection', headerSort:false, width:45, hozAlign:'center', cellClick:function(e, cell){cell.getRow().toggleSelect();}},
                 {title:'Ledger Name', field:'ledger_name', width:260, minWidth:200, frozen:true, headerTooltip:true},
