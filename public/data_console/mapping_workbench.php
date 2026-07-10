@@ -38,15 +38,82 @@ require_once '../../app/helpers/parent_group_validation_helper.php';
 require_once '../../app/helpers/hierarchy_ai_mapping.php';
 require_once '../../app/helpers/bulk_mapping_helper.php';
 
-requireFullContext();
+/* ---- Safe context resolution (GET → session → fallback) ---- */
+$rawCompanyId = isset($_GET['company_id']) ? (int) $_GET['company_id'] : 0;
+$rawEntityId  = isset($_GET['entity_id']) ? (int) $_GET['entity_id'] : 0;
+$rawFyId      = isset($_GET['fy_id']) ? (int) $_GET['fy_id'] : 0;
 
-$company_id = $_SESSION['company_id'];
-$fy_id      = $_SESSION['fy_id'];
-$userId = (int) ($_SESSION['user_id'] ?? 0);
+$effectiveCompanyId = $rawCompanyId > 0 ? $rawCompanyId : ($rawEntityId > 0 ? $rawEntityId : 0);
+
+if ($effectiveCompanyId > 0) {
+    $_SESSION['company_id'] = $effectiveCompanyId;
+}
+if ($rawFyId > 0) {
+    $_SESSION['fy_id'] = $rawFyId;
+}
+
+$company_id = isset($_SESSION['company_id']) ? (int) $_SESSION['company_id'] : 0;
+$fy_id      = isset($_SESSION['fy_id']) ? (int) $_SESSION['fy_id'] : 0;
+$userId     = (int) ($_SESSION['user_id'] ?? 0);
+
+if ($userId <= 0) {
+    header('Location: ' . BASE_URL . 'login.php');
+    exit;
+}
 
 if ($company_id <= 0 || $fy_id <= 0) {
-    header('Location: ' . BASE_URL . 'dashboard_company.php');
+    $page_title = "ReconHub \u2014 Select Context";
+    $showSidebar = true;
+    require_once __DIR__ . '/../layouts/header_v2.php';
+    ?>
+    <div style="max-width:500px;margin:60px auto;text-align:center;padding:40px;background:var(--panel-strong);border:1px solid var(--border);border-radius:12px;">
+        <h2 style="margin-bottom:12px;">ReconHub \u2014 Mapping Workbench</h2>
+        <p style="font-size:0.95rem;color:var(--text);margin-bottom:20px;">Please select an entity and financial year to continue.</p>
+        <a href="<?= BASE_URL ?>dashboard_company.php" class="btn btn-primary" style="padding:10px 24px;font-size:0.9rem;text-decoration:none;">Go to e-BAL Gateway</a>
+    </div>
+    <?php
+    require_once __DIR__ . '/../layouts/footer_v2.php';
     exit;
+}
+
+$fyValid = false;
+try {
+    $fyCheckStmt = $pdo->prepare("SELECT COUNT(*) FROM financial_years WHERE id = ? AND company_id = ?");
+    $fyCheckStmt->execute([$fy_id, $company_id]);
+    $fyValid = (int) $fyCheckStmt->fetchColumn() > 0;
+} catch (Throwable $e) {
+    error_log('Mapping Workbench: FY validation query failed: ' . $e->getMessage());
+}
+
+if (!$fyValid) {
+    unset($_SESSION['fy_id'], $_SESSION['fy_name']);
+    $page_title = "ReconHub \u2014 Invalid Financial Year";
+    $showSidebar = true;
+    require_once __DIR__ . '/../layouts/header_v2.php';
+    ?>
+    <div style="max-width:500px;margin:60px auto;text-align:center;padding:40px;background:var(--panel-strong);border:1px solid var(--border);border-radius:12px;">
+        <h2 style="margin-bottom:12px;">Invalid Financial Year</h2>
+        <p style="font-size:0.95rem;color:var(--text);margin-bottom:20px;">The selected financial year is not valid for this entity. Please select a valid entity and financial year.</p>
+        <a href="<?= BASE_URL ?>dashboard_company.php" class="btn btn-primary" style="padding:10px 24px;font-size:0.9rem;text-decoration:none;">Go to e-BAL Gateway</a>
+    </div>
+    <?php
+    require_once __DIR__ . '/../layouts/footer_v2.php';
+    exit;
+}
+
+try {
+    if (empty($_SESSION['company_name'])) {
+        $compStmt = $pdo->prepare("SELECT name FROM companies WHERE id = ?");
+        $compStmt->execute([$company_id]);
+        $_SESSION['company_name'] = $compStmt->fetchColumn() ?: 'Unknown';
+    }
+    if (empty($_SESSION['fy_name'])) {
+        $fyStmt = $pdo->prepare("SELECT label FROM financial_years WHERE id = ?");
+        $fyStmt->execute([$fy_id]);
+        $_SESSION['fy_name'] = $fyStmt->fetchColumn() ?: 'Unknown';
+    }
+} catch (Throwable $e) {
+    error_log('Mapping Workbench: Session label load failed: ' . $e->getMessage());
 }
 
 /* Mode detection: group (default) or ledger */
@@ -537,14 +604,7 @@ error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}
 
 $pctComplete = $stats['total'] > 0 ? round(($stats['mapped'] / $stats['total']) * 100) : 0;
 
-/* Pagination: limit gridData passed to JavaScript for performance */
-$perPage = max(50, min(500, (int) ($_GET['per_page'] ?? 50)));
-$currentPage = max(1, (int) ($_GET['page'] ?? 1));
-$totalGridRows = count($gridData);
-$totalPages = max(1, (int) ceil($totalGridRows / $perPage));
-$currentPage = min($currentPage, $totalPages);
-$gridOffset = ($currentPage - 1) * $perPage;
-$paginatedGridData = array_slice($gridData, $gridOffset, $perPage);
+$paginatedGridData = $gridData;
 
 $page_title = $isLedgerMode ? "Ledger-wise Mapping" : "ReconHub";
 $showSidebar = true;
