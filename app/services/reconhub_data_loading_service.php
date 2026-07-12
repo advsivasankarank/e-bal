@@ -53,6 +53,7 @@ class ReconHubDataLoadingService
         $perPage   = (int) $context['pagination']['per_page'];
         $page      = (int) $context['pagination']['page'];
         $isGroupMode = $context['screen']['is_group_mode'];
+        $companyCategory = strtolower((string) ($context['company']['category'] ?? ''));
 
         $result = [
             'grid_data'       => [],
@@ -79,7 +80,7 @@ class ReconHubDataLoadingService
         ];
 
         try {
-            $this->loadData($result, $companyId, $fyId, $perPage, $page, $timeStart);
+            $this->loadData($result, $companyId, $fyId, $companyCategory, $perPage, $page, $timeStart);
         } catch (Throwable $e) {
             error_log('ReconHub data loading failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             $result['error'] = [
@@ -95,10 +96,9 @@ class ReconHubDataLoadingService
     /**
      * Core data-loading logic. Populates $result by reference.
      */
-    private function loadData(array &$result, int $companyId, int $fyId, int $perPage, int $page, float $timeStart): void
+    private function loadData(array &$result, int $companyId, int $fyId, string $companyCategory, int $perPage, int $page, float $timeStart): void
     {
         /* ---- Initialise engines ---- */
-        $companyCategory = strtolower((string) $result['_company_category'] ?? '');
         $mappingEngine = new AIMappingEngine($companyCategory, $this->pdo, $companyId);
         $mappingOptions = $mappingEngine->getMappingOptions();
         asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
