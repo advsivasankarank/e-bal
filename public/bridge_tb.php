@@ -20,7 +20,7 @@ $fyId = (int) ($allHeaders['X-Fy-Id'] ?? $_SERVER['HTTP_X_FY_ID'] ?? 0);
 $xmlRaw = file_get_contents('php://input');
 
 $expected = defined('TALLY_BRIDGE_TOKEN') ? trim((string) TALLY_BRIDGE_TOKEN) : '';
-if ($expected === '' || $token !== $expected) {
+if ($expected === '' || !hash_equals($expected, $token)) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'message' => 'Unauthorized']);
     exit;

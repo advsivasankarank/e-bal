@@ -16,10 +16,10 @@ $headerToken = $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? '';
 $raw = file_get_contents('php://input');
 $payload = json_decode($raw, true);
 
-$payloadToken = is_array($payload) ? ($payload['token'] ?? '') : '';
-$finalToken = $payloadToken !== '' ? $payloadToken : $headerToken;
+$payloadToken = is_array($payload) ? (string) ($payload['token'] ?? '') : '';
+$finalToken = $payloadToken !== '' ? $payloadToken : (string) $headerToken;
 
-if ($token === '' || $finalToken !== $token) {
+if ($token === '' || !hash_equals($token, $finalToken)) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'Unauthorized']);
     exit;

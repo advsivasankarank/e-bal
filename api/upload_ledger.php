@@ -21,7 +21,7 @@ $xmlRaw = file_get_contents('php://input');
 
 /* HARDEN: Token must be configured. Empty token = reject. */
 $expected = defined('EBAL_BRIDGE_TOKEN') ? trim((string) EBAL_BRIDGE_TOKEN) : '';
-if ($expected === '' || $token !== $expected) {
+if ($expected === '' || !hash_equals($expected, $token)) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'message' => 'Unauthorized']);
     exit;
