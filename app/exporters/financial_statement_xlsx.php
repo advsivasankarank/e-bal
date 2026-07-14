@@ -169,7 +169,7 @@ function buildPlSheet(Spreadsheet $spreadsheet, array $fs, string $companyName, 
     $hasPrev = !($fs['is_first_year'] ?? false);
     $lastCol = $hasPrev ? 'D' : 'C';
 
-    $plLabel = ($fs['entity_subcategory'] ?? '') === 'trust' ? 'Income & Expenditure' : 'Profit & Loss';
+    $plLabel = in_array($fs['entity_subcategory'] ?? '', ['trust', 'society'], true) ? 'Income & Expenditure' : 'Profit & Loss';
 
     $r = 1;
     $sheet->setCellValue('A1', $companyName);
