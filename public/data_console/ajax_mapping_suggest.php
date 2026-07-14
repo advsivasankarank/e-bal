@@ -52,7 +52,7 @@ $hierarchyEngine = null;
 try {
     $hierarchyEngine = new HierarchyAIMappingEngine($pdo, $company_id, $companyCategory);
 } catch (Throwable $e) {
-    error_log('Mapping suggest: hierarchy engine init failed: ' . $e->getMessage());
+    appLog('ERROR', 'Mapping suggest: hierarchy engine init failed', ['message' => $e->getMessage()]);
 }
 
 $suggestions = generateBulkSuggestions($pdo, $company_id, $fy_id, $hierarchyEngine, $mappingEngine);

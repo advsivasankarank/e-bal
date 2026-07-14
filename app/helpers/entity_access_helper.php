@@ -206,7 +206,7 @@ function ensureArchivedAtColumn(PDO $pdo): void
             $pdo->exec("ALTER TABLE companies ADD COLUMN archived_at DATETIME NULL DEFAULT NULL AFTER updated_at");
         }
     } catch (\Throwable $e) {
-        error_log('ensureArchivedAtColumn failed: ' . $e->getMessage());
+        appLog('ERROR', 'ensureArchivedAtColumn failed', ['message' => $e->getMessage()]);
     }
 }
 

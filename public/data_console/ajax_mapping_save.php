@@ -231,6 +231,6 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    error_log('Bulk mapping save failed: ' . $e->getMessage());
+    appLog('ERROR', 'Bulk mapping save failed', ['message' => $e->getMessage()]);
     echo json_encode(['success' => false, 'error' => 'Server error during save. Please try again.']);
 }

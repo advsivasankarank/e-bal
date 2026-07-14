@@ -191,7 +191,7 @@ class ReconHubContextResolver
             $fyRow = $stmt->fetch(PDO::FETCH_ASSOC);
             $queryCount++;
         } catch (Throwable $e) {
-            error_log('ReconHub context: Company/FY query failed: ' . $e->getMessage());
+            appLog('ERROR', 'ReconHub context: Company/FY query failed', ['message' => $e->getMessage()]);
         }
 
         // ---- FY not found or FY belongs to another company ----
@@ -296,7 +296,7 @@ class ReconHubContextResolver
 
         // Reject arrays
         if (is_array($rawValue)) {
-            error_log("ReconHub context: {$paramName} received array value, treating as malformed");
+            appLog('WARNING', 'ReconHub context: param received array value, treating as malformed', ['param' => $paramName]);
             return 0;
         }
 
@@ -392,7 +392,7 @@ class ReconHubContextResolver
             $tblCheck = $this->pdo->query("SHOW TABLES LIKE 'mapping_learning'");
             return $tblCheck->rowCount() > 0;
         } catch (Throwable $e) {
-            error_log('ReconHub context: Schema check failed: ' . $e->getMessage());
+            appLog('ERROR', 'ReconHub context: Schema check failed', ['message' => $e->getMessage()]);
             return false;
         }
     }

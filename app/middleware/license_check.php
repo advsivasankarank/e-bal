@@ -17,7 +17,7 @@ if ($userId <= 0) {
 }
 
 if (!isset($pdo) || !($pdo instanceof PDO)) {
-    error_log('license_check.php: PDO not initialized when called from ' . ($_SERVER['SCRIPT_NAME'] ?? 'unknown'));
+    appLog('CRITICAL', 'license_check.php: PDO not initialized', ['script' => $_SERVER['SCRIPT_NAME'] ?? 'unknown']);
     return;
 }
 

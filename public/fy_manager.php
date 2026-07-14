@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['fy_action'] ?? '') === 'cr
                 header("Location: " . BASE_URL . "fy_workspace.php?entity_id=" . $entityId . "&fy_id=" . $newFyId);
                 exit;
             } catch (\Throwable $e) {
-                error_log('FY create failed: ' . $e->getMessage());
+                appLog('ERROR', 'FY create failed', ['message' => $e->getMessage()]);
                 $_SESSION['error'] = 'Financial Year was created, but workspace could not be opened. Please open it from the FY list.';
                 header("Location: " . BASE_URL . "fy_manager.php?entity_id=" . $entityId);
                 exit;
@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['fy_action'] ?? '') === 'se
             header("Location: " . BASE_URL . "fy_workspace.php?entity_id=" . $entityId . "&fy_id=" . $selFy['id']);
             exit;
         } else {
-            error_log("FY Manager: FY ID {$selFyId} not found for entity {$entityId}");
+            appLog('WARNING', 'FY Manager: FY not found for entity', ['fy_id' => $selFyId, 'entity_id' => $entityId]);
         }
     }
     $_SESSION['error'] = 'Invalid Financial Year selected.';
