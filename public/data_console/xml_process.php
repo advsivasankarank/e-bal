@@ -36,12 +36,17 @@ $rawXml = file_get_contents($_FILES['xml_file']['tmp_name']);
 // Convert and sanitize XML
 $rawXml = sanitizeTallyXML($rawXml);
 
-// Now parse
-$xmlObj = simplexml_load_string($rawXml);
+// Now parse. LIBXML_NONET blocks network-based entity resolution as explicit
+// defense-in-depth; external entity substitution is already disabled by
+// default on PHP 8+ (LIBXML_NOENT is deliberately not passed -- that flag
+// would re-enable it).
+$xmlObj = simplexml_load_string($rawXml, 'SimpleXMLElement', LIBXML_NONET);
 
 if (!$xmlObj) {
     $errors = libxml_get_errors();
-    $_SESSION['error'] = "Invalid XML format. Parser errors: " . print_r($errors, true);
+    $errorSummary = !empty($errors) ? trim((string) $errors[0]->message) : 'Unknown parse error';
+    appLog('WARNING', 'XML upload parse failed', ['company_id' => $company_id, 'errors' => array_map(fn($e) => trim((string) $e->message), $errors)]);
+    $_SESSION['error'] = "Invalid XML format: {$errorSummary}";
     $_SESSION['process_stats'] = ['total'=>0,'dr_total'=>0,'cr_total'=>0,'type'=>'xml'];
     header('Location: ' . BASE_URL . 'data_console/process_result.php');
     exit;

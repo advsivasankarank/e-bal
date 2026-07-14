@@ -24,7 +24,7 @@ function getTrialBalanceXML($from_date, $to_date)
 
 function fetchTrialBalance($response)
 {
-    $xml = simplexml_load_string($response);
+    $xml = simplexml_load_string($response, 'SimpleXMLElement', LIBXML_NONET);
 
     if (!$xml) return [];
 

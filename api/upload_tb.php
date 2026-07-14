@@ -80,7 +80,7 @@ if (trim($xmlRaw) === '') {
 
 $xmlRaw = sanitizeTallyXML($xmlRaw);
 libxml_use_internal_errors(true);
-$xml = simplexml_load_string($xmlRaw);
+$xml = simplexml_load_string($xmlRaw, 'SimpleXMLElement', LIBXML_NONET);
 if ($xml === false) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'message' => 'Invalid XML']);

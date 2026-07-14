@@ -180,7 +180,7 @@ XML
     private function parseXml(string $rawXml): ?SimpleXMLElement
     {
         libxml_use_internal_errors(true);
-        $xmlObj = simplexml_load_string(sanitizeTallyXML($rawXml));
+        $xmlObj = simplexml_load_string(sanitizeTallyXML($rawXml), 'SimpleXMLElement', LIBXML_NONET);
         if ($xmlObj === false) {
             libxml_clear_errors();
             return null;

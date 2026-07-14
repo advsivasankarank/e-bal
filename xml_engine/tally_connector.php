@@ -144,7 +144,7 @@ XML;
 
     $response = sanitizeTallyXML($response);
     libxml_use_internal_errors(true);
-    $xmlObj = simplexml_load_string($response);
+    $xmlObj = simplexml_load_string($response, 'SimpleXMLElement', LIBXML_NONET);
 
     if (!$xmlObj) {
         libxml_clear_errors();
