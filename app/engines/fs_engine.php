@@ -686,6 +686,10 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
                 )
             ),
         ],
+        'tax_provision' => [
+            'current' => manualAmount($manualInputs, 'tax_provision', 0),
+            'previous' => manualAmount($previousManualInputs, 'tax_provision', 0),
+        ],
         'sections' => $sections,
     ];
 }
@@ -840,8 +844,8 @@ function buildCompanySummaryFromNotes(array $classified, array $notes, string $f
         'prev_depreciation' => $sectionTotalsByCode['DEP']['previous'] ?? ($sectionTotals['Depreciation & Amortisation']['previous'] ?? 0),
         'other_expenses' => $sectionTotalsByCode['EXP']['current'] ?? ($sectionTotals['Other Expenses']['current'] ?? 0),
         'prev_other_expenses' => $sectionTotalsByCode['EXP']['previous'] ?? ($sectionTotals['Other Expenses']['previous'] ?? 0),
-        'tax' => 0,
-        'prev_tax' => 0,
+        'tax' => (float) ($notes['tax_provision']['current'] ?? 0),
+        'prev_tax' => (float) ($notes['tax_provision']['previous'] ?? 0),
     ];
 
     /* ---- Branch / Divisions — Standalone Balance Sheet Treatment ---- */
@@ -1064,6 +1068,11 @@ function buildNonCorpSummaryFromNotes(array $classified, array $notes, string $f
         'prev_revenue' => $prevRevenue,
         'expenses' => $expenses,
         'prev_expenses' => $prevExpenses,
+        /* Correct as 0 for proprietorship (taxed on the individual, not the firm).
+           Not yet correct for partnership/trust/society, which do have entity-level
+           tax — buildNonCorpNotesPayload() has no manual-input wiring or UI field
+           for it yet, unlike buildCompanyNotesPayload()'s tax_provision. Needs its
+           own manual-input UI before this can be sourced correctly per subcategory. */
         'tax' => 0,
         'prev_tax' => 0,
         'other_income' => classifiedAmount($classified, 'other_income') ?: 0,

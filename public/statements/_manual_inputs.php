@@ -56,6 +56,10 @@ if (!isset($isCorporate)) return;
             <label for="note24_closing_work_in_progress">Closing WIP</label>
             <input id="note24_closing_work_in_progress" name="note24_closing_work_in_progress" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_closing_work_in_progress'] ?? '')) ?>">
         </div>
+        <div class="form-group">
+            <label for="tax_provision">Provision for Tax (Current Year)</label>
+            <input id="tax_provision" name="tax_provision" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['tax_provision'] ?? '')) ?>">
+        </div>
         <button class="btn btn-primary" type="submit" style="width:100%;">Save Adjustments</button>
     </form>
     <?php else: ?>
