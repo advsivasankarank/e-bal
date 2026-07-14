@@ -32,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'note24_opening_work_in_progress' => trim((string) ($_POST['note24_opening_work_in_progress'] ?? '')),
         'note24_closing_finished_goods' => trim((string) ($_POST['note24_closing_finished_goods'] ?? '')),
         'note24_closing_work_in_progress' => trim((string) ($_POST['note24_closing_work_in_progress'] ?? '')),
+        'tax_provision' => trim((string) ($_POST['tax_provision'] ?? '')),
     ];
     $derivedOpeningFinishedGoods = $manualBundle['previous']['note24_closing_finished_goods'] ?? $manualBundle['current']['note24_opening_finished_goods'] ?? '';
     $derivedOpeningWip = $manualBundle['previous']['note24_closing_work_in_progress'] ?? $manualBundle['current']['note24_opening_work_in_progress'] ?? '';
@@ -56,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'note24_opening_work_in_progress' => $postedManualInputs['note24_opening_work_in_progress'] !== '' ? $postedManualInputs['note24_opening_work_in_progress'] : (string) $derivedOpeningWip,
         'note24_closing_finished_goods' => $postedManualInputs['note24_closing_finished_goods'],
         'note24_closing_work_in_progress' => $postedManualInputs['note24_closing_work_in_progress'],
+        'tax_provision' => $postedManualInputs['tax_provision'],
     ]);
     header("Location: " . BASE_URL . "statements/financials.php");
     exit;
@@ -410,6 +412,14 @@ echo renderWorkflowNavigation($navData);
         <h3>Directors Report</h3>
         <p style="font-size:0.88rem;color:#475569;margin:0 0 12px;">Generate and review the Directors Report for this company and financial year.</p>
         <a class="btn" href="<?= BASE_URL ?>directors_report.php" style="display:inline-block;">Open Directors Report</a>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($entityCategory === 'llp' || $entitySubcategory === 'partnership'): ?>
+    <div class="fs-compliance-card" style="margin-bottom:16px;">
+        <h3>Partners' Capital Schedule</h3>
+        <p style="font-size:0.88rem;color:#475569;margin:0 0 12px;">Manage partners and their capital account movements for this financial year.</p>
+        <a class="btn" href="<?= BASE_URL ?>statements/partner_capital.php" style="display:inline-block;">Open Partners' Capital Schedule</a>
     </div>
     <?php endif; ?>
 

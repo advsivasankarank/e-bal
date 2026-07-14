@@ -1,7 +1,8 @@
 <?php
 /**
  * Entity Management Master Helper
- * CRUD for auditor_master, director_master, company_fy_auditors, company_directors, company_fy_signatories.
+ * CRUD for auditor_master, director_master, company_fy_auditors, company_directors,
+ * company_fy_signatories, partner_master, company_partners, partner_capital_movements.
  */
 
 /* =========================
@@ -172,6 +173,175 @@ function getCompanySignatories(PDO $pdo, int $companyId, int $fyId): array
 }
 
 /* =========================
+   PARTNER MASTER
+========================= */
+
+function searchPartners(PDO $pdo, int $ownerId, string $query = '', bool $activeOnly = true): array
+{
+    $sql = "SELECT partner_id, partner_name, pan, email, mobile FROM partner_master WHERE owner_user_id = ?";
+    $params = [$ownerId];
+    if ($activeOnly) $sql .= " AND active_status = 1";
+    if ($query !== '') {
+        $sql .= " AND (partner_name LIKE ? OR pan LIKE ?)";
+        $like = "%{$query}%"; $params[] = $like; $params[] = $like;
+    }
+    $sql .= " ORDER BY partner_name ASC LIMIT 50";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function getPartner(PDO $pdo, int $partnerId): ?array
+{
+    $stmt = $pdo->prepare("SELECT * FROM partner_master WHERE partner_id = ?");
+    $stmt->execute([$partnerId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
+function createPartner(PDO $pdo, int $ownerId, array $data): int
+{
+    $stmt = $pdo->prepare("INSERT INTO partner_master (owner_user_id, partner_name, pan, email, mobile, address, active_status) VALUES (?, ?, ?, ?, ?, ?, 1)");
+    $stmt->execute([$ownerId, $data['partner_name'] ?? '', $data['pan'] ?? '', $data['email'] ?? '', $data['mobile'] ?? '', $data['address'] ?? null]);
+    return (int) $pdo->lastInsertId();
+}
+
+/* =========================
+   COMPANY PARTNERS
+========================= */
+
+function getCompanyPartners(PDO $pdo, int $companyId, bool $activeOnly = true): array
+{
+    $sql = "
+        SELECT cp.*, pm.partner_name, pm.pan, pm.email AS partner_email, pm.mobile AS partner_mobile
+        FROM company_partners cp INNER JOIN partner_master pm ON pm.partner_id = cp.partner_id
+        WHERE cp.company_id = ?";
+    if ($activeOnly) $sql .= " AND cp.active_status = 1";
+    $sql .= " ORDER BY cp.appointment_date ASC, pm.partner_name ASC";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$companyId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function addCompanyPartner(PDO $pdo, int $companyId, int $partnerId, array $data): void
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO company_partners (company_id, partner_id, designation, appointment_date, cessation_date, active_status)
+        VALUES (?, ?, ?, ?, ?, 1)
+        ON DUPLICATE KEY UPDATE designation=VALUES(designation), appointment_date=VALUES(appointment_date),
+            cessation_date=VALUES(cessation_date), active_status=VALUES(active_status), updated_at=NOW()
+    ");
+    $stmt->execute([$companyId, $partnerId, $data['designation'] ?? 'Partner', $data['appointment_date'] ?? null,
+        $data['cessation_date'] ?? null]);
+}
+
+/* =========================
+   PARTNER CAPITAL MOVEMENTS (per FY)
+========================= */
+
+/**
+ * Load this FY's capital-movement rows for a company, one per active partner.
+ * Opening balance is pre-filled from last FY's closing balance (carry-forward,
+ * same convention as loadManualInputsWithCarryForward()) when this FY has no
+ * saved row of its own yet. Share % also carries forward as a default, since
+ * ratios usually only change on partner admission/retirement/deed revision,
+ * not every year.
+ */
+function getPartnerCapitalSchedule(PDO $pdo, int $companyId, int $fyId, ?int $previousFyId): array
+{
+    $partners = getCompanyPartners($pdo, $companyId, true);
+    if (empty($partners)) {
+        return [];
+    }
+
+    $stmt = $pdo->prepare("SELECT * FROM partner_capital_movements WHERE company_id = ? AND fy_id = ?");
+    $stmt->execute([$companyId, $fyId]);
+    $currentByPartner = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $currentByPartner[(int) $row['partner_id']] = $row;
+    }
+
+    $previousByPartner = [];
+    if ($previousFyId !== null) {
+        $prevStmt = $pdo->prepare("SELECT * FROM partner_capital_movements WHERE company_id = ? AND fy_id = ?");
+        $prevStmt->execute([$companyId, $previousFyId]);
+        foreach ($prevStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $previousByPartner[(int) $row['partner_id']] = $row;
+        }
+    }
+
+    $schedule = [];
+    foreach ($partners as $partner) {
+        $partnerId = (int) $partner['partner_id'];
+        $current = $currentByPartner[$partnerId] ?? null;
+        $previous = $previousByPartner[$partnerId] ?? null;
+
+        $previousClosing = $previous !== null ? partnerCapitalClosingBalance($previous) : 0.0;
+
+        $schedule[] = [
+            'partner_id' => $partnerId,
+            'partner_name' => $partner['partner_name'],
+            'designation' => $partner['designation'],
+            'share_percentage' => $current !== null
+                ? (float) $current['share_percentage']
+                : (float) ($previous['share_percentage'] ?? 0),
+            'opening_balance' => $current !== null ? (float) $current['opening_balance'] : $previousClosing,
+            'capital_introduced' => (float) ($current['capital_introduced'] ?? 0),
+            'remuneration' => (float) ($current['remuneration'] ?? 0),
+            'interest_on_capital' => (float) ($current['interest_on_capital'] ?? 0),
+            'withdrawals' => (float) ($current['withdrawals'] ?? 0),
+            'is_saved' => $current !== null,
+        ];
+    }
+
+    return $schedule;
+}
+
+/**
+ * closing = opening + capital_introduced + remuneration + interest_on_capital
+ *           + share_of_profit - withdrawals
+ * share_of_profit is not stored on the row -- pass it in explicitly so this
+ * stays correct whether called with a stored row (no share_of_profit key,
+ * defaults to 0) or a schedule entry that already has it computed.
+ */
+function partnerCapitalClosingBalance(array $row, float $shareOfProfit = 0.0): float
+{
+    return (float) ($row['opening_balance'] ?? 0)
+        + (float) ($row['capital_introduced'] ?? 0)
+        + (float) ($row['remuneration'] ?? 0)
+        + (float) ($row['interest_on_capital'] ?? 0)
+        + $shareOfProfit
+        - (float) ($row['withdrawals'] ?? 0);
+}
+
+function savePartnerCapitalMovement(PDO $pdo, int $companyId, int $fyId, int $partnerId, array $data, ?int $userId = null): void
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO partner_capital_movements
+            (company_id, fy_id, partner_id, share_percentage, opening_balance, capital_introduced, remuneration, interest_on_capital, withdrawals, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            share_percentage = VALUES(share_percentage),
+            opening_balance = VALUES(opening_balance),
+            capital_introduced = VALUES(capital_introduced),
+            remuneration = VALUES(remuneration),
+            interest_on_capital = VALUES(interest_on_capital),
+            withdrawals = VALUES(withdrawals),
+            updated_at = NOW()
+    ");
+    $stmt->execute([
+        $companyId, $fyId, $partnerId,
+        (float) ($data['share_percentage'] ?? 0),
+        (float) ($data['opening_balance'] ?? 0),
+        (float) ($data['capital_introduced'] ?? 0),
+        (float) ($data['remuneration'] ?? 0),
+        (float) ($data['interest_on_capital'] ?? 0),
+        (float) ($data['withdrawals'] ?? 0),
+        $userId,
+    ]);
+}
+
+/* =========================
    ENSURE SCHEMA (idempotent)
 ========================= */
 
@@ -232,5 +402,52 @@ function ensureEntityMasterSchema(PDO $pdo): void
             is_signing_person TINYINT(1) NOT NULL DEFAULT 1, signing_order INT NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY uq_fy_signatory (company_id, fy_id, director_id), INDEX idx_fys_company (company_id))");
+    } catch (Throwable $e) {}
+}
+
+/**
+ * Deliberately separate from ensureEntityMasterSchema() above, which is
+ * called from company_create.php for EVERY company type. If partner tables
+ * were added to that shared assert list, a production database that hasn't
+ * run migration 009 yet would fail company creation entirely -- not just
+ * the partner feature. This function is only called from partner-specific
+ * code paths, so a missing migration only affects those.
+ */
+function ensurePartnerCapitalSchema(PDO $pdo): void
+{
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+    try {
+        if (!appAllowsRuntimeSchema()) {
+            assertTableExists($pdo, 'partner_master');
+            assertTableExists($pdo, 'company_partners');
+            assertTableExists($pdo, 'partner_capital_movements');
+            return;
+        }
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS partner_master (
+            partner_id INT AUTO_INCREMENT PRIMARY KEY, owner_user_id INT NULL,
+            partner_name VARCHAR(255) NOT NULL DEFAULT '', pan VARCHAR(20) NOT NULL DEFAULT '',
+            email VARCHAR(255) NOT NULL DEFAULT '', mobile VARCHAR(20) NOT NULL DEFAULT '', address TEXT NULL,
+            active_status TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_partner_owner (owner_user_id), INDEX idx_partner_name (partner_name))");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS company_partners (
+            id INT AUTO_INCREMENT PRIMARY KEY, company_id INT NOT NULL, partner_id INT NOT NULL,
+            designation VARCHAR(100) NOT NULL DEFAULT 'Partner', appointment_date DATE NULL, cessation_date DATE NULL,
+            active_status TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_company_partner (company_id, partner_id), INDEX idx_cp_company (company_id))");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS partner_capital_movements (
+            id INT AUTO_INCREMENT PRIMARY KEY, company_id INT NOT NULL, fy_id INT NOT NULL, partner_id INT NOT NULL,
+            share_percentage DECIMAL(5,2) NOT NULL DEFAULT 0, opening_balance DECIMAL(18,2) NOT NULL DEFAULT 0,
+            capital_introduced DECIMAL(18,2) NOT NULL DEFAULT 0, remuneration DECIMAL(18,2) NOT NULL DEFAULT 0,
+            interest_on_capital DECIMAL(18,2) NOT NULL DEFAULT 0, withdrawals DECIMAL(18,2) NOT NULL DEFAULT 0,
+            created_by_user_id INT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_partner_fy (company_id, fy_id, partner_id), INDEX idx_pcm_company_fy (company_id, fy_id))");
     } catch (Throwable $e) {}
 }

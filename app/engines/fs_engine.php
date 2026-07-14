@@ -694,7 +694,54 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
     ];
 }
 
-function buildLLPNotesPayload(array $classified): array
+/**
+ * Adds computed share_of_profit and closing_balance to each partner schedule
+ * row (from getPartnerCapitalSchedule()) plus a totals row, ready for the
+ * notes_llp.php / notes_noncorp.php templates to render directly. Kept out
+ * of entity_master_helper.php since it's presentation logic (Note 3a
+ * formatting), not data access.
+ */
+function withPartnerScheduleTotals(array $partnerSchedule, float $totalProfit): array
+{
+    if (empty($partnerSchedule)) {
+        return ['rows' => [], 'totals' => null];
+    }
+
+    $rows = [];
+    $totals = [
+        'share_percentage' => 0.0, 'opening_balance' => 0.0, 'capital_introduced' => 0.0,
+        'remuneration' => 0.0, 'interest_on_capital' => 0.0, 'withdrawals' => 0.0,
+        'share_of_profit' => 0.0, 'closing_balance' => 0.0,
+    ];
+
+    foreach ($partnerSchedule as $row) {
+        $shareOfProfit = $totalProfit * ((float) $row['share_percentage'] / 100);
+        $closing = partnerCapitalClosingBalance($row, $shareOfProfit);
+        $row['share_of_profit'] = $shareOfProfit;
+        $row['closing_balance'] = $closing;
+        $rows[] = $row;
+
+        $totals['share_percentage'] += (float) $row['share_percentage'];
+        $totals['opening_balance'] += (float) $row['opening_balance'];
+        $totals['capital_introduced'] += (float) $row['capital_introduced'];
+        $totals['remuneration'] += (float) $row['remuneration'];
+        $totals['interest_on_capital'] += (float) $row['interest_on_capital'];
+        $totals['withdrawals'] += (float) $row['withdrawals'];
+        $totals['share_of_profit'] += $shareOfProfit;
+        $totals['closing_balance'] += $closing;
+    }
+
+    return ['rows' => $rows, 'totals' => $totals];
+}
+
+/**
+ * @param array $partnerSchedule Rows from getPartnerCapitalSchedule(), or []
+ *        if no partners have been added yet for this company.
+ * @param float $totalProfit Current-year profit from $classified['summary']
+ *        ['profit'], used to compute each partner's share_of_profit so it
+ *        can never drift from the actual P&L figure.
+ */
+function buildLLPNotesPayload(array $classified, array $partnerSchedule = [], float $totalProfit = 0.0): array
 {
     $sections = [
             buildDetailedNote('Partners Capital', buildLedgerLines($classified, ['share_capital'])),
@@ -722,10 +769,11 @@ function buildLLPNotesPayload(array $classified): array
             'Revenue',
             'Expenses',
         ]),
+        'partner_capital_schedule' => withPartnerScheduleTotals($partnerSchedule, $totalProfit),
     ];
 }
 
-function buildNonCorpNotesPayload(array $classified, string $subcategory = 'proprietorship'): array
+function buildNonCorpNotesPayload(array $classified, string $subcategory = 'proprietorship', array $partnerSchedule = [], float $totalProfit = 0.0): array
 {
     $baseSections = [
         'Capital' => buildDetailedNote('Capital', buildLedgerLines($classified, ['share_capital', 'reserves', 'corpus_fund'])),
@@ -768,6 +816,7 @@ function buildNonCorpNotesPayload(array $classified, string $subcategory = 'prop
 
     return [
         'sections' => assignSequentialNoteMetadata($sections, $order),
+        'partner_capital_schedule' => withPartnerScheduleTotals($partnerSchedule, $totalProfit),
     ];
 }
 
@@ -1270,6 +1319,21 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
     $isFirstYear = !$hasPrevData;
     $prevFYId = getPreviousFYId($pdo, $company_id, $fy_id);
 
+    /* Partner Capital Schedule (LLP / Partnership only) — fetched here rather
+       than inside the note builders below because it needs $pdo, and those
+       builders otherwise only ever receive already-classified data. Empty
+       array for every other entity type, and for LLP/Partnership entities
+       that haven't added any partners via statements/partner_capital.php yet
+       (the note builders fall back to the pre-existing aggregate treatment
+       in that case). */
+    $partnerSchedule = [];
+    if ($entity === 'llp' || ($entity === 'non_corporate' && $subcategory === 'partnership')) {
+        require_once __DIR__ . '/../helpers/entity_master_helper.php';
+        ensurePartnerCapitalSchema($pdo);
+        $partnerSchedule = getPartnerCapitalSchedule($pdo, $company_id, $fy_id, $prevFYId);
+    }
+    $totalProfitForSchedule = (float) ($classified['summary']['profit'] ?? 0);
+
     switch ($entity) {
         case 'corporate':
             $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs);
@@ -1280,7 +1344,7 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
             break;
 
         case 'llp':
-            $notes = buildLLPNotesPayload($classified);
+            $notes = buildLLPNotesPayload($classified, $partnerSchedule, $totalProfitForSchedule);
             $data = buildLLPSummaryFromNotes($classified, $notes, $fyDisplay);
             $formatTemplate = __DIR__ . '/../../public/reports_dashboard/formats/llp_format.php';
             $notesTemplate = __DIR__ . '/../../public/reports_dashboard/formats/notes_llp.php';
@@ -1289,7 +1353,7 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
 
         case 'non_corporate':
         default:
-            $notes = buildNonCorpNotesPayload($classified, $subcategory);
+            $notes = buildNonCorpNotesPayload($classified, $subcategory, $partnerSchedule, $totalProfitForSchedule);
             $data = buildNonCorpSummaryFromNotes($classified, $notes, $fyDisplay, $subcategory);
             $formatTemplate = __DIR__ . '/../../public/reports_dashboard/formats/noncorporate_format.php';
             $notesTemplate = __DIR__ . '/../../public/reports_dashboard/formats/notes_noncorp.php';

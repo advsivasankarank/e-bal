@@ -10,8 +10,54 @@ $prevLlpNetProfit = max(($data['prev_pbr'] ?? 0), 0);
 <h2 class="report-page-title">Notes to Accounts (LLP)</h2>
 <p class="report-page-subtitle notes-cover">Detailed disclosures supporting the LLP financial statements.</p>
 
+<?php $partnerScheduleRows = $notes['partner_capital_schedule']['rows'] ?? []; ?>
+<?php if (!empty($partnerScheduleRows)): ?>
+<div class="note-block">
+<h3 class="note-heading" id="note-capital-movement">Note 3a: Partners' Capital Account</h3>
+<table class="note-table" border="1" width="100%">
+    <thead>
+    <tr>
+        <th>Partner</th><th class="figure">Share %</th><th class="figure">Opening</th>
+        <th class="figure">Introduced</th><th class="figure">Remuneration</th><th class="figure">Interest</th>
+        <th class="figure">Withdrawals</th><th class="figure">Share of Profit</th><th class="figure">Closing</th>
+    </tr>
+    </thead>
+    <tbody>
+    <?php foreach ($partnerScheduleRows as $pRow): ?>
+    <tr>
+        <td><?= htmlspecialchars($pRow['partner_name']) ?></td>
+        <td class="figure"><?= number_format((float) $pRow['share_percentage'], 2) ?>%</td>
+        <td class="figure"><?= format_inr((float) $pRow['opening_balance']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['capital_introduced']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['remuneration']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['interest_on_capital']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['withdrawals']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['share_of_profit']) ?></td>
+        <td class="figure"><strong><?= format_inr((float) $pRow['closing_balance']) ?></strong></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+    <?php $pTotals = $notes['partner_capital_schedule']['totals'] ?? null; if ($pTotals): ?>
+    <tfoot>
+    <tr>
+        <td><strong>Total</strong></td>
+        <td class="figure"><strong><?= number_format((float) $pTotals['share_percentage'], 2) ?>%</strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['opening_balance']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['capital_introduced']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['remuneration']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['interest_on_capital']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['withdrawals']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['share_of_profit']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['closing_balance']) ?></strong></td>
+    </tr>
+    </tfoot>
+    <?php endif; ?>
+</table>
+</div>
+<?php else: ?>
 <div class="note-block">
 <h3 class="note-heading" id="note-capital-movement">Capital Account Movement</h3>
+<p style="font-size:0.85em;color:#64748b;margin:0 0 8px;">Aggregate view — add partners via the Partners' Capital Schedule page for a per-partner breakup (ICAI Note 3a format).</p>
 <table class="note-table" border="1" width="100%">
     <thead>
     <tr><th>Particulars</th><th class="figure">Current Year</th><?php if (!$isFirstYear): ?><th class="figure" data-prev>Previous Year</th><?php endif; ?></tr>
@@ -28,6 +74,7 @@ $prevLlpNetProfit = max(($data['prev_pbr'] ?? 0), 0);
     </tbody>
 </table>
 </div>
+<?php endif; ?>
 
 <?php foreach (($notes['sections'] ?? []) as $index => $section): ?>
     <div class="note-block">
