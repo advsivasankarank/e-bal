@@ -743,19 +743,24 @@ function withPartnerScheduleTotals(array $partnerSchedule, float $totalProfit): 
  */
 function buildLLPNotesPayload(array $classified, array $partnerSchedule = [], float $totalProfit = 0.0): array
 {
-    /* Notes 6-10 per the ICAI illustrative LLP format (Statutory/guidance
-       note on LLP.pdf, Appendix B): Deferred Tax, Other Long-term
-       Liabilities, Long/Short-term Provisions and Other Current Liabilities
-       were previously invisible in the notes to accounts even though their
+    /* Notes 7-10 per the ICAI illustrative LLP format (Statutory/guidance
+       note on LLP.pdf, Appendix B): Other Long-term Liabilities,
+       Long/Short-term Provisions and Other Current Liabilities were
+       previously invisible in the notes to accounts even though their
        amounts were already counted correctly in the balance sheet totals via
        classification -- these schedule codes existed but nothing routed them
        into a disclosed note, only into "Borrowings"/"Current Assets" via
-       whichever bucket they happened to sum into. */
+       whichever bucket they happened to sum into.
+
+       Deliberately NOT including Note 6 (Deferred Tax) despite it appearing
+       in the ICAI illustrative format -- deferred tax accounting (AS 22
+       book-vs-tax timing differences) doesn't apply to LLPs in practice;
+       they're taxed as flat-rate pass-through entities, not on the accrual
+       basis that gives rise to deferred tax. */
     $sections = [
             buildDetailedNote('Partners Capital', buildLedgerLines($classified, ['share_capital'])),
             buildDetailedNote('Partners Current Account / Reserves', buildLedgerLines($classified, ['reserves'])),
             buildDetailedNote('Borrowings', buildLedgerLines($classified, ['lt_borrowings', 'st_borrowings'])),
-            buildDetailedNote('Deferred Tax Liabilities/(Assets) (Net)', buildLedgerLines($classified, ['deferred_tax_liability', 'deferred_tax_asset'])),
             buildDetailedNote('Other Long-term Liabilities', buildLedgerLines($classified, ['other_non_current_liabilities'])),
             buildDetailedNote('Long-term Provisions', buildLedgerLines($classified, ['long_term_provisions'])),
             buildDetailedNote('Trade Payables', buildLedgerLines($classified, ['trade_payables', 'trade_payables_msme'])),
@@ -774,7 +779,6 @@ function buildLLPNotesPayload(array $classified, array $partnerSchedule = [], fl
             'Partners Capital',
             'Partners Current Account / Reserves',
             'Borrowings',
-            'Deferred Tax Liabilities/(Assets) (Net)',
             'Other Long-term Liabilities',
             'Long-term Provisions',
             'Trade Payables',
@@ -1029,24 +1033,22 @@ function buildLLPSummaryFromNotes(array $classified, array $notes, string $fyLab
         'prev_capital' => $sectionTotals['Partners Capital']['previous'] ?? 0,
         'current_accounts' => $sectionTotals['Partners Current Account / Reserves']['current'] ?? 0,
         'prev_current_accounts' => $sectionTotals['Partners Current Account / Reserves']['previous'] ?? 0,
-        /* Folds in the Notes 6-10 line items (Deferred Tax, Other Long-term
-           Liabilities, Long/Short-term Provisions, Other Current Liabilities)
-           added alongside Borrowings/Trade Payables -- their rupee amounts
-           must reach this total even though the balance sheet face still
-           shows one lump "Borrowings" line (readers get the itemized
-           breakdown from the notes themselves, standard Schedule III
-           practice). Without this, the notes would disclose real amounts
-           the face total silently excluded. */
+        /* Folds in the Notes 7-10 line items (Other Long-term Liabilities,
+           Long/Short-term Provisions, Other Current Liabilities) added
+           alongside Borrowings/Trade Payables -- their rupee amounts must
+           reach this total even though the balance sheet face still shows
+           one lump "Borrowings" line (readers get the itemized breakdown
+           from the notes themselves, standard Schedule III practice).
+           Without this, the notes would disclose real amounts the face
+           total silently excluded. */
         'borrowings' => ($sectionTotals['Borrowings']['current'] ?? 0)
             + ($sectionTotals['Trade Payables']['current'] ?? 0)
-            + ($sectionTotals['Deferred Tax Liabilities/(Assets) (Net)']['current'] ?? 0)
             + ($sectionTotals['Other Long-term Liabilities']['current'] ?? 0)
             + ($sectionTotals['Long-term Provisions']['current'] ?? 0)
             + ($sectionTotals['Other Current Liabilities']['current'] ?? 0)
             + ($sectionTotals['Short-term Provisions']['current'] ?? 0),
         'prev_borrowings' => ($sectionTotals['Borrowings']['previous'] ?? 0)
             + ($sectionTotals['Trade Payables']['previous'] ?? 0)
-            + ($sectionTotals['Deferred Tax Liabilities/(Assets) (Net)']['previous'] ?? 0)
             + ($sectionTotals['Other Long-term Liabilities']['previous'] ?? 0)
             + ($sectionTotals['Long-term Provisions']['previous'] ?? 0)
             + ($sectionTotals['Other Current Liabilities']['previous'] ?? 0)
