@@ -172,6 +172,31 @@ function uiStatusBadge(string $label, string $variant = 'default'): string
 }
 
 /* ============================================================
+   MODAL
+   Usage: echo uiModalStart('myModal', 'Title'); ... body ...; echo uiModalEnd();
+   Show/hide from JS the same way as before:
+     document.getElementById('myModal').style.display = 'flex';  // show
+     document.getElementById('myModal').style.display = 'none';  // hide
+   A start/end pair (not a single function taking a body string) because
+   callers typically build the body from interleaved PHP conditionals,
+   not a string they can assemble upfront.
+   ============================================================ */
+function uiModalStart(string $id, string $title): string
+{
+    $idAttr = htmlspecialchars($id, ENT_QUOTES);
+    return '<div id="' . $idAttr . '" class="ui-modal-overlay" onclick="if(event.target===this)this.style.display=\'none\'">'
+        . '<div class="ui-modal-panel">'
+        . '<div class="ui-modal-header"><h3>' . htmlspecialchars($title) . '</h3>'
+        . '<button type="button" class="ui-modal-close" onclick="document.getElementById(\'' . $idAttr . '\').style.display=\'none\'">&times;</button></div>'
+        . '<div class="ui-modal-body">';
+}
+
+function uiModalEnd(): string
+{
+    return '</div></div></div>';
+}
+
+/* ============================================================
    TABLE (styled wrapper)
    ============================================================ */
 function uiTableStart(array $columns, string $id = ''): string

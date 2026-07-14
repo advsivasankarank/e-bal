@@ -232,12 +232,7 @@ echo renderWorkflowNavigation($navData);
 </div>
 
 <!-- Validation Issues Modal -->
-<div id="validationModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;justify-content:center;align-items:center;" onclick="if(event.target===this)this.style.display='none'">
-<div style="background:#fff;border-radius:12px;max-width:700px;width:95%;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-    <h3 style="margin:0;font-size:1.1rem;">&#9888;&#65039; Validation Issues</h3>
-    <button onclick="document.getElementById('validationModal').style.display='none'" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#666;">&times;</button>
-</div>
+<?= uiModalStart('validationModal', '⚠️ Validation Issues') ?>
 
 <!-- BS Difference -->
 <?php if (abs($currentDiff) > 0.01 || abs($previousDiff) > 0.01): ?>
@@ -331,8 +326,7 @@ echo renderWorkflowNavigation($navData);
 </div>
 <?php endif; ?>
 
-</div>
-</div>
+<?= uiModalEnd() ?>
 <?php endif; ?>
 
 <!-- Three-Panel Workspace -->
