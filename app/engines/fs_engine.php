@@ -743,11 +743,24 @@ function withPartnerScheduleTotals(array $partnerSchedule, float $totalProfit): 
  */
 function buildLLPNotesPayload(array $classified, array $partnerSchedule = [], float $totalProfit = 0.0): array
 {
+    /* Notes 6-10 per the ICAI illustrative LLP format (Statutory/guidance
+       note on LLP.pdf, Appendix B): Deferred Tax, Other Long-term
+       Liabilities, Long/Short-term Provisions and Other Current Liabilities
+       were previously invisible in the notes to accounts even though their
+       amounts were already counted correctly in the balance sheet totals via
+       classification -- these schedule codes existed but nothing routed them
+       into a disclosed note, only into "Borrowings"/"Current Assets" via
+       whichever bucket they happened to sum into. */
     $sections = [
             buildDetailedNote('Partners Capital', buildLedgerLines($classified, ['share_capital'])),
             buildDetailedNote('Partners Current Account / Reserves', buildLedgerLines($classified, ['reserves'])),
             buildDetailedNote('Borrowings', buildLedgerLines($classified, ['lt_borrowings', 'st_borrowings'])),
+            buildDetailedNote('Deferred Tax Liabilities/(Assets) (Net)', buildLedgerLines($classified, ['deferred_tax_liability', 'deferred_tax_asset'])),
+            buildDetailedNote('Other Long-term Liabilities', buildLedgerLines($classified, ['other_non_current_liabilities'])),
+            buildDetailedNote('Long-term Provisions', buildLedgerLines($classified, ['long_term_provisions'])),
             buildDetailedNote('Trade Payables', buildLedgerLines($classified, ['trade_payables', 'trade_payables_msme'])),
+            buildDetailedNote('Other Current Liabilities', buildLedgerLines($classified, ['other_current_liabilities', 'other_financial_liabilities'])),
+            buildDetailedNote('Short-term Provisions', buildLedgerLines($classified, ['short_term_provisions'])),
             buildDetailedNote('Fixed Assets', buildLedgerLines($classified, ['ppe', 'cwip', 'intangible_assets'])),
             buildDetailedNote('Loans', buildLedgerLines($classified, ['loans_non_current', 'loans_current'])),
             buildDetailedNote('Investments', buildLedgerLines($classified, ['investments_non_current', 'investments_current'])),
@@ -761,7 +774,12 @@ function buildLLPNotesPayload(array $classified, array $partnerSchedule = [], fl
             'Partners Capital',
             'Partners Current Account / Reserves',
             'Borrowings',
+            'Deferred Tax Liabilities/(Assets) (Net)',
+            'Other Long-term Liabilities',
+            'Long-term Provisions',
             'Trade Payables',
+            'Other Current Liabilities',
+            'Short-term Provisions',
             'Fixed Assets',
             'Loans',
             'Investments',
@@ -1011,8 +1029,28 @@ function buildLLPSummaryFromNotes(array $classified, array $notes, string $fyLab
         'prev_capital' => $sectionTotals['Partners Capital']['previous'] ?? 0,
         'current_accounts' => $sectionTotals['Partners Current Account / Reserves']['current'] ?? 0,
         'prev_current_accounts' => $sectionTotals['Partners Current Account / Reserves']['previous'] ?? 0,
-        'borrowings' => ($sectionTotals['Borrowings']['current'] ?? 0) + ($sectionTotals['Trade Payables']['current'] ?? 0),
-        'prev_borrowings' => ($sectionTotals['Borrowings']['previous'] ?? 0) + ($sectionTotals['Trade Payables']['previous'] ?? 0),
+        /* Folds in the Notes 6-10 line items (Deferred Tax, Other Long-term
+           Liabilities, Long/Short-term Provisions, Other Current Liabilities)
+           added alongside Borrowings/Trade Payables -- their rupee amounts
+           must reach this total even though the balance sheet face still
+           shows one lump "Borrowings" line (readers get the itemized
+           breakdown from the notes themselves, standard Schedule III
+           practice). Without this, the notes would disclose real amounts
+           the face total silently excluded. */
+        'borrowings' => ($sectionTotals['Borrowings']['current'] ?? 0)
+            + ($sectionTotals['Trade Payables']['current'] ?? 0)
+            + ($sectionTotals['Deferred Tax Liabilities/(Assets) (Net)']['current'] ?? 0)
+            + ($sectionTotals['Other Long-term Liabilities']['current'] ?? 0)
+            + ($sectionTotals['Long-term Provisions']['current'] ?? 0)
+            + ($sectionTotals['Other Current Liabilities']['current'] ?? 0)
+            + ($sectionTotals['Short-term Provisions']['current'] ?? 0),
+        'prev_borrowings' => ($sectionTotals['Borrowings']['previous'] ?? 0)
+            + ($sectionTotals['Trade Payables']['previous'] ?? 0)
+            + ($sectionTotals['Deferred Tax Liabilities/(Assets) (Net)']['previous'] ?? 0)
+            + ($sectionTotals['Other Long-term Liabilities']['previous'] ?? 0)
+            + ($sectionTotals['Long-term Provisions']['previous'] ?? 0)
+            + ($sectionTotals['Other Current Liabilities']['previous'] ?? 0)
+            + ($sectionTotals['Short-term Provisions']['previous'] ?? 0),
         'fixed_assets' => $sectionTotals['Fixed Assets']['current'] ?? 0,
         'prev_fixed_assets' => $sectionTotals['Fixed Assets']['previous'] ?? 0,
         'current_assets' => $sectionTotals['Current Assets']['current'] ?? 0,
@@ -1173,8 +1211,19 @@ function buildNonCorpSummaryFromNotes(array $classified, array $notes, string $f
 
     $isTradingEntity = in_array($subcategory, ['proprietorship', 'partnership', 'llp'], true);
     if ($isTradingEntity) {
-        $gp = $data['sales'] + $data['closing_stock_val'] - $data['opening_stock_val'] - $data['purchases'] - $data['direct_expenses'];
-        $prevGp = $data['prev_sales'] + $data['prev_closing_stock_val'] - $data['prev_opening_stock_val'] - $data['prev_purchases'] - $data['prev_direct_expenses'];
+        /* Pilot defect D03: closing stock was being added here to compute
+           gross profit (standard trading-account convention: GP = Sales +
+           Closing Stock - Opening Stock - Purchases - Direct Expenses) AND
+           separately counted in current_assets a few lines above -- since
+           this PBT flows into capital -> total_liabilities while
+           current_assets independently already includes the same closing
+           stock value, the balance sheet showed a gap exactly equal to
+           inventory (confirmed against Nivedha's pilot data: ₹450,000 gap =
+           inventory value). Closing stock is treated as purely a BS item
+           here per the pilot's diagnosed fix -- it must not also inflate
+           the P&L side that feeds capital. */
+        $gp = $data['sales'] - $data['opening_stock_val'] - $data['purchases'] - $data['direct_expenses'];
+        $prevGp = $data['prev_sales'] - $data['prev_opening_stock_val'] - $data['prev_purchases'] - $data['prev_direct_expenses'];
         $data['pbt'] = max($gp, 0) + $data['other_income'] - $operatingExpenses - ($gp < 0 ? abs($gp) : 0);
         $data['prev_pbt'] = max($prevGp, 0) + $data['prev_other_income'] - $prevOperatingExpenses - ($prevGp < 0 ? abs($prevGp) : 0);
     } else {

@@ -87,10 +87,17 @@ $isTrading = in_array($data['entity_subcategory'] ?? '', ['proprietorship', 'par
     <tr><td>Add: Capital Introduced</td><td class="figure"><?= format_inr($data['capital_introduced']) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr($data['prev_capital_introduced']) ?></td><?php endif; ?></tr>
     <tr><td>Less: Drawings</td><td class="figure"><?= format_inr($data['drawings']) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr($data['prev_drawings']) ?></td><?php endif; ?></tr>
 <?php
-$grossPft = $data['sales'] + $data['closing_stock_val'] - $data['opening_stock_val'] - $data['purchases'] - $data['direct_expenses'];
-$prevGrossPft = $data['prev_sales'] + $data['prev_closing_stock_val'] - $data['prev_opening_stock_val'] - $data['prev_purchases'] - $data['prev_direct_expenses'];
-$netProfit_val = ($isTrading ? max($grossPft, 0) : 0) + $data['revenue'] - $data['expenses'] - ($isTrading && $grossPft < 0 ? abs($grossPft) : 0);
-$prevNetProfit_val = ($isTrading ? max($prevGrossPft, 0) : 0) + $data['prev_revenue'] - $data['prev_expenses'] - ($isTrading && $prevGrossPft < 0 ? abs($prevGrossPft) : 0);
+/* Net Profit/Loss read directly from $data['pat'], computed once in
+   buildNonCorpSummaryFromNotes() -- this block used to recompute its own
+   copy of the gross-profit formula, which had drifted out of sync (it
+   subtracted $data['expenses'], the whole Expenses note total including
+   purchases/materials/direct_expenses, on top of already subtracting those
+   same items in its own gross-profit term -- a double-subtraction bug
+   independent of the closing-stock one fixed in fs_engine.php). Single
+   source of truth now; the balance sheet's Closing Capital below already
+   depends on this same $data['pat']. */
+$netProfit_val = $data['pat'];
+$prevNetProfit_val = $data['prev_pat'];
 ?>
     <tr><td>Add: Net Profit</td><td class="figure"><?= format_inr(max($netProfit_val, 0)) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr(max($prevNetProfit_val, 0)) ?></td><?php endif; ?></tr>
 <?php if ($netProfit_val < 0): ?>
