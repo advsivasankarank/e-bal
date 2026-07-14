@@ -6,6 +6,7 @@ require_once '../../config/database.php';
 require_once '../../app/helpers/xml_sanitizer.php';
 
 requireFullContext();
+requireCsrfToken();
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
