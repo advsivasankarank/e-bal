@@ -1,5 +1,17 @@
 <?php
 
+/* Centralized error-display policy: never show raw PHP errors to the browser,
+   always log them. Applied here (rather than per-script) because this file is
+   loaded by both config/app.php and config/database.php, which together are
+   required by effectively every entry point in the app. Individual scripts
+   (e.g. mapping_workbench.php) previously set this per-file; that duplicate
+   config has been removed in favor of this single source of truth. */
+if (PHP_SAPI !== 'cli') {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
+}
+
 function runtimeEnv(): string
 {
     if (defined('ENV')) {

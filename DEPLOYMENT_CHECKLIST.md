@@ -1,5 +1,14 @@
 # Email & Invoice System - Deployment Checklist
 
+> **Note:** `app/sql/migrations/*.sql` (the numbered migrations, separate from
+> this feature's schema file below) can now be applied with
+> `php app/sql/migrate.php` from the repo root instead of running each file
+> by hand — it tracks what's already been applied in a `schema_migrations`
+> table and stops at the first failure rather than silently skipping ahead.
+> Use `--dry-run` to preview what's pending. The steps below (for this
+> specific email/invoice schema file) are unaffected and still apply as
+> written.
+
 ## Phase 1: Database Setup
 
 - [ ] Execute SQL migration:

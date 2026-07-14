@@ -5,10 +5,10 @@
  * Excel-like workspace for bulk ledger mapping.
  * Handles missing voucher_entries table gracefully.
  * Shows user-friendly error on failure instead of 500.
+ *
+ * error_reporting/display_errors/log_errors are now set centrally in
+ * app/helpers/runtime_helper.php, loaded transitively before this file.
  */
-error_reporting(E_ALL);
-ini_set('display_errors', '0');
-ini_set('log_errors', '1');
 
 set_exception_handler(function (\Throwable $e) {
     http_response_code(500);
