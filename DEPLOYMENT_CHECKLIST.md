@@ -9,6 +9,23 @@
 > specific email/invoice schema file) are unaffected and still apply as
 > written.
 
+## Phase 0: Required php.ini Values
+
+Large Tally trial balance/ledger imports (thousands of ledgers per
+company) and PDF/XLSX/DOCX export generation need headroom beyond PHP's
+defaults. Confirm these on the production server before go-live —
+`public/report_download.php` already raises `memory_limit` to `256M`
+for its own request, but that's a per-script workaround, not a
+substitute for adequate server-wide defaults:
+
+| Setting | Minimum | Why |
+|---|---|---|
+| `upload_max_filesize` | `20M` | Tally XML exports for large companies can run several MB |
+| `post_max_size` | `25M` | Must exceed `upload_max_filesize` |
+| `memory_limit` | `256M` | Classification + note-building holds the full trial balance in memory |
+| `max_execution_time` | `120` | Bulk mapping suggestions and large exports can run long |
+| `max_input_vars` | `3000` | The bulk mapping-save form posts one set of fields per ledger |
+
 ## Phase 1: Database Setup
 
 - [ ] Execute SQL migration:
