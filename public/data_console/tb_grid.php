@@ -20,6 +20,17 @@ $mappingEngine = new AIMappingEngine($companyCategory);
 $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 
+/* Deliberately NOT paginated, unlike view_synced_ledgers.php's fix for the
+   same class of finding. This grid's "Save Changes" button reads the FULL
+   client-side Handsontable state and submits every row's schedule_code in
+   one POST — if only one page's rows were ever loaded into the grid, edits
+   on the other pages would be silently dropped on save (data loss, not just
+   a perf issue). Handsontable's `renderAllRows: false` already virtualizes
+   DOM rendering, so the browser doesn't choke on row count; the remaining
+   cost is the JSON payload size, which scales with one company+FY's trial
+   balance (in production, a small slice of the ~43k-row tally_ledgers
+   table — not the ~410k-row tally_ledger_master). A real fix here needs an
+   accumulate-edits-across-pages design, not a mechanical LIMIT/OFFSET swap. */
 $stmt = $pdo->prepare("
     SELECT
         tl.ledger_name,
