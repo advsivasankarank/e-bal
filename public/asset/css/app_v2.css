@@ -1600,32 +1600,9 @@ img { display: block; max-width: 100%; }
   flex-shrink: 0;
 }
 
-.v2-dw-badge {
-  font-size: 0.75rem;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-weight: 600;
-}
-
-.v2-dw-badge-complete {
-  background: var(--success-light);
-  color: var(--success);
-}
-
-.v2-dw-badge-partial {
-  background: var(--warning-light);
-  color: var(--warning);
-}
-
-.v2-dw-badge-available {
-  background: var(--info-light);
-  color: var(--info);
-}
-
-.v2-dw-badge-pending {
-  background: var(--bg);
-  color: var(--muted);
-}
+/* Badge markup here now uses the shared .ui-badge/.ui-badge--* from
+   components.css (via uiStatusBadge() in components/ui.php) instead of
+   this shell's own divergent badge class. */
 
 .v2-dw-panel-detail {
   padding: clamp(12px, 1.5vw, 18px) clamp(16px, 2vw, 22px);
