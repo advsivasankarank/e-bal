@@ -367,7 +367,11 @@ function closeFinancialYear(PDO $pdo, int $company_id, int $fy_id, int $user_id,
 
         $nextFYId = getNextFYId($pdo, $company_id, $fy_id);
         if ($nextFYId !== null) {
-            $obsCheck = $pdo->prepare("SELECT COUNT(*) FROM fy_opening_balance_sources WHERE company_id = ? AND fy_id = ?");
+            /* Only a non-invalidated source counts as "already populated" — a row that
+               reopenFinancialYear() marked invalidated_by must not block regeneration,
+               otherwise re-closing after a reopen leaves next year's opening balances
+               frozen at their stale pre-reopen values. */
+            $obsCheck = $pdo->prepare("SELECT COUNT(*) FROM fy_opening_balance_sources WHERE company_id = ? AND fy_id = ? AND invalidated_by IS NULL");
             $obsCheck->execute([$company_id, $nextFYId]);
             if ((int) $obsCheck->fetchColumn() === 0) {
                 createOpeningBalances($pdo, $company_id, $nextFYId, $fy_id, $user_id);
