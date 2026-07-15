@@ -50,6 +50,14 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
     if ($isBranchDiv && abs($currentTotal) > 0.001) {
         $isEmpty = false;
     }
+    /* Share Capital with share-count/shareholder detail is not empty even if the
+       rupee lines happen to be zero (e.g. face value entered but no amount yet) */
+    if (($section['custom_type'] ?? '') === 'share_capital') {
+        $shareRecon = $section['share_reconciliation'] ?? [];
+        if ((float) ($shareRecon['closing_shares'] ?? 0) > 0.0 || !empty($section['shareholders_above_5pct'])) {
+            $isEmpty = false;
+        }
+    }
 ?>
     <div class="note-block" id="note-<?= $noteNo ?>">
     <h3 class="note-heading">
@@ -180,6 +188,54 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
             </tr>
             </tfoot>
         </table>
+    <?php endif; ?>
+
+    <?php if (($section['custom_type'] ?? '') === 'share_capital'): ?>
+        <?php
+        $shareRecon = $section['share_reconciliation'] ?? [];
+        $authorisedShares = (float) ($shareRecon['authorised_shares'] ?? 0);
+        $faceValue = (float) ($shareRecon['face_value'] ?? 0);
+        $openingShares = (float) ($shareRecon['opening_shares'] ?? 0);
+        $issuedDuringYear = (float) ($shareRecon['issued_during_year'] ?? 0);
+        $boughtBackDuringYear = (float) ($shareRecon['bought_back_during_year'] ?? 0);
+        $closingShares = (float) ($shareRecon['closing_shares'] ?? 0);
+        $shareholdersAbove5Pct = $section['shareholders_above_5pct'] ?? [];
+        ?>
+        <?php if ($authorisedShares > 0.0 || $closingShares > 0.0): ?>
+        <table class="note-table" border="1" width="100%" cellpadding="5">
+            <thead>
+            <tr><th class="particulars" colspan="2">Reconciliation of Equity Shares Outstanding</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>Authorised Shares (Number)</td><td class="figure"><?= number_format($authorisedShares, 0) ?></td></tr>
+            <tr><td>Face Value per Share</td><td class="figure"><?= \format_inr($faceValue) ?></td></tr>
+            <tr><td>Opening Shares</td><td class="figure"><?= number_format($openingShares, 0) ?></td></tr>
+            <tr><td>Add: Issued During the Year</td><td class="figure"><?= number_format($issuedDuringYear, 0) ?></td></tr>
+            <tr><td>Less: Bought Back During the Year</td><td class="figure"><?= number_format($boughtBackDuringYear, 0) ?></td></tr>
+            <tr><td><b>Closing Shares (Issued, Subscribed &amp; Fully Paid)</b></td><td class="figure"><b><?= number_format($closingShares, 0) ?></b></td></tr>
+            </tbody>
+        </table>
+        <?php endif; ?>
+        <?php if (!empty($shareholdersAbove5Pct)): ?>
+        <table class="note-table" border="1" width="100%" cellpadding="5">
+            <thead>
+            <tr>
+                <th class="particulars">Shareholder Holding &gt;5% of Shares</th>
+                <th class="figure">Shares Held</th>
+                <th class="figure">% Holding</th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($shareholdersAbove5Pct as $shareholder): ?>
+            <tr>
+                <td><?= htmlspecialchars((string) ($shareholder['name'] ?? '')) ?></td>
+                <td class="figure"><?= number_format((float) ($shareholder['shares'] ?? 0), 0) ?></td>
+                <td class="figure"><?= number_format((float) ($shareholder['percent'] ?? 0), 2) ?>%</td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
     <?php endif; ?>
 
     <?php if (!empty($section['disclosure'])): ?>

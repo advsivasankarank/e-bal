@@ -465,7 +465,7 @@ function manualAmount(array $manualInputs, string $key, float $fallback = 0.0): 
     return (float) $value;
 }
 
-function buildCompanyNotesPayload(array $classified, array $manualInputs = [], array $previousManualInputs = []): array
+function buildCompanyNotesPayload(array $classified, array $manualInputs = [], array $previousManualInputs = [], array $shareholders = []): array
 {
     $currentPaidUp = manualAmount($manualInputs, 'share_capital_paidup', classifiedAmount($classified, 'share_capital'));
     $previousPaidUp = manualAmount($previousManualInputs, 'share_capital_paidup', classifiedPreviousAmount($classified, 'share_capital'));
@@ -500,10 +500,26 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
         }
 
         if ($masterCode === 'SC') {
+            $closingShares = manualAmount($manualInputs, 'share_capital_issued_shares', 0);
+
+            $shareholdersAbove5Pct = [];
+            foreach ($shareholders as $shareholder) {
+                $shares = (float) ($shareholder['shares'] ?? 0);
+                $percent = $closingShares > 0 ? round(($shares / $closingShares) * 100, 2) : 0.0;
+                if ($percent > 5.0) {
+                    $shareholdersAbove5Pct[] = [
+                        'name' => (string) ($shareholder['name'] ?? ''),
+                        'shares' => $shares,
+                        'percent' => $percent,
+                    ];
+                }
+            }
+
             $sections[] = [
                 'title' => $title,
                 'note_no' => $noteNo,
                 'master_code' => $masterCode,
+                'custom_type' => 'share_capital',
                 'lines' => [
                     [
                         'label' => 'Authorised Capital',
@@ -523,6 +539,15 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
                 ],
                 'current_total' => $currentPaidUp,
                 'previous_total' => $previousPaidUp,
+                'share_reconciliation' => [
+                    'authorised_shares' => manualAmount($manualInputs, 'share_capital_authorised_shares', 0),
+                    'face_value' => manualAmount($manualInputs, 'share_capital_face_value', 0),
+                    'opening_shares' => manualAmount($manualInputs, 'share_capital_opening_shares', 0),
+                    'issued_during_year' => manualAmount($manualInputs, 'share_capital_shares_issued_during_year', 0),
+                    'bought_back_during_year' => manualAmount($manualInputs, 'share_capital_shares_bought_back_during_year', 0),
+                    'closing_shares' => $closingShares,
+                ],
+                'shareholders_above_5pct' => $shareholdersAbove5Pct,
             ];
             continue;
         }
@@ -1387,7 +1412,9 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
 
     switch ($entity) {
         case 'corporate':
-            $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs);
+            require_once __DIR__ . '/../helpers/share_capital_helper.php';
+            $shareholders = getShareholders($pdo, $company_id, $fy_id);
+            $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs, $shareholders);
             $data = buildCompanySummaryFromNotes($classified, $notes, $fyDisplay);
             $formatTemplate = __DIR__ . '/../../public/reports_dashboard/formats/company_format.php';
             $notesTemplate = __DIR__ . '/../../public/reports_dashboard/formats/notes_company.php';

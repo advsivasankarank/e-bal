@@ -3,6 +3,8 @@ require_once __DIR__ . '/../../app/context_check.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../app/engines/fs_engine.php';
 require_once __DIR__ . '/../../app/helpers/report_manual_helper.php';
+require_once __DIR__ . '/../../app/helpers/share_capital_helper.php';
+require_once __DIR__ . '/../../app/helpers/financial_year_helper.php';
 require_once __DIR__ . '/../../app/helpers/figure_helper.php';
 require_once __DIR__ . '/../../app/helpers/report_validation_helper.php';
 require_once __DIR__ . '/../../app/workflow_engine.php';
@@ -17,6 +19,44 @@ $companyName = $_SESSION['company_name'] ?? 'Not Selected';
 $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 
 $manualBundle = loadManualInputsWithCarryForward($pdo, $company_id, $fy_id, $fyName);
+$shareholders = getShareholders($pdo, $company_id, $fy_id);
+
+$prevFyLabel = getPreviousFinancialYearLabel($fyName);
+$prevFy = $prevFyLabel !== '' ? findFinancialYearByLabel($pdo, $prevFyLabel, $company_id) : null;
+$prevFyId = $prevFy !== null ? (int) ($prevFy['id'] ?? 0) : 0;
+$prevShareholders = $prevFyId > 0 ? getShareholders($pdo, $company_id, $prevFyId) : [];
+
+/* Use 'saved_current' (this year's own saved rows only) here, NOT 'current'
+   (which is already array_replace($previous, $current) -- silently merged
+   with last year's values -- so it would always look "already saved"). */
+$hasCurrentShareCapitalDetail = trim((string) ($manualBundle['saved_current']['share_capital_authorised_shares'] ?? '')) !== ''
+    || trim((string) ($manualBundle['saved_current']['share_capital_issued_shares'] ?? '')) !== ''
+    || !empty($shareholders);
+$hasPreviousShareCapitalDetail = trim((string) ($manualBundle['previous']['share_capital_authorised_shares'] ?? '')) !== ''
+    || trim((string) ($manualBundle['previous']['share_capital_issued_shares'] ?? '')) !== ''
+    || !empty($prevShareholders);
+$showShareCapitalCarryForwardPrompt = !$hasCurrentShareCapitalDetail && $hasPreviousShareCapitalDetail;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') === 'carry_forward_share_capital') {
+    requireCsrfToken();
+    saveManualInputs($pdo, $company_id, $fy_id, [
+        'share_capital_authorised' => (string) ($manualBundle['previous']['share_capital_authorised'] ?? ''),
+        'share_capital_issued' => (string) ($manualBundle['previous']['share_capital_issued'] ?? ''),
+        'share_capital_paidup' => (string) ($manualBundle['previous']['share_capital_paidup'] ?? ''),
+        'share_capital_authorised_shares' => (string) ($manualBundle['previous']['share_capital_authorised_shares'] ?? ''),
+        'share_capital_face_value' => (string) ($manualBundle['previous']['share_capital_face_value'] ?? ''),
+        'share_capital_opening_shares' => (string) ($manualBundle['previous']['share_capital_issued_shares'] ?? ''),
+        'share_capital_shares_issued_during_year' => '0',
+        'share_capital_shares_bought_back_during_year' => '0',
+        'share_capital_issued_shares' => (string) ($manualBundle['previous']['share_capital_issued_shares'] ?? ''),
+    ]);
+    saveShareholders($pdo, $company_id, $fy_id, array_map(
+        static fn (array $row): array => ['name' => $row['name'], 'shares' => $row['shares']],
+        $prevShareholders
+    ));
+    header("Location: " . BASE_URL . "statements/financials.php");
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') === 'save_manual_company_note') {
     requireCsrfToken();
@@ -33,10 +73,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'note24_closing_finished_goods' => trim((string) ($_POST['note24_closing_finished_goods'] ?? '')),
         'note24_closing_work_in_progress' => trim((string) ($_POST['note24_closing_work_in_progress'] ?? '')),
         'tax_provision' => trim((string) ($_POST['tax_provision'] ?? '')),
+        'note24_opening_stock_in_trade' => trim((string) ($_POST['note24_opening_stock_in_trade'] ?? '')),
+        'note24_closing_stock_in_trade' => trim((string) ($_POST['note24_closing_stock_in_trade'] ?? '')),
+        'share_capital_authorised_shares' => trim((string) ($_POST['share_capital_authorised_shares'] ?? '')),
+        'share_capital_face_value' => trim((string) ($_POST['share_capital_face_value'] ?? '')),
+        'share_capital_opening_shares' => trim((string) ($_POST['share_capital_opening_shares'] ?? '')),
+        'share_capital_shares_issued_during_year' => trim((string) ($_POST['share_capital_shares_issued_during_year'] ?? '')),
+        'share_capital_shares_bought_back_during_year' => trim((string) ($_POST['share_capital_shares_bought_back_during_year'] ?? '')),
+        'share_capital_issued_shares' => trim((string) ($_POST['share_capital_issued_shares'] ?? '')),
     ];
     $derivedOpeningFinishedGoods = $manualBundle['previous']['note24_closing_finished_goods'] ?? $manualBundle['current']['note24_opening_finished_goods'] ?? '';
     $derivedOpeningWip = $manualBundle['previous']['note24_closing_work_in_progress'] ?? $manualBundle['current']['note24_opening_work_in_progress'] ?? '';
+    $derivedOpeningStockInTrade = $manualBundle['previous']['note24_closing_stock_in_trade'] ?? $manualBundle['current']['note24_opening_stock_in_trade'] ?? '';
     $derivedOpeningRawMaterials = $manualBundle['previous']['note16_closing_raw_materials'] ?? $manualBundle['current']['note16_opening_raw_materials'] ?? '';
+    $derivedOpeningShares = $manualBundle['previous']['share_capital_issued_shares'] ?? $manualBundle['current']['share_capital_opening_shares'] ?? '';
     $note2OpeningBalance = trim((string) ($postedManualInputs['note2_opening_profit_loss'] ?? ''));
     $note2ClosingBalance = '';
     if ($note2OpeningBalance !== '') {
@@ -58,7 +108,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'note24_closing_finished_goods' => $postedManualInputs['note24_closing_finished_goods'],
         'note24_closing_work_in_progress' => $postedManualInputs['note24_closing_work_in_progress'],
         'tax_provision' => $postedManualInputs['tax_provision'],
+        'note24_opening_stock_in_trade' => $postedManualInputs['note24_opening_stock_in_trade'] !== '' ? $postedManualInputs['note24_opening_stock_in_trade'] : (string) $derivedOpeningStockInTrade,
+        'note24_closing_stock_in_trade' => $postedManualInputs['note24_closing_stock_in_trade'],
+        'share_capital_authorised_shares' => $postedManualInputs['share_capital_authorised_shares'],
+        'share_capital_face_value' => $postedManualInputs['share_capital_face_value'],
+        'share_capital_opening_shares' => $postedManualInputs['share_capital_opening_shares'] !== '' ? $postedManualInputs['share_capital_opening_shares'] : (string) $derivedOpeningShares,
+        'share_capital_shares_issued_during_year' => $postedManualInputs['share_capital_shares_issued_during_year'],
+        'share_capital_shares_bought_back_during_year' => $postedManualInputs['share_capital_shares_bought_back_during_year'],
+        'share_capital_issued_shares' => $postedManualInputs['share_capital_issued_shares'],
     ]);
+
+    $shareholderNames = $_POST['shareholder_name'] ?? [];
+    $shareholderShares = $_POST['shareholder_shares'] ?? [];
+    $shareholderRowsToSave = [];
+    foreach ($shareholderNames as $index => $name) {
+        $shareholderRowsToSave[] = [
+            'name' => $name,
+            'shares' => $shareholderShares[$index] ?? 0,
+        ];
+    }
+    saveShareholders($pdo, $company_id, $fy_id, $shareholderRowsToSave);
+
     header("Location: " . BASE_URL . "statements/financials.php");
     exit;
 }
