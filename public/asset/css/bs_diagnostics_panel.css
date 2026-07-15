@@ -1,0 +1,283 @@
+/* e-BAL — Balance Sheet Diagnostics Drill-down Panel */
+
+.bs-diag-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.bs-diag-overlay.bs-diag-open {
+    display: flex;
+}
+
+.bs-diag-modal {
+    background: var(--panel, #fff);
+    color: var(--text, #1a1d21);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 980px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.bs-diag-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 20px 12px;
+    border-bottom: 1px solid var(--border, #e0e4e8);
+}
+
+.bs-diag-title {
+    font-size: 1.05rem;
+    margin: 0;
+    font-weight: 700;
+}
+
+.bs-diag-close {
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--muted, #6b7280);
+    padding: 2px 6px;
+}
+
+.bs-diag-close:hover {
+    color: var(--text, #1a1d21);
+}
+
+.bs-diag-status {
+    padding: 0 20px;
+}
+
+.bs-diag-banner {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+}
+
+.bs-diag-banner-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+.bs-diag-banner-warning {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+}
+
+.bs-diag-banner-success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.bs-diag-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    margin-top: 12px;
+}
+
+.bs-diag-list {
+    width: 320px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--border, #e0e4e8);
+    padding: 8px;
+}
+
+.bs-diag-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 10px 10px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+}
+
+.bs-diag-row:hover {
+    background: rgba(15, 76, 129, 0.06);
+}
+
+.bs-diag-row-active {
+    background: rgba(15, 76, 129, 0.1);
+    border-color: var(--brand, #0f4c81);
+}
+
+.bs-diag-row-icon {
+    font-size: 1.05rem;
+}
+
+.bs-diag-row-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.bs-diag-row-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bs-diag-row-type {
+    font-size: 0.72rem;
+    color: var(--muted, #6b7280);
+}
+
+.bs-diag-row-amount {
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.bs-diag-detail {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+}
+
+.bs-diag-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--muted, #6b7280);
+    font-size: 0.85rem;
+}
+
+.bs-diag-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.bs-diag-card-head h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.bs-diag-card-message {
+    font-size: 0.88rem;
+    color: var(--text, #1a1d21);
+    margin: 0 0 14px;
+}
+
+.bs-diag-kv {
+    margin-bottom: 14px;
+}
+
+.bs-diag-kv-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border, #e0e4e8);
+    font-size: 0.85rem;
+}
+
+.bs-diag-kv-label {
+    color: var(--muted, #6b7280);
+}
+
+.bs-diag-kv-value {
+    font-weight: 600;
+    text-align: right;
+}
+
+.bs-diag-suggestion {
+    background: #f8fafc;
+    border: 1px solid var(--border, #e0e4e8);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.85rem;
+}
+
+.bs-diag-select {
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border, #e0e4e8);
+    font-size: 0.85rem;
+}
+
+.bs-diag-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.bs-diag-btn {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border, #e0e4e8);
+    background: #fff;
+    color: var(--text, #1a1d21);
+    font-size: 0.82rem;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.bs-diag-btn-primary {
+    background: var(--brand, #0f4c81);
+    border-color: var(--brand, #0f4c81);
+    color: #fff;
+    font-weight: 600;
+}
+
+.bs-diag-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.bs-diag-fineprint {
+    font-size: 0.75rem;
+    color: var(--muted, #6b7280);
+    margin: 8px 0 0;
+}
+
+.bs-diag-note {
+    font-size: 0.82rem;
+    color: var(--muted, #6b7280);
+}
+
+@media (max-width: 720px) {
+    .bs-diag-body {
+        flex-direction: column;
+    }
+
+    .bs-diag-list {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border, #e0e4e8);
+        max-height: 220px;
+    }
+}

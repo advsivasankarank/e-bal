@@ -110,7 +110,7 @@ $wpGenTime = date('d M Y H:i:s');
             </tr>
         </tbody>
         <tfoot>
-            <tr><td>Difference</td><?php if ($hasPrev): ?><td></td><?php endif; ?><td class="amount" style="color: <?= abs((float)($fs['validation']['current_balance_difference'] ?? 0)) < 0.01 ? '#16a34a' : '#dc2626' ?>"><?= $fmt($fs['validation']['current_balance_difference'] ?? 0) ?></td></tr>
+            <tr><td>Difference</td><?php if ($hasPrev): ?><td></td><?php endif; ?><td class="amount" style="color: <?= abs((float)($fs['validation']['current_balance_difference'] ?? 0)) < 0.01 ? '#16a34a' : '#dc2626' ?>"><?php if (abs((float)($fs['validation']['current_balance_difference'] ?? 0)) >= 0.01): ?><a href="javascript:void(0)" onclick="openBsDiagnosticsPanel()" style="color:inherit;text-decoration:underline;"><?= $fmt($fs['validation']['current_balance_difference'] ?? 0) ?></a><?php else: ?><?= $fmt($fs['validation']['current_balance_difference'] ?? 0) ?><?php endif; ?></td></tr>
         </tfoot>
     </table>
 </div>

@@ -352,6 +352,15 @@ $showSidebar = true;
 require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
+<link rel="stylesheet" href="<?= BASE_URL ?>asset/css/bs_diagnostics_panel.css?v=<?= filemtime(__DIR__ . '/../asset/css/bs_diagnostics_panel.css') ?>">
+<meta name="csrf-token" content="<?= htmlspecialchars(csrfToken()) ?>">
+<script>
+    window.BS_DIAG_BASE_URL = <?= json_encode(BASE_URL) ?>;
+    window.BS_DIAG_ENTITY_ID = <?= (int) $company_id ?>;
+    window.BS_DIAG_FY_ID = <?= (int) $fy_id ?>;
+</script>
+<script src="<?= BASE_URL ?>asset/js/bs_diagnostics_panel.js?v=<?= filemtime(__DIR__ . '/../asset/js/bs_diagnostics_panel.js') ?>"></script>
+
 <style>
 :root {
     --font-sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -569,6 +578,9 @@ $cardParams = ['company_id' => (int)$company_id, 'fy_id' => (int)$fy_id, 'per_pa
 
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:10px 16px;background:<?= $reviewStatus === 'ready' ? '#dcfce7' : ($reviewStatus === 'needs_review' ? '#fef3c7' : '#fee2e2') ?>;border-radius:8px;font-size:0.85rem;">
     <strong style="color:<?= $reviewColor ?>;">Review Status: <?= htmlspecialchars($reviewLabel) ?></strong>
+    <?php if ($conflictLedgers > 0): ?>
+        <button type="button" onclick="openBsDiagnosticsPanel()" style="color:var(--danger);font-weight:600;text-decoration:underline;font-size:0.82rem;background:none;border:none;cursor:pointer;padding:0;">View Full Diagnostics</button>
+    <?php endif; ?>
     <?php if ($cardFilter !== '' && $cardFilter !== 'all'): ?>
         <span style="color:#475569;">&middot; Active Filter: <?= htmlspecialchars(ucfirst($cardFilter)) ?></span>
         <a href="<?= $cardBase ?>&filter=all" style="color:var(--brand);font-weight:600;text-decoration:none;font-size:0.82rem;">Clear Filter</a>
@@ -635,6 +647,7 @@ $cardParams = ['company_id' => (int)$company_id, 'fy_id' => (int)$fy_id, 'per_pa
                 <li><?= htmlspecialchars($conflict['ledger_name'] . ' [' . ($conflict['parent_group'] !== '' ? $conflict['parent_group'] : 'No Parent Group') . '] -> ' . $conflict['schedule_code']) ?></li>
             <?php endforeach; ?>
         </ul>
+        <button type="button" onclick="openBsDiagnosticsPanel()" style="margin-top:10px;font-size:0.78rem;padding:5px 12px;border:1px solid #dc2626;border-radius:6px;background:#fff;color:#dc2626;cursor:pointer;font-weight:600;">View Full Diagnostics</button>
     </div>
 <?php endif; ?>
 
@@ -698,9 +711,12 @@ $cardParams = ['company_id' => (int)$company_id, 'fy_id' => (int)$fy_id, 'per_pa
             <input type="number" step="0.01" name="cr_max" value="<?= $filterCrMax !== null ? htmlspecialchars((string) $filterCrMax) : '' ?>" placeholder="Max">
         </div>
     </div>
-    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
         <button type="submit" class="btn">Apply Filters</button>
         <a class="btn-outline btn-sm" href="<?= BASE_URL ?>data_console/trial_balance_preview.php<?= $selectedNote !== '' ? '?note=' . urlencode($selectedNote) : '' ?>">Clear Filters</a>
+        <?php if ($filterValidation === 'conflict'): ?>
+            <button type="button" onclick="openBsDiagnosticsPanel()" style="color:var(--danger);font-weight:600;text-decoration:underline;font-size:0.82rem;background:none;border:none;cursor:pointer;padding:0;">Open full diagnostics</button>
+        <?php endif; ?>
     </div>
 </form>
 

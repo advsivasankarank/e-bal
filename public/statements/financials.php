@@ -126,7 +126,7 @@ foreach ($tabDefs as $td) { if ($td['has_wp'] ?? false) { $hasWPTabs = true; bre
 
 $validationIssues = [];
 if (abs($currentDiff) > 0.01 || abs($previousDiff) > 0.01) {
-    $validationIssues[] = ['type' => 'error', 'text' => 'BS not balanced (Diff: ' . format_inr($currentDiff) . ')'];
+    $validationIssues[] = ['type' => 'error', 'text' => 'BS not balanced (Diff: ' . format_inr($currentDiff) . ')', 'diag' => true];
 }
 if (!empty($parentGroupConflicts)) {
     $validationIssues[] = ['type' => 'warning', 'text' => count($parentGroupConflicts) . ' parent-group conflict(s) excluded from notes'];
@@ -153,6 +153,14 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 ]) ?>
 
 <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/financials_workspace.css?v=<?= filemtime(__DIR__ . '/../asset/css/financials_workspace.css') ?>">
+<link rel="stylesheet" href="<?= BASE_URL ?>asset/css/bs_diagnostics_panel.css?v=<?= filemtime(__DIR__ . '/../asset/css/bs_diagnostics_panel.css') ?>">
+<meta name="csrf-token" content="<?= htmlspecialchars(csrfToken()) ?>">
+<script>
+    window.BS_DIAG_BASE_URL = <?= json_encode(BASE_URL) ?>;
+    window.BS_DIAG_ENTITY_ID = <?= (int) $company_id ?>;
+    window.BS_DIAG_FY_ID = <?= (int) $fy_id ?>;
+</script>
+<script src="<?= BASE_URL ?>asset/js/bs_diagnostics_panel.js?v=<?= filemtime(__DIR__ . '/../asset/js/bs_diagnostics_panel.js') ?>"></script>
 
 <?= uiContextCard([
     'company' => $companyName,
@@ -222,7 +230,7 @@ echo renderWorkflowNavigation($navData);
 <?php if (!empty($validationIssues)): ?>
 <div class="fs-validation-strip">
     <?php foreach ($validationIssues as $vi): ?>
-    <span class="item <?= $vi['type'] ?>" style="cursor:pointer;" onclick="document.getElementById('validationModal').style.display='flex';"><?= $vi['type'] === 'error' ? '&#10060;' : '&#9888;&#65039;' ?> <?= htmlspecialchars($vi['text']) ?></span>
+    <span class="item <?= $vi['type'] ?>" style="cursor:pointer;" onclick="<?= !empty($vi['diag']) ? 'openBsDiagnosticsPanel();' : "document.getElementById('validationModal').style.display='flex';" ?>"><?= $vi['type'] === 'error' ? '&#10060;' : '&#9888;&#65039;' ?> <?= htmlspecialchars($vi['text']) ?></span>
     <?php endforeach; ?>
     <?php if (abs($currentDiff) <= 0.01 && abs($previousDiff) <= 0.01): ?>
     <span style="color:#16a34a;">&#9989; BS Identity: Balanced</span>
@@ -245,9 +253,9 @@ echo renderWorkflowNavigation($navData);
         Current year difference: <strong><?= format_inr($currentDiff) ?></strong>
         <?php if (abs($previousDiff) > 0.01): ?><br>Previous year difference: <strong><?= format_inr($previousDiff) ?></strong><?php endif; ?>
     </div>
-    <div style="font-size:0.82rem;color:#666;margin-bottom:10px;">Suggested causes: parent-group conflict, unmapped ledger, duplicate ledger, or data mismatch.</div>
+    <div style="font-size:0.82rem;color:#666;margin-bottom:10px;">This is the current residual, explained below — not a single root cause.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <a class="btn" href="<?= BASE_URL ?>review/index.php?issue=bs_difference&company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;background:#dc2626;color:#fff;">View Difference Analysis</a>
+        <button type="button" class="btn" onclick="document.getElementById('validationModal').style.display='none';openBsDiagnosticsPanel();" style="font-size:0.78rem;padding:5px 12px;background:#dc2626;color:#fff;border:none;cursor:pointer;">View Difference Analysis</button>
         <a class="btn" href="<?= BASE_URL ?>data_console/mapping_workbench.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;">Open Mapping Workbench</a>
         <a class="btn" href="<?= BASE_URL ?>data_console/trial_balance_preview.php?company_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" style="font-size:0.78rem;padding:5px 12px;">Open Trial Balance</a>
         <button onclick="window.location.reload()" style="font-size:0.78rem;padding:5px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;cursor:pointer;">Rebuild</button>
