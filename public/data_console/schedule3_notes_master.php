@@ -14,7 +14,7 @@ return [
 
 2 => [
     'code' => 'OE',
-    'title' => 'Other Equity (Reserves & Surplus)',
+    'title' => 'Reserves & Surplus',
     'category' => 'BS',
 ],
 
@@ -154,7 +154,7 @@ return [
 
 24 => [
     'code' => 'INVCHG',
-    'title' => 'Changes in Inventory',
+    'title' => 'Changes in Inventories of Finished Goods, Work-in-Progress and Stock-in-Trade',
     'category' => 'PL',
 ],
 
