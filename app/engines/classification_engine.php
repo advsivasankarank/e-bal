@@ -179,9 +179,15 @@ function getClassifiedData(PDO $pdo, int $company_id, int $fy_id): array
         JOIN tally_ledgers tb
             ON tb.company_id = lm.company_id
             AND tb.ledger_name = lm.ledger_name
+        LEFT JOIN (
+            SELECT company_id, ledger_name, MIN(id) AS min_id
+            FROM tally_ledger_master
+            GROUP BY company_id, ledger_name
+        ) tlm_dedup
+            ON tlm_dedup.company_id = tb.company_id
+            AND tlm_dedup.ledger_name = tb.ledger_name
         LEFT JOIN tally_ledger_master tlm
-            ON tlm.company_id = tb.company_id
-            AND tlm.ledger_name = tb.ledger_name
+            ON tlm.id = tlm_dedup.min_id
         WHERE lm.company_id = ? AND tb.fy_id = ?
         GROUP BY lm.schedule_code, tb.ledger_name, tlm.parent_group
         ORDER BY lm.schedule_code, tb.ledger_name

@@ -102,6 +102,7 @@ try {
         INSERT INTO tally_ledger_master
         (company_id, ledger_name, parent_group)
         VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE parent_group = VALUES(parent_group)
     ");
 
     $count = 0;

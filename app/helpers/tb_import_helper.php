@@ -82,6 +82,8 @@ function importTrialBalanceRows(PDO $pdo, int $company_id, int $fy_id, array $ro
         INSERT INTO tally_ledger_master
         (company_id, ledger_name, parent_group)
         VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            parent_group = VALUES(parent_group)
     ");
 
     $insertMappingStmt = $pdo->prepare("
