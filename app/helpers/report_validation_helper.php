@@ -39,10 +39,24 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
         ];
     }
 
-    if (!($data['mapping_completed'] ?? false)) {
+    /* $data['mapping_completed'] was never actually set anywhere in fs_engine.php --
+       that key only exists on the unrelated workflow_status DB table -- so this check
+       always fired regardless of real mapping state. Query the real unmapped count
+       instead (same definition used elsewhere, e.g. ajax_mapping_save.php's pending
+       count and bs_diagnostics_helper.php's unmapped-ledgers issue). */
+    $unmappedCountStmt = $pdo->prepare("
+        SELECT COUNT(*) FROM tally_ledgers tl
+        LEFT JOIN ledger_mapping lm
+            ON lm.company_id = tl.company_id AND lm.ledger_name = tl.ledger_name
+        WHERE tl.company_id = ? AND tl.fy_id = ?
+          AND (lm.schedule_code IS NULL OR lm.schedule_code = '')
+    ");
+    $unmappedCountStmt->execute([$company_id, $fy_id]);
+    $unmappedLedgerCount = (int) $unmappedCountStmt->fetchColumn();
+    if ($unmappedLedgerCount > 0) {
         $errors[] = [
             'check' => 'mapping_completeness',
-            'message' => 'Ledger mapping is not yet complete. Some ledgers may be unmapped.',
+            'message' => $unmappedLedgerCount . ' ledger(s) have no note mapping and are excluded from the Balance Sheet.',
         ];
     }
 
