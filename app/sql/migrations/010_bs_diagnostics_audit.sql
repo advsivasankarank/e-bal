@@ -1,5 +1,5 @@
 -- ============================================================
--- e-BAL Migration 008: BS Diagnostics Audit Log
+-- e-BAL Migration 010: BS Diagnostics Audit Log
 -- Date: 2026-07-15
 -- Purpose: Record who applied which fix (auto-suggested or manual)
 --          from the Balance Sheet diff drill-down panel, with
