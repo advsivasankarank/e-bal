@@ -537,7 +537,9 @@ function purgeDemoUserData(PDO $pdo, int $userId, ?int $companyId = null): array
     try {
         $tables_to_check = ['review_remarks', 'sign_offs', 'review_data'];
         foreach ($tables_to_check as $table) {
-            $exists = $pdo->query("SHOW TABLES LIKE '$table'")->fetchColumn();
+            $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+            $existsStmt->execute([$table]);
+            $exists = (bool) $existsStmt->fetchColumn();
             if ($exists) {
                 $stmt = $pdo->prepare("DELETE FROM {$table} WHERE user_id = ?");
                 $stmt->execute([$userId]);
@@ -552,7 +554,9 @@ function purgeDemoUserData(PDO $pdo, int $userId, ?int $companyId = null): array
     try {
         $tables_to_check = ['trial_balance_entries', 'trial_balance_imports', 'ledger_mappings'];
         foreach ($tables_to_check as $table) {
-            $exists = $pdo->query("SHOW TABLES LIKE '$table'")->fetchColumn();
+            $existsStmt = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+            $existsStmt->execute([$table]);
+            $exists = (bool) $existsStmt->fetchColumn();
             if ($exists) {
                 $companyIdFilter = '';
                 $deleteParams = [$userId];

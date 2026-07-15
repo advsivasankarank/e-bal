@@ -210,9 +210,11 @@ echo renderWorkflowNavigation($navData);
                 <div class="v2-dw-tile-icon"><?= $ss['icon'] ?></div>
                 <div class="v2-dw-tile-info">
                     <h3><?= htmlspecialchars($ss['label']) ?></h3>
-                    <span class="v2-dw-badge v2-dw-badge-<?= $ss['status'] ?>">
-                        <?= $ss['status'] === 'complete' ? '✓ Complete' : ($ss['status'] === 'partial' ? '◐ In Progress' : ($ss['status'] === 'available' ? '→ Available' : '○ Not Started')) ?>
-                    </span>
+                    <?php
+                    $ssBadgeVariant = ['complete' => 'success', 'partial' => 'warning', 'available' => 'info'][$ss['status']] ?? 'default';
+                    $ssBadgeLabel = $ss['status'] === 'complete' ? '✓ Complete' : ($ss['status'] === 'partial' ? '◐ In Progress' : ($ss['status'] === 'available' ? '→ Available' : '○ Not Started'));
+                    ?>
+                    <?= uiStatusBadge($ssBadgeLabel, $ssBadgeVariant) ?>
                 </div>
             </div>
             <p class="v2-dw-tile-desc"><?= htmlspecialchars($ss['desc']) ?></p>

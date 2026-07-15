@@ -81,12 +81,17 @@ if (empty($ledgerNames)) {
 
 $placeholders = implode(',', array_fill(0, count($ledgerNames), '?'));
 $validStmt = $pdo->prepare("
-    SELECT ledger_name FROM tally_ledger_master
+    SELECT ledger_name, parent_group FROM tally_ledger_master
     WHERE company_id = ? AND ledger_name IN ($placeholders)
 ");
 $validParams = array_merge([$company_id], $ledgerNames);
 $validStmt->execute($validParams);
-$validLedgers = $validStmt->fetchAll(PDO::FETCH_COLUMN);
+$validRows = $validStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$validLedgers = array_column($validRows, 'ledger_name');
+/* ---- Parent group lookup, batched here instead of one query per ledger
+   inside the save loop below. ---- */
+$parentGroupByLedger = array_column($validRows, 'parent_group', 'ledger_name');
 
 $invalidLedgers = array_diff($ledgerNames, $validLedgers);
 if (!empty($invalidLedgers)) {
@@ -97,13 +102,6 @@ if (!empty($invalidLedgers)) {
     ]);
     exit;
 }
-
-/* ---- Parent group lookup ---- */
-$parentStmt = $pdo->prepare("
-    SELECT ledger_name, parent_group FROM tally_ledger_master
-    WHERE company_id = ? AND ledger_name = ?
-    LIMIT 1
-");
 
 /* ---- Save statement ---- */
 $saveStmt = $pdo->prepare("
@@ -136,9 +134,7 @@ try {
             continue;
         }
 
-        $parentStmt->execute([$company_id, $ledger]);
-        $parentRow = $parentStmt->fetch(PDO::FETCH_ASSOC);
-        $parentGroup = (string) (($parentRow['parent_group'] ?? '') ?: '');
+        $parentGroup = (string) ($parentGroupByLedger[$ledger] ?? '');
 
         $isOverride = !empty($overrides[$ledger]);
         $overrideReason = isset($overrideReasons[$ledger]) ? trim((string) $overrideReasons[$ledger]) : '';
@@ -235,6 +231,6 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    error_log('Bulk mapping save failed: ' . $e->getMessage());
+    appLog('ERROR', 'Bulk mapping save failed', ['message' => $e->getMessage()]);
     echo json_encode(['success' => false, 'error' => 'Server error during save. Please try again.']);
 }

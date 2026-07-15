@@ -153,7 +153,7 @@ echo renderWorkflowNavigation($navData);
 <div class="dw-section">
     <div class="dw-section-header">
         <h3>Client Deliverables</h3>
-        <span class="dw-badge client">Client Package</span>
+        <?= uiStatusBadge('Client Package', 'info') ?>
     </div>
     <div class="dw-section-body">
         <?php include __DIR__ . '/_package_list.php'; ?>
@@ -167,7 +167,7 @@ echo renderWorkflowNavigation($navData);
 <div class="dw-section">
     <div class="dw-section-header">
         <h3>Internal Deliverables</h3>
-        <span class="dw-badge internal">Internal Package</span>
+        <?= uiStatusBadge('Internal Package', 'purple') ?>
     </div>
     <div class="dw-section-body">
         <?php include __DIR__ . '/_internal_list.php'; ?>

@@ -21,6 +21,40 @@ $mappingEngine = new AIMappingEngine($companyCategory);
 $page_title = "Synced Ledgers";
 require_once __DIR__ . '/../layouts/header_v2.php';
 
+/* ---- Pagination (page/per_page convention matches reconhub_context_resolver.php) ---- */
+const VSL_MIN_PER_PAGE = 25;
+const VSL_MAX_PER_PAGE = 100;
+const VSL_DEFAULT_PER_PAGE = 50;
+$perPage = max(VSL_MIN_PER_PAGE, min(VSL_MAX_PER_PAGE, (int) ($_GET['per_page'] ?? VSL_DEFAULT_PER_PAGE)));
+$page = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($page - 1) * $perPage;
+
+/* ---- KPI counts via SQL aggregates, not a PHP loop over every row ---- */
+$countStmt = $pdo->prepare("
+    SELECT
+        COUNT(*) AS total_ledgers,
+        SUM(CASE WHEN lm.schedule_code IS NOT NULL AND lm.schedule_code != '' THEN 1 ELSE 0 END) AS mapped_count,
+        SUM(CASE WHEN tb.amount IS NOT NULL AND tb.amount != 0 AND tb.dr_cr IS NOT NULL AND tb.dr_cr != '' THEN 1 ELSE 0 END) AS tb_count
+    FROM tally_ledger_master tlm
+    LEFT JOIN ledger_mapping lm
+        ON lm.company_id = tlm.company_id
+        AND lm.ledger_name = tlm.ledger_name
+    LEFT JOIN tally_ledgers tb
+        ON tb.company_id = tlm.company_id
+        AND tb.fy_id = ?
+        AND tb.ledger_name = tlm.ledger_name
+    WHERE tlm.company_id = ?
+");
+$countStmt->execute([$fy_id, $company_id]);
+$counts = $countStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+$totalLedgers = (int) ($counts['total_ledgers'] ?? 0);
+$mappedCount = (int) ($counts['mapped_count'] ?? 0);
+$tbCount = (int) ($counts['tb_count'] ?? 0);
+$totalPages = max(1, (int) ceil($totalLedgers / $perPage));
+$page = min($page, $totalPages);
+$offset = ($page - 1) * $perPage;
+
+/* ---- Current page of rows only ---- */
 $stmt = $pdo->prepare("
     SELECT
         tlm.ledger_name,
@@ -38,23 +72,14 @@ $stmt = $pdo->prepare("
         AND tb.ledger_name = tlm.ledger_name
     WHERE tlm.company_id = ?
     ORDER BY tlm.ledger_name
+    LIMIT ? OFFSET ?
 ");
-$stmt->execute([$fy_id, $company_id]);
+$stmt->bindValue(1, $fy_id, PDO::PARAM_INT);
+$stmt->bindValue(2, $company_id, PDO::PARAM_INT);
+$stmt->bindValue(3, $perPage, PDO::PARAM_INT);
+$stmt->bindValue(4, $offset, PDO::PARAM_INT);
+$stmt->execute();
 $rows = $stmt->fetchAll();
-
-$totalLedgers = count($rows);
-$mappedCount = 0;
-$tbCount = 0;
-
-foreach ($rows as $row) {
-    if (!empty($row['schedule_code'])) {
-        $mappedCount++;
-    }
-
-    if ((float) ($row['amount'] ?? 0) != 0.0 && !empty($row['dr_cr'])) {
-        $tbCount++;
-    }
-}
 ?>
 
 <?= uiBreadcrumb([
@@ -70,7 +95,7 @@ foreach ($rows as $row) {
 ]) ?>
 
 <div class="card" style="margin-bottom:20px;">
-    This view shows the synced ledger master for the selected company, the saved mapping head, and any live trial balance value already fetched for the active financial year.
+    This view shows the synced ledger master for the selected company, the saved mapping head, and any live trial balance value already fetched for the active financial year. The counts below cover all synced ledgers; the table is paginated.
 </div>
 
 <?= uiKpiCards([
@@ -109,5 +134,17 @@ foreach ($rows as $row) {
         </tr>
     <?php endforeach; ?>
 </table>
+
+<?php if ($totalPages > 1): ?>
+<div class="card" style="margin-top:16px; display:flex; align-items:center; gap:12px;">
+    <?php if ($page > 1): ?>
+        <a class="btn" href="?page=<?= $page - 1 ?>&per_page=<?= $perPage ?>">&larr; Previous</a>
+    <?php endif; ?>
+    <span>Page <?= $page ?> of <?= $totalPages ?> (<?= $totalLedgers ?> ledgers total, <?= $perPage ?> per page)</span>
+    <?php if ($page < $totalPages): ?>
+        <a class="btn" href="?page=<?= $page + 1 ?>&per_page=<?= $perPage ?>">Next &rarr;</a>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../layouts/footer_v2.php'; ?>

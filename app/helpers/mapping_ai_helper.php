@@ -2,6 +2,16 @@
 
 function ensureLedgerMappingMetadataColumns(PDO $pdo): void
 {
+    /* Called once per request normally, but also reachable indirectly via
+       saveMappingLearning()/loadLearnedMappings() inside per-ledger loops
+       (e.g. ajax_mapping_save.php's bulk-save loop) — guard per-request so
+       a bulk save of N ledgers doesn't re-run SHOW COLUMNS N times. */
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
     $columns = $pdo->query("SHOW COLUMNS FROM ledger_mapping")->fetchAll(PDO::FETCH_COLUMN);
 
     $requiredColumns = [
@@ -22,6 +32,15 @@ function ensureLedgerMappingMetadataColumns(PDO $pdo): void
 
 function ensureMappingLearningTable(PDO $pdo): void
 {
+    /* Same per-request guard as ensureLedgerMappingMetadataColumns() above —
+       this is called from saveMappingLearning() and loadLearnedMappings(),
+       both reachable inside per-ledger loops. */
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS mapping_learning (
             id INT AUTO_INCREMENT PRIMARY KEY,

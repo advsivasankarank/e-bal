@@ -686,17 +686,86 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
                 )
             ),
         ],
+        'tax_provision' => [
+            'current' => manualAmount($manualInputs, 'tax_provision', 0),
+            'previous' => manualAmount($previousManualInputs, 'tax_provision', 0),
+        ],
         'sections' => $sections,
     ];
 }
 
-function buildLLPNotesPayload(array $classified): array
+/**
+ * Adds computed share_of_profit and closing_balance to each partner schedule
+ * row (from getPartnerCapitalSchedule()) plus a totals row, ready for the
+ * notes_llp.php / notes_noncorp.php templates to render directly. Kept out
+ * of entity_master_helper.php since it's presentation logic (Note 3a
+ * formatting), not data access.
+ */
+function withPartnerScheduleTotals(array $partnerSchedule, float $totalProfit): array
 {
+    if (empty($partnerSchedule)) {
+        return ['rows' => [], 'totals' => null];
+    }
+
+    $rows = [];
+    $totals = [
+        'share_percentage' => 0.0, 'opening_balance' => 0.0, 'capital_introduced' => 0.0,
+        'remuneration' => 0.0, 'interest_on_capital' => 0.0, 'withdrawals' => 0.0,
+        'share_of_profit' => 0.0, 'closing_balance' => 0.0,
+    ];
+
+    foreach ($partnerSchedule as $row) {
+        $shareOfProfit = $totalProfit * ((float) $row['share_percentage'] / 100);
+        $closing = partnerCapitalClosingBalance($row, $shareOfProfit);
+        $row['share_of_profit'] = $shareOfProfit;
+        $row['closing_balance'] = $closing;
+        $rows[] = $row;
+
+        $totals['share_percentage'] += (float) $row['share_percentage'];
+        $totals['opening_balance'] += (float) $row['opening_balance'];
+        $totals['capital_introduced'] += (float) $row['capital_introduced'];
+        $totals['remuneration'] += (float) $row['remuneration'];
+        $totals['interest_on_capital'] += (float) $row['interest_on_capital'];
+        $totals['withdrawals'] += (float) $row['withdrawals'];
+        $totals['share_of_profit'] += $shareOfProfit;
+        $totals['closing_balance'] += $closing;
+    }
+
+    return ['rows' => $rows, 'totals' => $totals];
+}
+
+/**
+ * @param array $partnerSchedule Rows from getPartnerCapitalSchedule(), or []
+ *        if no partners have been added yet for this company.
+ * @param float $totalProfit Current-year profit from $classified['summary']
+ *        ['profit'], used to compute each partner's share_of_profit so it
+ *        can never drift from the actual P&L figure.
+ */
+function buildLLPNotesPayload(array $classified, array $partnerSchedule = [], float $totalProfit = 0.0): array
+{
+    /* Notes 7-10 per the ICAI illustrative LLP format (Statutory/guidance
+       note on LLP.pdf, Appendix B): Other Long-term Liabilities,
+       Long/Short-term Provisions and Other Current Liabilities were
+       previously invisible in the notes to accounts even though their
+       amounts were already counted correctly in the balance sheet totals via
+       classification -- these schedule codes existed but nothing routed them
+       into a disclosed note, only into "Borrowings"/"Current Assets" via
+       whichever bucket they happened to sum into.
+
+       Deliberately NOT including Note 6 (Deferred Tax) despite it appearing
+       in the ICAI illustrative format -- deferred tax accounting (AS 22
+       book-vs-tax timing differences) doesn't apply to LLPs in practice;
+       they're taxed as flat-rate pass-through entities, not on the accrual
+       basis that gives rise to deferred tax. */
     $sections = [
             buildDetailedNote('Partners Capital', buildLedgerLines($classified, ['share_capital'])),
             buildDetailedNote('Partners Current Account / Reserves', buildLedgerLines($classified, ['reserves'])),
             buildDetailedNote('Borrowings', buildLedgerLines($classified, ['lt_borrowings', 'st_borrowings'])),
+            buildDetailedNote('Other Long-term Liabilities', buildLedgerLines($classified, ['other_non_current_liabilities'])),
+            buildDetailedNote('Long-term Provisions', buildLedgerLines($classified, ['long_term_provisions'])),
             buildDetailedNote('Trade Payables', buildLedgerLines($classified, ['trade_payables', 'trade_payables_msme'])),
+            buildDetailedNote('Other Current Liabilities', buildLedgerLines($classified, ['other_current_liabilities', 'other_financial_liabilities'])),
+            buildDetailedNote('Short-term Provisions', buildLedgerLines($classified, ['short_term_provisions'])),
             buildDetailedNote('Fixed Assets', buildLedgerLines($classified, ['ppe', 'cwip', 'intangible_assets'])),
             buildDetailedNote('Loans', buildLedgerLines($classified, ['loans_non_current', 'loans_current'])),
             buildDetailedNote('Investments', buildLedgerLines($classified, ['investments_non_current', 'investments_current'])),
@@ -710,7 +779,11 @@ function buildLLPNotesPayload(array $classified): array
             'Partners Capital',
             'Partners Current Account / Reserves',
             'Borrowings',
+            'Other Long-term Liabilities',
+            'Long-term Provisions',
             'Trade Payables',
+            'Other Current Liabilities',
+            'Short-term Provisions',
             'Fixed Assets',
             'Loans',
             'Investments',
@@ -718,10 +791,11 @@ function buildLLPNotesPayload(array $classified): array
             'Revenue',
             'Expenses',
         ]),
+        'partner_capital_schedule' => withPartnerScheduleTotals($partnerSchedule, $totalProfit),
     ];
 }
 
-function buildNonCorpNotesPayload(array $classified, string $subcategory = 'proprietorship'): array
+function buildNonCorpNotesPayload(array $classified, string $subcategory = 'proprietorship', array $partnerSchedule = [], float $totalProfit = 0.0): array
 {
     $baseSections = [
         'Capital' => buildDetailedNote('Capital', buildLedgerLines($classified, ['share_capital', 'reserves', 'corpus_fund'])),
@@ -764,6 +838,7 @@ function buildNonCorpNotesPayload(array $classified, string $subcategory = 'prop
 
     return [
         'sections' => assignSequentialNoteMetadata($sections, $order),
+        'partner_capital_schedule' => withPartnerScheduleTotals($partnerSchedule, $totalProfit),
     ];
 }
 
@@ -840,8 +915,8 @@ function buildCompanySummaryFromNotes(array $classified, array $notes, string $f
         'prev_depreciation' => $sectionTotalsByCode['DEP']['previous'] ?? ($sectionTotals['Depreciation & Amortisation']['previous'] ?? 0),
         'other_expenses' => $sectionTotalsByCode['EXP']['current'] ?? ($sectionTotals['Other Expenses']['current'] ?? 0),
         'prev_other_expenses' => $sectionTotalsByCode['EXP']['previous'] ?? ($sectionTotals['Other Expenses']['previous'] ?? 0),
-        'tax' => 0,
-        'prev_tax' => 0,
+        'tax' => (float) ($notes['tax_provision']['current'] ?? 0),
+        'prev_tax' => (float) ($notes['tax_provision']['previous'] ?? 0),
     ];
 
     /* ---- Branch / Divisions — Standalone Balance Sheet Treatment ---- */
@@ -958,8 +1033,26 @@ function buildLLPSummaryFromNotes(array $classified, array $notes, string $fyLab
         'prev_capital' => $sectionTotals['Partners Capital']['previous'] ?? 0,
         'current_accounts' => $sectionTotals['Partners Current Account / Reserves']['current'] ?? 0,
         'prev_current_accounts' => $sectionTotals['Partners Current Account / Reserves']['previous'] ?? 0,
-        'borrowings' => ($sectionTotals['Borrowings']['current'] ?? 0) + ($sectionTotals['Trade Payables']['current'] ?? 0),
-        'prev_borrowings' => ($sectionTotals['Borrowings']['previous'] ?? 0) + ($sectionTotals['Trade Payables']['previous'] ?? 0),
+        /* Folds in the Notes 7-10 line items (Other Long-term Liabilities,
+           Long/Short-term Provisions, Other Current Liabilities) added
+           alongside Borrowings/Trade Payables -- their rupee amounts must
+           reach this total even though the balance sheet face still shows
+           one lump "Borrowings" line (readers get the itemized breakdown
+           from the notes themselves, standard Schedule III practice).
+           Without this, the notes would disclose real amounts the face
+           total silently excluded. */
+        'borrowings' => ($sectionTotals['Borrowings']['current'] ?? 0)
+            + ($sectionTotals['Trade Payables']['current'] ?? 0)
+            + ($sectionTotals['Other Long-term Liabilities']['current'] ?? 0)
+            + ($sectionTotals['Long-term Provisions']['current'] ?? 0)
+            + ($sectionTotals['Other Current Liabilities']['current'] ?? 0)
+            + ($sectionTotals['Short-term Provisions']['current'] ?? 0),
+        'prev_borrowings' => ($sectionTotals['Borrowings']['previous'] ?? 0)
+            + ($sectionTotals['Trade Payables']['previous'] ?? 0)
+            + ($sectionTotals['Other Long-term Liabilities']['previous'] ?? 0)
+            + ($sectionTotals['Long-term Provisions']['previous'] ?? 0)
+            + ($sectionTotals['Other Current Liabilities']['previous'] ?? 0)
+            + ($sectionTotals['Short-term Provisions']['previous'] ?? 0),
         'fixed_assets' => $sectionTotals['Fixed Assets']['current'] ?? 0,
         'prev_fixed_assets' => $sectionTotals['Fixed Assets']['previous'] ?? 0,
         'current_assets' => $sectionTotals['Current Assets']['current'] ?? 0,
@@ -1064,6 +1157,11 @@ function buildNonCorpSummaryFromNotes(array $classified, array $notes, string $f
         'prev_revenue' => $prevRevenue,
         'expenses' => $expenses,
         'prev_expenses' => $prevExpenses,
+        /* Correct as 0 for proprietorship (taxed on the individual, not the firm).
+           Not yet correct for partnership/trust/society, which do have entity-level
+           tax — buildNonCorpNotesPayload() has no manual-input wiring or UI field
+           for it yet, unlike buildCompanyNotesPayload()'s tax_provision. Needs its
+           own manual-input UI before this can be sourced correctly per subcategory. */
         'tax' => 0,
         'prev_tax' => 0,
         'other_income' => classifiedAmount($classified, 'other_income') ?: 0,
@@ -1115,8 +1213,19 @@ function buildNonCorpSummaryFromNotes(array $classified, array $notes, string $f
 
     $isTradingEntity = in_array($subcategory, ['proprietorship', 'partnership', 'llp'], true);
     if ($isTradingEntity) {
-        $gp = $data['sales'] + $data['closing_stock_val'] - $data['opening_stock_val'] - $data['purchases'] - $data['direct_expenses'];
-        $prevGp = $data['prev_sales'] + $data['prev_closing_stock_val'] - $data['prev_opening_stock_val'] - $data['prev_purchases'] - $data['prev_direct_expenses'];
+        /* Pilot defect D03: closing stock was being added here to compute
+           gross profit (standard trading-account convention: GP = Sales +
+           Closing Stock - Opening Stock - Purchases - Direct Expenses) AND
+           separately counted in current_assets a few lines above -- since
+           this PBT flows into capital -> total_liabilities while
+           current_assets independently already includes the same closing
+           stock value, the balance sheet showed a gap exactly equal to
+           inventory (confirmed against Nivedha's pilot data: ₹450,000 gap =
+           inventory value). Closing stock is treated as purely a BS item
+           here per the pilot's diagnosed fix -- it must not also inflate
+           the P&L side that feeds capital. */
+        $gp = $data['sales'] - $data['opening_stock_val'] - $data['purchases'] - $data['direct_expenses'];
+        $prevGp = $data['prev_sales'] - $data['prev_opening_stock_val'] - $data['prev_purchases'] - $data['prev_direct_expenses'];
         $data['pbt'] = max($gp, 0) + $data['other_income'] - $operatingExpenses - ($gp < 0 ? abs($gp) : 0);
         $data['prev_pbt'] = max($prevGp, 0) + $data['prev_other_income'] - $prevOperatingExpenses - ($prevGp < 0 ? abs($prevGp) : 0);
     } else {
@@ -1261,6 +1370,21 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
     $isFirstYear = !$hasPrevData;
     $prevFYId = getPreviousFYId($pdo, $company_id, $fy_id);
 
+    /* Partner Capital Schedule (LLP / Partnership only) — fetched here rather
+       than inside the note builders below because it needs $pdo, and those
+       builders otherwise only ever receive already-classified data. Empty
+       array for every other entity type, and for LLP/Partnership entities
+       that haven't added any partners via statements/partner_capital.php yet
+       (the note builders fall back to the pre-existing aggregate treatment
+       in that case). */
+    $partnerSchedule = [];
+    if ($entity === 'llp' || ($entity === 'non_corporate' && $subcategory === 'partnership')) {
+        require_once __DIR__ . '/../helpers/entity_master_helper.php';
+        ensurePartnerCapitalSchema($pdo);
+        $partnerSchedule = getPartnerCapitalSchedule($pdo, $company_id, $fy_id, $prevFYId);
+    }
+    $totalProfitForSchedule = (float) ($classified['summary']['profit'] ?? 0);
+
     switch ($entity) {
         case 'corporate':
             $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs);
@@ -1271,7 +1395,7 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
             break;
 
         case 'llp':
-            $notes = buildLLPNotesPayload($classified);
+            $notes = buildLLPNotesPayload($classified, $partnerSchedule, $totalProfitForSchedule);
             $data = buildLLPSummaryFromNotes($classified, $notes, $fyDisplay);
             $formatTemplate = __DIR__ . '/../../public/reports_dashboard/formats/llp_format.php';
             $notesTemplate = __DIR__ . '/../../public/reports_dashboard/formats/notes_llp.php';
@@ -1280,7 +1404,7 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
 
         case 'non_corporate':
         default:
-            $notes = buildNonCorpNotesPayload($classified, $subcategory);
+            $notes = buildNonCorpNotesPayload($classified, $subcategory, $partnerSchedule, $totalProfitForSchedule);
             $data = buildNonCorpSummaryFromNotes($classified, $notes, $fyDisplay, $subcategory);
             $formatTemplate = __DIR__ . '/../../public/reports_dashboard/formats/noncorporate_format.php';
             $notesTemplate = __DIR__ . '/../../public/reports_dashboard/formats/notes_noncorp.php';

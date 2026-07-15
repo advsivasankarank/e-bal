@@ -5,10 +5,10 @@
  * Excel-like workspace for bulk ledger mapping.
  * Handles missing voucher_entries table gracefully.
  * Shows user-friendly error on failure instead of 500.
+ *
+ * error_reporting/display_errors/log_errors are now set centrally in
+ * app/helpers/runtime_helper.php, loaded transitively before this file.
  */
-error_reporting(E_ALL);
-ini_set('display_errors', '0');
-ini_set('log_errors', '1');
 
 set_exception_handler(function (\Throwable $e) {
     http_response_code(500);
@@ -59,7 +59,15 @@ require_once '../../app/helpers/reconhub_context_resolver.php';
 $contextResolver = new ReconHubContextResolver($pdo);
 $ctx = $contextResolver->resolve($_GET, $_SESSION);
 
-error_log("ReconHub context timing: total={$ctx['timing_ms']}ms, queries={$ctx['query_count']}, company_id={$ctx['company']['id']}, fy_id={$ctx['financial_year']['id']}, page={$ctx['pagination']['page']}, limit={$ctx['pagination']['per_page']}, result=" . ($ctx['error'] ?? 'success'));
+appLog('INFO', 'ReconHub context timing', [
+    'timing_ms' => $ctx['timing_ms'],
+    'query_count' => $ctx['query_count'],
+    'company_id' => $ctx['company']['id'],
+    'fy_id' => $ctx['financial_year']['id'],
+    'page' => $ctx['pagination']['page'],
+    'per_page' => $ctx['pagination']['per_page'],
+    'result' => $ctx['error'] ?? 'success',
+]);
 
 /* Handle auth redirect */
 if ($ctx['error'] === 'authentication_required') {

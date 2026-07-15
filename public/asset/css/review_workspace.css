@@ -71,19 +71,9 @@
     margin-bottom: 16px;
     flex-wrap: wrap;
 }
-.rw-v-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 600;
-}
-.rw-v-badge.error { background: #fee2e2; color: #dc2626; }
-.rw-v-badge.warning { background: #fef3c7; color: #d97706; }
-.rw-v-badge.info { background: #dbeafe; color: #2563eb; }
-.rw-v-badge.passed { background: #dcfce7; color: #16a34a; }
+/* Badge markup here now uses the shared .ui-badge/.ui-badge--* from
+   components.css (via uiStatusBadge() in components/ui.php) instead of
+   this module's own divergent badge class. */
 
 .rw-v-category { margin-bottom: 14px; }
 .rw-v-category-header {

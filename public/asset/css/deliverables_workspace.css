@@ -54,14 +54,9 @@
     user-select: none;
 }
 .dw-section-header h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
-.dw-section-header .dw-badge {
-    font-size: 0.72rem;
-    padding: 3px 8px;
-    border-radius: 999px;
-    font-weight: 600;
-}
-.dw-section-header .dw-badge.client { background: #dbeafe; color: #2563eb; }
-.dw-section-header .dw-badge.internal { background: #f3e8ff; color: #7c3aed; }
+/* Badge markup here now uses the shared .ui-badge/.ui-badge--* from
+   components.css (via uiStatusBadge() in components/ui.php) instead of
+   this module's own divergent badge class. */
 .dw-section-header .dw-toggle { font-size: 0.8rem; color: var(--muted, #6b7280); transition: transform 0.2s; }
 .dw-section-header .dw-toggle.collapsed { transform: rotate(-90deg); }
 .dw-section-body { padding: 16px 20px; }

@@ -82,7 +82,7 @@ class ReconHubDataLoadingService
         try {
             $this->loadData($result, $companyId, $fyId, $companyCategory, $perPage, $page, $timeStart);
         } catch (Throwable $e) {
-            error_log('ReconHub data loading failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            appLog('ERROR', 'ReconHub data loading failed', ['message' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
             $result['error'] = [
                 'code'    => 'data_loading_failed',
                 'message' => 'Unable to load ReconHub data. Please try again or contact support.',
@@ -107,7 +107,7 @@ class ReconHubDataLoadingService
         try {
             $hierarchyEngine = new HierarchyAIMappingEngine($this->pdo, $companyId, $companyCategory);
         } catch (Throwable $e) {
-            error_log('ReconHub: hierarchy engine init failed: ' . $e->getMessage());
+            appLog('ERROR', 'ReconHub: hierarchy engine init failed', ['message' => $e->getMessage()]);
             $result['meta']['page_warning'] = 'Hierarchy AI mapping unavailable. Basic mapping mode active.';
         }
 
@@ -384,7 +384,7 @@ class ReconHubDataLoadingService
         }
         } catch (\Throwable $e) {
             $result['meta']['processing_error'] = $e->getMessage();
-            error_log('ReconHub processing error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            appLog('ERROR', 'ReconHub processing error', ['message' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
         }
 
         $timeSuggestions = round((microtime(true) - $timeStart - ($timeQuery / 1000)) * 1000);
@@ -478,7 +478,7 @@ class ReconHubDataLoadingService
             ];
         }
         } catch (Throwable $e) {
-            error_log('ReconHub: Group mapping panel error: ' . $e->getMessage());
+            appLog('ERROR', 'ReconHub: Group mapping panel error', ['message' => $e->getMessage()]);
             $groupMappingData = [];
         }
 
@@ -512,7 +512,13 @@ class ReconHubDataLoadingService
         $result['meta']['processed_count'] = count($currentPageLedgers);
         $result['meta']['pct_complete'] = $pctComplete;
 
-        error_log("ReconHub timing: query={$timeQuery}ms, suggestions={$timeSuggestions}ms, parent_groups={$timePg}ms, processed=" . count($currentPageLedgers) . " of " . count($processingLedgers));
+        appLog('INFO', 'ReconHub timing', [
+            'query_ms' => $timeQuery,
+            'suggestions_ms' => $timeSuggestions,
+            'parent_groups_ms' => $timePg,
+            'processed' => count($currentPageLedgers),
+            'of' => count($processingLedgers),
+        ]);
     }
 
     /**
@@ -562,7 +568,7 @@ class ReconHubDataLoadingService
                 }
             }
         } catch (Throwable $e) {
-            error_log('ReconHub: TB load failed: ' . $e->getMessage());
+            appLog('ERROR', 'ReconHub: TB load failed', ['message' => $e->getMessage()]);
         }
         return $tbData;
     }

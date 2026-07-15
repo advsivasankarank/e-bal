@@ -99,7 +99,7 @@ try {
     $sheet = $spreadsheet->getActiveSheet();
     $rows = $sheet->toArray(null, true, true, true);
 } catch (Throwable $e) {
-    error_log('XLSX import parse failed: ' . $e->getMessage());
+    appLog('ERROR', 'XLSX import parse failed', ['message' => $e->getMessage()]);
     echo json_encode(['success' => false, 'error' => 'Failed to read XLSX file. Please check the file format.']);
     exit;
 }
@@ -306,6 +306,6 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    error_log('Excel import save failed: ' . $e->getMessage());
+    appLog('ERROR', 'Excel import save failed', ['message' => $e->getMessage()]);
     echo json_encode(['success' => false, 'error' => 'Server error during save.']);
 }

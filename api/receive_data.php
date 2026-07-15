@@ -21,7 +21,7 @@ $raw = sanitizeTallyXML($raw);
 
 /* PARSE */
 libxml_use_internal_errors(true);
-$xml = simplexml_load_string($raw);
+$xml = simplexml_load_string($raw, 'SimpleXMLElement', LIBXML_NONET);
 
 if ($xml === false) {
     echo "XML Parse Error\n";

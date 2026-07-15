@@ -21,11 +21,11 @@ if (!is_array($payload)) {
     exit;
 }
 
-$token = $payload['token'] ?? '';
-$headerToken = $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? '';
-$expected = defined('TALLY_BRIDGE_WEBHOOK_TOKEN') ? TALLY_BRIDGE_WEBHOOK_TOKEN : '';
+$token = trim((string) ($payload['token'] ?? ''));
+$headerToken = trim((string) ($_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? ''));
+$expected = defined('TALLY_BRIDGE_WEBHOOK_TOKEN') ? trim((string) TALLY_BRIDGE_WEBHOOK_TOKEN) : '';
 
-if ($expected !== '' && $token !== $expected && $headerToken !== $expected) {
+if ($expected !== '' && !hash_equals($expected, $token) && !hash_equals($expected, $headerToken)) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'Unauthorized']);
     exit;

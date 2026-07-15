@@ -191,10 +191,10 @@ foreach ($checks as $c) { $grouped[$c['category']][] = $c; }
 ?>
 
 <div class="rw-validation-summary">
-    <?php if ($errorCount > 0): ?><span class="rw-v-badge error"><?= $errorCount ?> Error<?= $errorCount !== 1 ? 's' : '' ?></span><?php endif; ?>
-    <?php if ($warningCount > 0): ?><span class="rw-v-badge warning"><?= $warningCount ?> Warning<?= $warningCount !== 1 ? 's' : '' ?></span><?php endif; ?>
-    <?php if ($infoCount > 0): ?><span class="rw-v-badge info"><?= $infoCount ?> Info</span><?php endif; ?>
-    <span class="rw-v-badge passed"><?= $passedCount ?> Passed</span>
+    <?php if ($errorCount > 0): ?><?= uiStatusBadge($errorCount . ' Error' . ($errorCount !== 1 ? 's' : ''), 'danger') ?><?php endif; ?>
+    <?php if ($warningCount > 0): ?><?= uiStatusBadge($warningCount . ' Warning' . ($warningCount !== 1 ? 's' : ''), 'warning') ?><?php endif; ?>
+    <?php if ($infoCount > 0): ?><?= uiStatusBadge($infoCount . ' Info', 'info') ?><?php endif; ?>
+    <?= uiStatusBadge($passedCount . ' Passed', 'success') ?>
 </div>
 
 <?php foreach ($grouped as $catName => $catChecks): ?>

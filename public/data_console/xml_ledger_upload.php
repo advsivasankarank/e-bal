@@ -25,7 +25,7 @@ $rawXml = file_get_contents($_FILES['ledger_xml']['tmp_name']);
 $rawXml = sanitizeTallyXML($rawXml);
 
 libxml_use_internal_errors(true);
-$xml = simplexml_load_string($rawXml);
+$xml = simplexml_load_string($rawXml, 'SimpleXMLElement', LIBXML_NONET);
 
 if (!$xml) {
     $errors = array_map(static function ($error) {

@@ -22,7 +22,7 @@ $xmlRaw = file_get_contents('php://input');
 
 /* HARDEN: Token must be configured. Empty token = reject. */
 $expected = defined('EBAL_BRIDGE_TOKEN') ? trim((string) EBAL_BRIDGE_TOKEN) : '';
-if ($expected === '' || $token !== $expected) {
+if ($expected === '' || !hash_equals($expected, $token)) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'message' => 'Unauthorized']);
     exit;
@@ -80,7 +80,7 @@ if (trim($xmlRaw) === '') {
 
 $xmlRaw = sanitizeTallyXML($xmlRaw);
 libxml_use_internal_errors(true);
-$xml = simplexml_load_string($xmlRaw);
+$xml = simplexml_load_string($xmlRaw, 'SimpleXMLElement', LIBXML_NONET);
 if ($xml === false) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'message' => 'Invalid XML']);

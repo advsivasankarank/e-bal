@@ -622,20 +622,6 @@
   gap: 6px;
 }
 
-.awl-fy-badge {
-  font-size: 0.6rem;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.awl-fy-badge.current {
-  background: var(--awl-emerald-light);
-  color: var(--awl-emerald);
-}
-
 .awl-card-tags {
   display: flex;
   gap: 5px;

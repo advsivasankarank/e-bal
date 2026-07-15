@@ -12,7 +12,7 @@ require_once __DIR__ . '/../config/database.php';
 
 $expected = defined('TALLY_BRIDGE_TOKEN') ? trim((string) TALLY_BRIDGE_TOKEN) : '';
 
-if ($token !== '' && $expected !== '' && $token === $expected) {
+if ($token !== '' && $expected !== '' && hash_equals($expected, $token)) {
     $isBridgeRequest = true;
     require_once __DIR__ . '/../app/helpers/runtime_helper.php';
 } else {

@@ -129,7 +129,7 @@ function buildPlSection(PhpWord $phpWord, array $fs, string $companyName, string
     $data = $fs['data'] ?? [];
     $hasPrev = !($fs['is_first_year'] ?? false);
 
-    $plLabel = ($fs['entity_subcategory'] ?? '') === 'trust' ? 'Income & Expenditure' : 'Profit & Loss';
+    $plLabel = in_array($fs['entity_subcategory'] ?? '', ['trust', 'society'], true) ? 'Income & Expenditure' : 'Profit & Loss';
 
     $companyMeta = $fs['company_meta'] ?? [];
     addDocxCompanyHeader($section, $companyName, 'Statement of ' . $plLabel, 'For the year ended ' . ($data['date'] ?? $fyName), $companyMeta);

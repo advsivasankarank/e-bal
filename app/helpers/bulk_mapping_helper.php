@@ -902,15 +902,40 @@ function generateBulkSuggestions(
         }
     }
 
+    /* Check hierarchy columns exist before selecting them — same guard
+       reconhub_data_loading_service.php uses, for environments where
+       migration 004 (tally_hierarchy_ai_mapping) hasn't run yet. */
+    $hasHierarchyCols = false;
+    try {
+        $chkStmt = $pdo->query("SHOW COLUMNS FROM tally_ledger_master LIKE 'tally_group_path'");
+        $hasHierarchyCols = $chkStmt->rowCount() > 0;
+    } catch (Throwable $e) { /* ignore */ }
+
     // Load all ledgers for this company
+    $hierarchyCols = $hasHierarchyCols
+        ? "COALESCE(t.primary_group, '') AS primary_group,
+           COALESCE(t.tally_group_path, '') AS tally_group_path,
+           COALESCE(t.tally_root_type, '') AS tally_root_type"
+        : "'' AS primary_group,
+           '' AS tally_group_path,
+           '' AS tally_root_type";
     $ledgerStmt = $pdo->prepare("
-        SELECT t.ledger_name, COALESCE(t.parent_group, '') AS parent_group
+        SELECT t.ledger_name, COALESCE(t.parent_group, '') AS parent_group, {$hierarchyCols}
         FROM tally_ledger_master t
         WHERE t.company_id = ?
         ORDER BY t.ledger_name
     ");
     $ledgerStmt->execute([$companyId]);
     $ledgers = $ledgerStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    /* Prime the hierarchy cache from this same query instead of letting
+       suggestBulkMapping() -> getLedgerHierarchy() fall through to a
+       per-ledger SHOW COLUMNS + SELECT for every row (the "slow group
+       panel loop" anti-pattern already fixed in the mapping workbench via
+       reconhub_data_loading_service.php, mirrored here). */
+    if ($hierarchyEngine !== null) {
+        $hierarchyEngine->setHierarchyCache($ledgers);
+    }
 
     $suggestions = [];
     foreach ($ledgers as $ledger) {

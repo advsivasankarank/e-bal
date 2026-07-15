@@ -28,9 +28,56 @@ $isTrading = in_array($data['entity_subcategory'] ?? '', ['proprietorship', 'par
 </div>
 <?php endif; ?>
 
-<?php if ($isTrading): ?>
+<?php $partnerScheduleRows = $notes['partner_capital_schedule']['rows'] ?? []; ?>
+<?php if ($isTrading && !empty($partnerScheduleRows)): ?>
+<div class="note-block">
+<h3 class="note-heading" id="note-capital-movement">Note 3a: Partners' Capital Account</h3>
+<table class="note-table" border="1" width="100%">
+    <thead>
+    <tr>
+        <th>Partner</th><th class="figure">Share %</th><th class="figure">Opening</th>
+        <th class="figure">Introduced</th><th class="figure">Remuneration</th><th class="figure">Interest</th>
+        <th class="figure">Withdrawals</th><th class="figure">Share of Profit</th><th class="figure">Closing</th>
+    </tr>
+    </thead>
+    <tbody>
+    <?php foreach ($partnerScheduleRows as $pRow): ?>
+    <tr>
+        <td><?= htmlspecialchars($pRow['partner_name']) ?></td>
+        <td class="figure"><?= number_format((float) $pRow['share_percentage'], 2) ?>%</td>
+        <td class="figure"><?= format_inr((float) $pRow['opening_balance']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['capital_introduced']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['remuneration']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['interest_on_capital']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['withdrawals']) ?></td>
+        <td class="figure"><?= format_inr((float) $pRow['share_of_profit']) ?></td>
+        <td class="figure"><strong><?= format_inr((float) $pRow['closing_balance']) ?></strong></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+    <?php $pTotals = $notes['partner_capital_schedule']['totals'] ?? null; if ($pTotals): ?>
+    <tfoot>
+    <tr>
+        <td><strong>Total</strong></td>
+        <td class="figure"><strong><?= number_format((float) $pTotals['share_percentage'], 2) ?>%</strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['opening_balance']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['capital_introduced']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['remuneration']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['interest_on_capital']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['withdrawals']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['share_of_profit']) ?></strong></td>
+        <td class="figure"><strong><?= format_inr((float) $pTotals['closing_balance']) ?></strong></td>
+    </tr>
+    </tfoot>
+    <?php endif; ?>
+</table>
+</div>
+<?php elseif ($isTrading): ?>
 <div class="note-block">
 <h3 class="note-heading" id="note-capital-movement">Capital Account Movement</h3>
+<?php if (($data['entity_subcategory'] ?? '') === 'partnership'): ?>
+<p style="font-size:0.85em;color:#64748b;margin:0 0 8px;">Aggregate view — add partners via the Partners' Capital Schedule page for a per-partner breakup (ICAI Note 3a format).</p>
+<?php endif; ?>
 <table class="note-table" border="1" width="100%">
     <thead>
     <tr><th>Particulars</th><th class="figure">Current Year</th><?php if (!$isFirstYear): ?><th class="figure" data-prev>Previous Year</th><?php endif; ?></tr>
@@ -40,10 +87,17 @@ $isTrading = in_array($data['entity_subcategory'] ?? '', ['proprietorship', 'par
     <tr><td>Add: Capital Introduced</td><td class="figure"><?= format_inr($data['capital_introduced']) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr($data['prev_capital_introduced']) ?></td><?php endif; ?></tr>
     <tr><td>Less: Drawings</td><td class="figure"><?= format_inr($data['drawings']) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr($data['prev_drawings']) ?></td><?php endif; ?></tr>
 <?php
-$grossPft = $data['sales'] + $data['closing_stock_val'] - $data['opening_stock_val'] - $data['purchases'] - $data['direct_expenses'];
-$prevGrossPft = $data['prev_sales'] + $data['prev_closing_stock_val'] - $data['prev_opening_stock_val'] - $data['prev_purchases'] - $data['prev_direct_expenses'];
-$netProfit_val = ($isTrading ? max($grossPft, 0) : 0) + $data['revenue'] - $data['expenses'] - ($isTrading && $grossPft < 0 ? abs($grossPft) : 0);
-$prevNetProfit_val = ($isTrading ? max($prevGrossPft, 0) : 0) + $data['prev_revenue'] - $data['prev_expenses'] - ($isTrading && $prevGrossPft < 0 ? abs($prevGrossPft) : 0);
+/* Net Profit/Loss read directly from $data['pat'], computed once in
+   buildNonCorpSummaryFromNotes() -- this block used to recompute its own
+   copy of the gross-profit formula, which had drifted out of sync (it
+   subtracted $data['expenses'], the whole Expenses note total including
+   purchases/materials/direct_expenses, on top of already subtracting those
+   same items in its own gross-profit term -- a double-subtraction bug
+   independent of the closing-stock one fixed in fs_engine.php). Single
+   source of truth now; the balance sheet's Closing Capital below already
+   depends on this same $data['pat']. */
+$netProfit_val = $data['pat'];
+$prevNetProfit_val = $data['prev_pat'];
 ?>
     <tr><td>Add: Net Profit</td><td class="figure"><?= format_inr(max($netProfit_val, 0)) ?></td><?php if (!$isFirstYear): ?><td class="figure" data-prev><?= format_inr(max($prevNetProfit_val, 0)) ?></td><?php endif; ?></tr>
 <?php if ($netProfit_val < 0): ?>
