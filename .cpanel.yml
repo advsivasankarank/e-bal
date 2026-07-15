@@ -1,4 +1,3 @@
 deployment:
   tasks:
-    - /bin/mkdir -p /home5/etaxadv/public_html/ebal
-    - /bin/rsync -av --delete --exclude ".git" --exclude ".cpanel.yml" --exclude "bridge" /home5/etaxadv/ebal/ /home5/etaxadv/public_html/ebal/
+    - /bin/echo "Deployed e-bal at commit $(/usr/bin/git rev-parse HEAD)"
