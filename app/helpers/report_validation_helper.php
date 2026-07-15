@@ -9,20 +9,24 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
     $errors = [];
     $warnings = [];
 
-    $summary = $fs['summary'] ?? [];
     $data = $fs['data'] ?? [];
     $notes = $fs['notes'] ?? [];
-    $scheduleItems = $fs['schedule_items'] ?? [];
 
-    $assetsTotal = (float) ($summary['assets_total'] ?? 0);
-    $liabilitiesTotal = (float) ($summary['liabilities_total'] ?? 0);
-    $bsDiff = round($assetsTotal - $liabilitiesTotal, 2);
-    if (abs($bsDiff) > 0.01) {
+    /* Uses the fully-built statement totals (post note-building, profit already
+       folded into Reserves & Surplus) -- NOT $summary['assets_total']/['liabilities_total'],
+       which are classification_engine.php's raw, intermediate bucket totals computed
+       before that fold-in and will misreport a "difference" equal to the year's
+       profit/loss even when the actual Balance Sheet balances. */
+    $currentDiff = (float) ($fs['validation']['current_balance_difference'] ?? 0);
+    $previousDiff = (float) ($fs['validation']['previous_balance_difference'] ?? 0);
+    if (abs($currentDiff) > 0.01) {
+        $assetsTotal = (float) ($data['total_assets'] ?? 0);
+        $liabilitiesTotal = (float) ($data['total_liabilities'] ?? 0);
         $errors[] = [
             'check' => 'assets_equals_liabilities',
             'message' => 'Balance Sheet does not balance. Assets (₹' . format_inr_number($assetsTotal)
                 . ') ≠ Liabilities (₹' . format_inr_number($liabilitiesTotal)
-                . '). Difference: ₹' . format_inr_number($bsDiff) . '.',
+                . '). Difference: ₹' . format_inr_number($currentDiff) . '.',
         ];
     }
 
@@ -53,15 +57,6 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
         ];
     }
 
-    $currentDiff = (float) ($fs['validation']['current_balance_difference'] ?? 0);
-    $previousDiff = (float) ($fs['validation']['previous_balance_difference'] ?? 0);
-    if (abs($currentDiff) > 0.01) {
-        $warnings[] = [
-            'check' => 'current_year_reconciliation',
-            'message' => 'Current year balance difference: ₹' . format_inr_number($currentDiff)
-                . '. The trial balance totals may not match the classified note totals.',
-        ];
-    }
     if (abs($previousDiff) > 0.01) {
         $warnings[] = [
             'check' => 'previous_year_reconciliation',
@@ -128,6 +123,6 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
         'can_generate' => empty($errors),
         'errors' => $errors,
         'warnings' => $warnings,
-        'total_checks' => 10,
+        'total_checks' => 9,
     ];
 }
