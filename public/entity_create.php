@@ -10,6 +10,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/../app/helpers/entity_access_helper.php';
+require_once __DIR__ . '/../app/helpers/entity_master_helper.php';
 
 $userId  = (int) ($_SESSION['user_id'] ?? 0);
 
@@ -20,6 +21,8 @@ if (!canCreateEntity($pdo) && !isDemoUser($pdo)) {
     header("Location: " . BASE_URL . "dashboard_company.php");
     exit;
 }
+
+ensureEntityMasterSchema($pdo);
 
 /* Resolve owner for entity ownership */
 $ownerId = getResolvedOwnerId($pdo);

@@ -200,7 +200,7 @@ function companyContinueLink(array $company): array
 <?php endif; ?>
 
 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
-    <?= uiButton('Create Entity', BASE_URL . 'company_dashboard/company_create.php', 'primary', '+') ?>
+    <?= uiButton('Create Entity', BASE_URL . 'entity_create.php', 'primary', '+') ?>
 </div>
 
 <div class="ui-section-card" style="margin-bottom:16px;">
@@ -226,7 +226,7 @@ function companyContinueLink(array $company): array
 </div>
 
 <?php if (empty($companies)): ?>
-    <?= uiEmptyState('🏢', 'No Companies Found', 'Create your first entity to get started.', 'Create Entity', BASE_URL . 'company_dashboard/company_create.php') ?>
+    <?= uiEmptyState('🏢', 'No Companies Found', 'Create your first entity to get started.', 'Create Entity', BASE_URL . 'entity_create.php') ?>
 <?php else: ?>
     <?= uiTableStart(['Name', 'Category', 'CIN / LLP Code', 'Profile', 'Status', 'Actions']) ?>
     <?php foreach ($companies as $c): $continue = companyContinueLink($c); ?>
@@ -275,7 +275,7 @@ function companyContinueLink(array $company): array
             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
                 <?= uiButton($continue['label'], $continue['href'], 'primary') ?>
                 <?= uiButton('Select', BASE_URL . 'company_dashboard/company_select.php?company_id=' . (int) $c['id'], 'outline') ?>
-                <?= uiButton('Edit', BASE_URL . 'company_dashboard/company_edit.php?id=' . (int) $c['id'], 'outline') ?>
+                <?= uiButton('Edit', BASE_URL . 'entity_edit.php?id=' . (int) $c['id'], 'outline') ?>
                 <form method="post" action="company_delete.php" onsubmit="return confirm('Delete this company?')" style="display:inline-flex;margin:0;">
                     <?= csrfInput() ?>
                     <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">

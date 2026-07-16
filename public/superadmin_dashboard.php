@@ -352,7 +352,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
             <div class="card-header"><h3>Quick Actions</h3></div>
             <div class="card-body">
                 <div class="action-grid">
-                    <a class="action-btn" href="<?= BASE_URL ?>company_dashboard/company_create.php">
+                    <a class="action-btn" href="<?= BASE_URL ?>entity_create.php">
                         <div class="icon">&#127962;</div>
                         <div>Create Company</div>
                     </a>

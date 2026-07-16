@@ -111,14 +111,14 @@ if ($entityCategory === 'corporate') {
         'impact' => 'informational', 'impact_value' => 0,
         'passed' => !empty($cm['statutory_auditor_name']),
         'message' => 'Statutory auditor details not filled',
-        'detail' => '', 'action_url' => BASE_URL . 'company_dashboard/company_edit.php', 'action_label' => 'Edit Company'
+        'detail' => '', 'action_url' => BASE_URL . 'entity_edit.php?id=' . (int) $company_id, 'action_label' => 'Edit Company'
     ];
     $checks[] = [
         'key' => 'signatory_details', 'category' => 'Corporate Requirements', 'severity' => 'info',
         'impact' => 'informational', 'impact_value' => 0,
         'passed' => !empty($cm['signatory_1_name']),
         'message' => 'Director signatory details not filled',
-        'detail' => '', 'action_url' => BASE_URL . 'company_dashboard/company_edit.php', 'action_label' => 'Edit Company'
+        'detail' => '', 'action_url' => BASE_URL . 'entity_edit.php?id=' . (int) $company_id, 'action_label' => 'Edit Company'
     ];
     $checks[] = [
         'key' => 'cash_flow_present', 'category' => 'Corporate Requirements', 'severity' => 'warning',
@@ -140,7 +140,7 @@ if ($entityCategory === 'corporate') {
         'impact' => 'informational', 'impact_value' => 0,
         'passed' => !empty(($companyMeta ?? [])['signatory_1_name']),
         'message' => 'Designated Partner details not filled',
-        'detail' => '', 'action_url' => BASE_URL . 'company_dashboard/company_edit.php', 'action_label' => 'Edit Company'
+        'detail' => '', 'action_url' => BASE_URL . 'entity_edit.php?id=' . (int) $company_id, 'action_label' => 'Edit Company'
     ];
 } elseif (in_array($entitySubcategory, ['trust', 'society'], true)) {
     $checks[] = [
@@ -155,7 +155,7 @@ if ($entityCategory === 'corporate') {
         'impact' => 'informational', 'impact_value' => 0,
         'passed' => !empty(($companyMeta ?? [])['signatory_1_name']),
         'message' => 'Trustee/office bearer details not filled',
-        'detail' => '', 'action_url' => BASE_URL . 'company_dashboard/company_edit.php', 'action_label' => 'Edit Company'
+        'detail' => '', 'action_url' => BASE_URL . 'entity_edit.php?id=' . (int) $company_id, 'action_label' => 'Edit Company'
     ];
 } else {
     $checks[] = [

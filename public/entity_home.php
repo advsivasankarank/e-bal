@@ -128,7 +128,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
             <div style="width:52px;height:52px;border-radius:50%;border:3px solid <?= $pctColor ?>;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;color:<?= $pctColor ?>;"><?= $pct ?>%</div>
             <div style="font-size:.65rem;color:var(--muted);margin-top:2px;">Profile</div>
         </div>
-        <a href="<?= BASE_URL ?>company_dashboard/company_edit.php?id=<?= $companyId ?>" class="v2-btn v2-btn--outline" style="font-size:.78rem;">Edit Profile</a>
+        <a href="<?= BASE_URL ?>entity_edit.php?id=<?= $companyId ?>" class="v2-btn v2-btn--outline" style="font-size:.78rem;">Edit Profile</a>
     </div>
 </div>
 

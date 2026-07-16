@@ -493,7 +493,7 @@ $v2SectionStatus = [
 <div class="v2-ah-actions">
     <h3 class="v2-ah-actions-title">Quick Actions</h3>
     <div class="v2-ah-actions-row">
-        <a href="<?= BASE_URL ?>company_dashboard/company_edit.php?id=<?= $v2CompanyId ?>" class="v2-btn v2-btn-outline">Edit Company</a>
+        <a href="<?= BASE_URL ?>entity_edit.php?id=<?= $v2CompanyId ?>" class="v2-btn v2-btn-outline">Edit Company</a>
         <a href="<?= BASE_URL ?>company_dashboard/financial_year.php" class="v2-btn v2-btn-outline">Manage FY</a>
     </div>
 </div>
