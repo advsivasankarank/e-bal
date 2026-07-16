@@ -31,6 +31,7 @@ composer.phar
 *.log
 /storage/logs/
 /storage/cache/
+/storage/business_pipeline.json
 
 # ===== Temp files =====
 nul
