@@ -353,6 +353,11 @@ $company['profile_completeness'] = $profilePct;
 
 </form>
 
+<div style="display:flex; gap:12px; margin-top:16px;">
+    <?= uiButton('Back to Company List', BASE_URL . 'company_dashboard/company_list.php', 'outline', '←') ?>
+    <?= uiButton('Continue to Financial Year', BASE_URL . 'entity_home.php?company_id=' . $id, 'primary', '→') ?>
+</div>
+
 <script>
 function applyCinRules() {
     const cinInput = document.getElementById('cin');
@@ -446,7 +451,7 @@ async function fetchEntityData(type) {
 
         applyCinRules();
         toggleEntitySections();
-        statusBox.textContent = 'Master data fetched. Review the details before updating.';
+        statusBox.textContent = 'Company/LLP profile fetched from MCA. Directors, auditor and signatories must still be entered manually.';
     } catch (error) {
         statusBox.textContent = 'Lookup failed: ' + error.message;
     }

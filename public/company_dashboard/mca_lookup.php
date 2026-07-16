@@ -15,8 +15,6 @@ if ($userId <= 0) {
 
 $type = strtolower(trim((string) ($_GET['type'] ?? '')));
 $identifier = trim((string) ($_GET['identifier'] ?? ''));
-$category = strtolower(trim((string) ($_GET['category'] ?? '')));
-$category = str_replace(['-', ' '], '_', $category);
 
 if (!in_array($type, ['cin', 'llpin'], true)) {
     http_response_code(400);
@@ -27,5 +25,5 @@ if (!in_array($type, ['cin', 'llpin'], true)) {
     exit;
 }
 
-$result = fetchMcaEntityData($type, $identifier, $category);
+$result = fetchMcaEntityData($identifier);
 echo json_encode($result);

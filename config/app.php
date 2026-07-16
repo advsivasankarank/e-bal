@@ -44,8 +44,9 @@ if (!defined('TALLY_ODBC_PORT')) {
     define('TALLY_ODBC_PORT', getenv('TALLY_ODBC_PORT') ?: '9000');
 }
 
-define('MCA_LOOKUP_URL', getenv('MCA_LOOKUP_URL') ?: '');
-define('MCA_LOOKUP_TOKEN', getenv('MCA_LOOKUP_TOKEN') ?: '');
+define('SANDBOX_API_KEY', getenv('SANDBOX_API_KEY') ?: '');
+define('SANDBOX_API_SECRET', getenv('SANDBOX_API_SECRET') ?: '');
+define('SANDBOX_API_BASE_URL', 'https://api.sandbox.co.in');
 define('DIRECTORS_REPORT_AI_URL', getenv('DIRECTORS_REPORT_AI_URL') ?: '');
 define('DIRECTORS_REPORT_AI_TOKEN', getenv('DIRECTORS_REPORT_AI_TOKEN') ?: '');
 $bridgeSettings = __DIR__ . '/bridge_settings.php';

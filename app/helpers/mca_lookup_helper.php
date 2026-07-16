@@ -1,19 +1,10 @@
 <?php
 
+require_once __DIR__ . '/company_reporting_helper.php';
+
 function normalizeMcaIdentifier(string $value): string
 {
     return strtoupper(preg_replace('/[^A-Z0-9]/', '', trim($value)));
-}
-
-function mcaLookupUrl(string $identifierType, string $identifier): string
-{
-    $baseUrl = rtrim((string) MCA_LOOKUP_URL, '/');
-    $query = http_build_query([
-        'type' => $identifierType,
-        'identifier' => $identifier,
-    ]);
-
-    return $baseUrl . '?' . $query;
 }
 
 function pickFirstValue(array $data, array $keys): string
@@ -27,44 +18,90 @@ function pickFirstValue(array $data, array $keys): string
     return '';
 }
 
-function mapMcaResponse(array $payload, string $category): array
+function sandboxStateCodeFromName(string $stateName): string
 {
-    $company = $payload['company'] ?? $payload;
-    $directors = $payload['directors'] ?? $payload['partners'] ?? $payload['signatories'] ?? [];
-    $auditor = $payload['auditor'] ?? $payload['statutory_auditor'] ?? [];
+    $needle = strtolower(trim($stateName));
+    if ($needle === '') {
+        return '';
+    }
 
-    $signatoryOne = $directors[0] ?? [];
-    $signatoryTwo = $directors[1] ?? [];
+    foreach (getIndianStateOptions() as $code => $label) {
+        if (strtolower($label) === $needle) {
+            return $code;
+        }
+    }
 
-    $defaultDesignation = match ($category) {
-        'corporate' => 'Director',
-        'llp' => 'Designated Partner',
-        default => 'Authorised Signatory',
-    };
+    return '';
+}
+
+function sandboxAuthenticate(): array
+{
+    if (SANDBOX_API_KEY === '' || SANDBOX_API_SECRET === '') {
+        return [
+            'ok' => false,
+            'message' => 'MCA lookup is not configured. Set SANDBOX_API_KEY and SANDBOX_API_SECRET.',
+        ];
+    }
+
+    $ch = curl_init(rtrim(SANDBOX_API_BASE_URL, '/') . '/authenticate');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST => 'POST',
+        CURLOPT_HTTPHEADER => [
+            'x-api-key: ' . SANDBOX_API_KEY,
+            'x-api-secret: ' . SANDBOX_API_SECRET,
+            'x-api-version: 1.0.0',
+            'Content-Type: application/json',
+        ],
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 20,
+    ]);
+
+    $response = curl_exec($ch);
+    if ($response === false) {
+        $message = curl_error($ch);
+        curl_close($ch);
+        return [
+            'ok' => false,
+            'message' => 'MCA authentication failed: ' . $message,
+        ];
+    }
+
+    $statusCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    curl_close($ch);
+
+    $payload = json_decode($response, true);
+    if ($statusCode >= 400 || !is_array($payload)) {
+        return [
+            'ok' => false,
+            'message' => 'MCA authentication returned HTTP ' . $statusCode . '.',
+        ];
+    }
+
+    $accessToken = pickFirstValue($payload, ['access_token']);
+    if ($accessToken === '') {
+        return [
+            'ok' => false,
+            'message' => 'MCA authentication did not return an access token.',
+        ];
+    }
 
     return [
-        'name' => pickFirstValue($company, ['name', 'company_name', 'llp_name']),
-        'registered_address' => pickFirstValue($company, ['registered_address', 'address', 'registered_office_address']),
-        'branch_address' => pickFirstValue($company, ['branch_address']),
-        'state_code' => pickFirstValue($company, ['state_code']),
-        'official_email' => pickFirstValue($company, ['official_email', 'email']),
-        'mobile_no' => pickFirstValue($company, ['phone', 'contact_no', 'mobile']),
-        'statutory_auditor_name' => pickFirstValue($auditor, ['name', 'auditor_name', 'partner_name']),
-        'statutory_auditor_firm' => pickFirstValue($auditor, ['firm', 'firm_name', 'auditor_firm']),
-        'statutory_auditor_frn' => pickFirstValue($auditor, ['frn', 'firm_registration_number']),
-        'statutory_auditor_membership_no' => pickFirstValue($auditor, ['membership_no', 'membership_number']),
-        'signatory_1_name' => pickFirstValue($signatoryOne, ['name', 'director_name', 'partner_name']),
-        'signatory_1_designation' => pickFirstValue($signatoryOne, ['designation', 'role']) ?: $defaultDesignation,
-        'signatory_1_id_no' => pickFirstValue($signatoryOne, ['din', 'dpin', 'id_no']),
-        'signatory_1_is_signing' => '1',
-        'signatory_2_name' => pickFirstValue($signatoryTwo, ['name', 'director_name', 'partner_name']),
-        'signatory_2_designation' => pickFirstValue($signatoryTwo, ['designation', 'role']) ?: $defaultDesignation,
-        'signatory_2_id_no' => pickFirstValue($signatoryTwo, ['din', 'dpin', 'id_no']),
-        'signatory_2_is_signing' => $signatoryTwo !== [] ? '1' : '',
+        'ok' => true,
+        'access_token' => $accessToken,
     ];
 }
 
-function fetchMcaEntityData(string $identifierType, string $identifier, string $category): array
+function mapMcaResponse(array $company): array
+{
+    return [
+        'name' => pickFirstValue($company, ['company_name']),
+        'registered_address' => pickFirstValue($company, ['registered_office_address']),
+        'state_code' => sandboxStateCodeFromName(pickFirstValue($company, ['company_state_code'])),
+    ];
+}
+
+function fetchMcaEntityData(string $identifier): array
 {
     $normalizedIdentifier = normalizeMcaIdentifier($identifier);
     if ($normalizedIdentifier === '') {
@@ -74,23 +111,21 @@ function fetchMcaEntityData(string $identifierType, string $identifier, string $
         ];
     }
 
-    if (MCA_LOOKUP_URL === '') {
-        return [
-            'ok' => false,
-            'message' => 'MCA lookup is not configured. Set MCA_LOOKUP_URL for your MCA or master-data connector.',
-        ];
+    $auth = sandboxAuthenticate();
+    if (!$auth['ok']) {
+        return $auth;
     }
 
-    $url = mcaLookupUrl($identifierType, $normalizedIdentifier);
-    $headers = ['Accept: application/json'];
-    if (MCA_LOOKUP_TOKEN !== '') {
-        $headers[] = 'Authorization: Bearer ' . MCA_LOOKUP_TOKEN;
-    }
-
-    $ch = curl_init($url);
+    $ch = curl_init(rtrim(SANDBOX_API_BASE_URL, '/') . '/kyc/mca/company/master-data');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_CUSTOMREQUEST => 'POST',
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $auth['access_token'],
+            'x-api-key: ' . SANDBOX_API_KEY,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => json_encode(['cin' => $normalizedIdentifier]),
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_TIMEOUT => 25,
     ]);
@@ -108,6 +143,13 @@ function fetchMcaEntityData(string $identifierType, string $identifier, string $
     $statusCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     curl_close($ch);
 
+    if ($statusCode === 521) {
+        return [
+            'ok' => false,
+            'message' => 'No MCA record found for this identifier.',
+        ];
+    }
+
     if ($statusCode >= 400) {
         return [
             'ok' => false,
@@ -123,17 +165,18 @@ function fetchMcaEntityData(string $identifierType, string $identifier, string $
         ];
     }
 
-    if (($payload['ok'] ?? true) === false) {
+    $company = $payload['data'][0] ?? null;
+    if (!is_array($company)) {
         return [
             'ok' => false,
-            'message' => (string) ($payload['message'] ?? 'MCA lookup failed.'),
+            'message' => 'No MCA record found for this identifier.',
         ];
     }
 
     return [
         'ok' => true,
         'identifier' => $normalizedIdentifier,
-        'fields' => mapMcaResponse($payload, $category),
+        'fields' => mapMcaResponse($company),
         'raw' => $payload,
     ];
 }
