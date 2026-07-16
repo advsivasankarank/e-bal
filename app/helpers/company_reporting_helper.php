@@ -176,7 +176,9 @@ function normalizeCompanyFormData(array $input): array
         'cin' => strtoupper(trim((string) ($input['cin'] ?? ''))),
         'llp_code' => strtoupper(trim((string) ($input['llp_code'] ?? ''))),
         'pan' => strtoupper(trim((string) ($input['pan'] ?? ''))),
-        'registered_address' => trim((string) ($input['registered_address'] ?? '')),
+        'registered_address' => trim((string) ($input['registered_address'] ?? '')) !== ''
+            ? trim((string) $input['registered_address'])
+            : trim((string) ($input['address'] ?? '')),
         'branch_address' => trim((string) ($input['branch_address'] ?? '')),
         'state_code' => strtoupper(trim((string) ($input['state_code'] ?? ''))),
         'official_email' => trim((string) ($input['official_email'] ?? '')),
