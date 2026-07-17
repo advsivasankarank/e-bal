@@ -19,11 +19,20 @@ if ($companyId <= 0) {
 }
 
 /* ---- Load entity details ---- */
-$stmt = $pdo->prepare("SELECT id, name, category, pan, cin, llp_code, profile_completeness FROM companies WHERE id = ?");
+$stmt = $pdo->prepare("SELECT id, name, category, pan, cin, llp_code, profile_completeness, owner_user_id FROM companies WHERE id = ?");
 $stmt->execute([$companyId]);
 $company = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$company) {
     header('Location: ' . BASE_URL . 'dashboard_company.php');
+    exit;
+}
+
+/* Ownership check — this page sets session company/FY context from a raw
+   $_GET company_id, so it must independently verify the company belongs to
+   the logged-in user rather than relying on requireAssignmentAccess() (which
+   only validates whatever is already IN the session, and hasn't run yet here). */
+if ((int) ($company['owner_user_id'] ?? 0) !== (int) ($_SESSION['user_id'] ?? 0)) {
+    header('Location: ' . BASE_URL . 'dashboard_company.php?error=access_denied');
     exit;
 }
 

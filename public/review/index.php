@@ -12,8 +12,13 @@ require_once __DIR__ . '/../../app/helpers/workflow_navigation_helper.php';
 $page_title = 'Review Centre';
 requireAssignmentAccess();
 
-$company_id = (int) ($_GET['company_id'] ?? $_SESSION['company_id'] ?? 0);
-$fy_id = (int) ($_GET['fy_id'] ?? $_SESSION['fy_id'] ?? 0);
+/* requireAssignmentAccess() above only validates the SESSION company/fy —
+   sourcing these from $_GET here would let a signed-in user read/write
+   another firm's data by editing the query string, since the value used
+   would never actually go through that ownership check. Session is the
+   sole source of truth once the access check has passed. */
+$company_id = (int) ($_SESSION['company_id'] ?? 0);
+$fy_id = (int) ($_SESSION['fy_id'] ?? 0);
 $companyName = $_SESSION['company_name'] ?? 'Not Selected';
 $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 $issueParam = trim((string) ($_GET['issue'] ?? ''));
