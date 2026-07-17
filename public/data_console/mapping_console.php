@@ -21,7 +21,7 @@ $fy_id      = $_SESSION['fy_id'] ?? 0;
 $companyName = $_SESSION['company_name'] ?? 'Not Selected';
 $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 
-require_once __DIR__ . '/layouts/header_v2.php';
+require_once __DIR__ . '/../layouts/header_v2.php';
 
 /* Build workbench URL with context */
 $workbenchUrl = BASE_URL . 'data_console/mapping_workbench.php';
