@@ -16,7 +16,7 @@ if (!isset($isCorporate)) return;
     <?php if (!empty($showShareCapitalCarryForwardPrompt)): ?>
     <div class="fs-carry-forward-prompt" id="shareCapitalCarryForwardPrompt" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:14px;font-size:0.85rem;">
         <div style="font-weight:600;margin-bottom:6px;">Share Capital details found for FY <?= htmlspecialchars($prevFyLabel) ?></div>
-        <div style="color:#475569;margin-bottom:10px;">No Note 1 (Share Capital) details are saved yet for this year. Carry forward last year's authorised/issued shares and shareholder list as-is, or enter fresh values below.</div>
+        <div style="color:#475569;margin-bottom:10px;">No Note 1 (Share Capital) details are saved yet for this year. Carry forward last year's share-type breakup (Equity/Preference etc.) and shareholder list as-is, or enter fresh values below.</div>
         <div style="display:flex;gap:8px;">
             <form method="post" style="margin:0;" onsubmit="return confirm('Carry forward Note 1 Share Capital details from FY <?= htmlspecialchars(addslashes($prevFyLabel)) ?> as-is? You can still edit them afterward.');">
                 <?= csrfInput() ?>
@@ -43,31 +43,49 @@ if (!isset($isCorporate)) return;
             <input id="share_capital_paidup" name="share_capital_paidup" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_paidup'] ?? '')) ?>">
         </div>
 
-        <h4 style="margin:16px 0 8px;font-size:0.85rem;color:var(--muted);">Share Capital Details (Note 1)</h4>
-        <div class="form-group">
-            <label for="share_capital_authorised_shares">Authorised Shares (Number)</label>
-            <input id="share_capital_authorised_shares" name="share_capital_authorised_shares" type="number" step="1" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_authorised_shares'] ?? '')) ?>">
+        <h4 style="margin:16px 0 8px;font-size:0.85rem;color:var(--muted);">Share Capital Details by Share Type (Note 1)</h4>
+        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">Add one row per share type (e.g. Equity Shares, 8% Preference Shares). Authorised/Issued/Paid-up amounts are computed as Face Value &times; Number of Shares.</div>
+        <div id="shareClassRows">
+            <?php $shareClassRowsData = $shareCapitalClasses ?: [['share_type' => '', 'face_value' => '', 'authorised_shares' => '', 'opening_shares' => '', 'issued_during_year' => '', 'bought_back_during_year' => '', 'closing_shares' => '']]; ?>
+            <?php foreach ($shareClassRowsData as $cls): ?>
+            <div class="form-group share-class-row" style="border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:10px;margin-bottom:10px;">
+                <div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:6px;">
+                    <div style="flex:2;">
+                        <label>Share Type</label>
+                        <input type="text" name="share_class_type[]" placeholder="e.g. Equity Shares" value="<?= htmlspecialchars((string) ($cls['share_type'] ?? '')) ?>">
+                    </div>
+                    <div style="flex:1;">
+                        <label>Face Value</label>
+                        <input type="number" step="0.01" name="share_class_face_value[]" value="<?= htmlspecialchars((string) ($cls['face_value'] ?? '')) ?>">
+                    </div>
+                    <button type="button" class="btn-outline btn-sm remove-share-class-row" style="padding:6px 10px;">&times;</button>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:110px;">
+                        <label>Authorised Shares</label>
+                        <input type="number" step="1" name="share_class_authorised_shares[]" value="<?= htmlspecialchars((string) ($cls['authorised_shares'] ?? '')) ?>">
+                    </div>
+                    <div style="flex:1;min-width:110px;">
+                        <label>Opening Shares</label>
+                        <input type="number" step="1" name="share_class_opening_shares[]" value="<?= htmlspecialchars((string) ($cls['opening_shares'] ?? '')) ?>">
+                    </div>
+                    <div style="flex:1;min-width:110px;">
+                        <label>Issued During Year</label>
+                        <input type="number" step="1" name="share_class_issued_during_year[]" value="<?= htmlspecialchars((string) ($cls['issued_during_year'] ?? '')) ?>">
+                    </div>
+                    <div style="flex:1;min-width:110px;">
+                        <label>Bought Back During Year</label>
+                        <input type="number" step="1" name="share_class_bought_back_during_year[]" value="<?= htmlspecialchars((string) ($cls['bought_back_during_year'] ?? '')) ?>">
+                    </div>
+                    <div style="flex:1;min-width:110px;">
+                        <label>Closing Shares (Paid-up)</label>
+                        <input type="number" step="1" name="share_class_closing_shares[]" value="<?= htmlspecialchars((string) ($cls['closing_shares'] ?? '')) ?>">
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
         </div>
-        <div class="form-group">
-            <label for="share_capital_face_value">Face Value per Share</label>
-            <input id="share_capital_face_value" name="share_capital_face_value" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_face_value'] ?? '')) ?>">
-        </div>
-        <div class="form-group">
-            <label for="share_capital_opening_shares">Opening Shares (Number)</label>
-            <input id="share_capital_opening_shares" name="share_capital_opening_shares" type="number" step="1" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_opening_shares'] ?? $manualBundle['previous']['share_capital_issued_shares'] ?? '')) ?>">
-        </div>
-        <div class="form-group">
-            <label for="share_capital_shares_issued_during_year">Shares Issued During Year</label>
-            <input id="share_capital_shares_issued_during_year" name="share_capital_shares_issued_during_year" type="number" step="1" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_shares_issued_during_year'] ?? '')) ?>">
-        </div>
-        <div class="form-group">
-            <label for="share_capital_shares_bought_back_during_year">Shares Bought Back During Year</label>
-            <input id="share_capital_shares_bought_back_during_year" name="share_capital_shares_bought_back_during_year" type="number" step="1" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_shares_bought_back_during_year'] ?? '')) ?>">
-        </div>
-        <div class="form-group">
-            <label for="share_capital_issued_shares">Closing Shares (Issued &amp; Fully Paid)</label>
-            <input id="share_capital_issued_shares" name="share_capital_issued_shares" type="number" step="1" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_issued_shares'] ?? '')) ?>">
-        </div>
+        <button type="button" id="addShareClassRow" class="btn-outline btn-sm" style="margin-bottom:12px;">+ Add Share Type</button>
 
         <h4 style="margin:16px 0 8px;font-size:0.85rem;color:var(--muted);">Shareholders Holding &gt;5% (Note 1)</h4>
         <div id="shareholderRows">
@@ -141,6 +159,46 @@ if (!isset($isCorporate)) return;
                 manualForm.style.display = '';
             });
         }
+    })();
+    (function () {
+        var rowsContainer = document.getElementById('shareClassRows');
+        var addBtn = document.getElementById('addShareClassRow');
+        if (!rowsContainer || !addBtn) return;
+
+        function wireRemove(row) {
+            var btn = row.querySelector('.remove-share-class-row');
+            if (!btn) return;
+            btn.addEventListener('click', function () {
+                if (rowsContainer.querySelectorAll('.share-class-row').length > 1) {
+                    row.remove();
+                } else {
+                    row.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+                }
+            });
+        }
+
+        rowsContainer.querySelectorAll('.share-class-row').forEach(wireRemove);
+
+        addBtn.addEventListener('click', function () {
+            var row = document.createElement('div');
+            row.className = 'form-group share-class-row';
+            row.style.cssText = 'border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:10px;margin-bottom:10px;';
+            row.innerHTML =
+                '<div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:6px;">' +
+                '<div style="flex:2;"><label>Share Type</label><input type="text" name="share_class_type[]" placeholder="e.g. Equity Shares" value=""></div>' +
+                '<div style="flex:1;"><label>Face Value</label><input type="number" step="0.01" name="share_class_face_value[]" value=""></div>' +
+                '<button type="button" class="btn-outline btn-sm remove-share-class-row" style="padding:6px 10px;">&times;</button>' +
+                '</div>' +
+                '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                '<div style="flex:1;min-width:110px;"><label>Authorised Shares</label><input type="number" step="1" name="share_class_authorised_shares[]" value=""></div>' +
+                '<div style="flex:1;min-width:110px;"><label>Opening Shares</label><input type="number" step="1" name="share_class_opening_shares[]" value=""></div>' +
+                '<div style="flex:1;min-width:110px;"><label>Issued During Year</label><input type="number" step="1" name="share_class_issued_during_year[]" value=""></div>' +
+                '<div style="flex:1;min-width:110px;"><label>Bought Back During Year</label><input type="number" step="1" name="share_class_bought_back_during_year[]" value=""></div>' +
+                '<div style="flex:1;min-width:110px;"><label>Closing Shares (Paid-up)</label><input type="number" step="1" name="share_class_closing_shares[]" value=""></div>' +
+                '</div>';
+            rowsContainer.appendChild(row);
+            wireRemove(row);
+        });
     })();
     (function () {
         var rowsContainer = document.getElementById('shareholderRows');

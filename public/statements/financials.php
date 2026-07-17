@@ -20,21 +20,19 @@ $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 
 $manualBundle = loadManualInputsWithCarryForward($pdo, $company_id, $fy_id, $fyName);
 $shareholders = getShareholders($pdo, $company_id, $fy_id);
+$shareCapitalClasses = getShareCapitalClasses($pdo, $company_id, $fy_id);
 
 $prevFyLabel = getPreviousFinancialYearLabel($fyName);
 $prevFy = $prevFyLabel !== '' ? findFinancialYearByLabel($pdo, $prevFyLabel, $company_id) : null;
 $prevFyId = $prevFy !== null ? (int) ($prevFy['id'] ?? 0) : 0;
 $prevShareholders = $prevFyId > 0 ? getShareholders($pdo, $company_id, $prevFyId) : [];
+$prevShareCapitalClasses = $prevFyId > 0 ? getShareCapitalClasses($pdo, $company_id, $prevFyId) : [];
 
-/* Use 'saved_current' (this year's own saved rows only) here, NOT 'current'
-   (which is already array_replace($previous, $current) -- silently merged
-   with last year's values -- so it would always look "already saved"). */
-$hasCurrentShareCapitalDetail = trim((string) ($manualBundle['saved_current']['share_capital_authorised_shares'] ?? '')) !== ''
-    || trim((string) ($manualBundle['saved_current']['share_capital_issued_shares'] ?? '')) !== ''
-    || !empty($shareholders);
-$hasPreviousShareCapitalDetail = trim((string) ($manualBundle['previous']['share_capital_authorised_shares'] ?? '')) !== ''
-    || trim((string) ($manualBundle['previous']['share_capital_issued_shares'] ?? '')) !== ''
-    || !empty($prevShareholders);
+/* A saved share-class row (Equity/Preference/...) is this year's own Note 1
+   detail; the old scalar share_capital_authorised_shares/... fields are gone
+   in favour of the per-share-type breakup. */
+$hasCurrentShareCapitalDetail = !empty($shareCapitalClasses);
+$hasPreviousShareCapitalDetail = !empty($prevShareCapitalClasses);
 $showShareCapitalCarryForwardPrompt = !$hasCurrentShareCapitalDetail && $hasPreviousShareCapitalDetail;
 
 /* Closing stock (Note 24) has no sensible auto-fill -- Tally only ever gives
@@ -53,13 +51,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'share_capital_authorised' => (string) ($manualBundle['previous']['share_capital_authorised'] ?? ''),
         'share_capital_issued' => (string) ($manualBundle['previous']['share_capital_issued'] ?? ''),
         'share_capital_paidup' => (string) ($manualBundle['previous']['share_capital_paidup'] ?? ''),
-        'share_capital_authorised_shares' => (string) ($manualBundle['previous']['share_capital_authorised_shares'] ?? ''),
-        'share_capital_face_value' => (string) ($manualBundle['previous']['share_capital_face_value'] ?? ''),
-        'share_capital_opening_shares' => (string) ($manualBundle['previous']['share_capital_issued_shares'] ?? ''),
-        'share_capital_shares_issued_during_year' => '0',
-        'share_capital_shares_bought_back_during_year' => '0',
-        'share_capital_issued_shares' => (string) ($manualBundle['previous']['share_capital_issued_shares'] ?? ''),
     ]);
+    saveShareCapitalClasses($pdo, $company_id, $fy_id, array_map(
+        static fn (array $row): array => [
+            'share_type' => $row['share_type'],
+            'face_value' => $row['face_value'],
+            'authorised_shares' => $row['authorised_shares'],
+            'opening_shares' => $row['closing_shares'],
+            'issued_during_year' => 0,
+            'bought_back_during_year' => 0,
+            'closing_shares' => $row['closing_shares'],
+        ],
+        $prevShareCapitalClasses
+    ));
     saveShareholders($pdo, $company_id, $fy_id, array_map(
         static fn (array $row): array => ['name' => $row['name'], 'shares' => $row['shares']],
         $prevShareholders
@@ -85,18 +89,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'tax_provision' => trim((string) ($_POST['tax_provision'] ?? '')),
         'note24_opening_stock_in_trade' => trim((string) ($_POST['note24_opening_stock_in_trade'] ?? '')),
         'note24_closing_stock_in_trade' => trim((string) ($_POST['note24_closing_stock_in_trade'] ?? '')),
-        'share_capital_authorised_shares' => trim((string) ($_POST['share_capital_authorised_shares'] ?? '')),
-        'share_capital_face_value' => trim((string) ($_POST['share_capital_face_value'] ?? '')),
-        'share_capital_opening_shares' => trim((string) ($_POST['share_capital_opening_shares'] ?? '')),
-        'share_capital_shares_issued_during_year' => trim((string) ($_POST['share_capital_shares_issued_during_year'] ?? '')),
-        'share_capital_shares_bought_back_during_year' => trim((string) ($_POST['share_capital_shares_bought_back_during_year'] ?? '')),
-        'share_capital_issued_shares' => trim((string) ($_POST['share_capital_issued_shares'] ?? '')),
     ];
     $derivedOpeningFinishedGoods = $manualBundle['previous']['note24_closing_finished_goods'] ?? $manualBundle['current']['note24_opening_finished_goods'] ?? '';
     $derivedOpeningWip = $manualBundle['previous']['note24_closing_work_in_progress'] ?? $manualBundle['current']['note24_opening_work_in_progress'] ?? '';
     $derivedOpeningStockInTrade = $manualBundle['previous']['note24_closing_stock_in_trade'] ?? $manualBundle['current']['note24_opening_stock_in_trade'] ?? '';
     $derivedOpeningRawMaterials = $manualBundle['previous']['note16_closing_raw_materials'] ?? $manualBundle['current']['note16_opening_raw_materials'] ?? '';
-    $derivedOpeningShares = $manualBundle['previous']['share_capital_issued_shares'] ?? $manualBundle['current']['share_capital_opening_shares'] ?? '';
     $note2OpeningBalance = trim((string) ($postedManualInputs['note2_opening_profit_loss'] ?? ''));
     $note2ClosingBalance = '';
     if ($note2OpeningBalance !== '') {
@@ -120,13 +117,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'tax_provision' => $postedManualInputs['tax_provision'],
         'note24_opening_stock_in_trade' => $postedManualInputs['note24_opening_stock_in_trade'] !== '' ? $postedManualInputs['note24_opening_stock_in_trade'] : (string) $derivedOpeningStockInTrade,
         'note24_closing_stock_in_trade' => $postedManualInputs['note24_closing_stock_in_trade'],
-        'share_capital_authorised_shares' => $postedManualInputs['share_capital_authorised_shares'],
-        'share_capital_face_value' => $postedManualInputs['share_capital_face_value'],
-        'share_capital_opening_shares' => $postedManualInputs['share_capital_opening_shares'] !== '' ? $postedManualInputs['share_capital_opening_shares'] : (string) $derivedOpeningShares,
-        'share_capital_shares_issued_during_year' => $postedManualInputs['share_capital_shares_issued_during_year'],
-        'share_capital_shares_bought_back_during_year' => $postedManualInputs['share_capital_shares_bought_back_during_year'],
-        'share_capital_issued_shares' => $postedManualInputs['share_capital_issued_shares'],
     ]);
+
+    $shareClassTypes = $_POST['share_class_type'] ?? [];
+    $shareClassFaceValues = $_POST['share_class_face_value'] ?? [];
+    $shareClassAuthorisedShares = $_POST['share_class_authorised_shares'] ?? [];
+    $shareClassOpeningShares = $_POST['share_class_opening_shares'] ?? [];
+    $shareClassIssuedDuringYear = $_POST['share_class_issued_during_year'] ?? [];
+    $shareClassBoughtBackDuringYear = $_POST['share_class_bought_back_during_year'] ?? [];
+    $shareClassClosingShares = $_POST['share_class_closing_shares'] ?? [];
+    $shareClassRowsToSave = [];
+    foreach ($shareClassTypes as $index => $shareType) {
+        $shareClassRowsToSave[] = [
+            'share_type' => $shareType,
+            'face_value' => $shareClassFaceValues[$index] ?? 0,
+            'authorised_shares' => $shareClassAuthorisedShares[$index] ?? 0,
+            'opening_shares' => $shareClassOpeningShares[$index] ?? 0,
+            'issued_during_year' => $shareClassIssuedDuringYear[$index] ?? 0,
+            'bought_back_during_year' => $shareClassBoughtBackDuringYear[$index] ?? 0,
+            'closing_shares' => $shareClassClosingShares[$index] ?? 0,
+        ];
+    }
+    saveShareCapitalClasses($pdo, $company_id, $fy_id, $shareClassRowsToSave);
 
     $shareholderNames = $_POST['shareholder_name'] ?? [];
     $shareholderShares = $_POST['shareholder_shares'] ?? [];

@@ -465,7 +465,7 @@ function manualAmount(array $manualInputs, string $key, float $fallback = 0.0): 
     return (float) $value;
 }
 
-function buildCompanyNotesPayload(array $classified, array $manualInputs = [], array $previousManualInputs = [], array $shareholders = []): array
+function buildCompanyNotesPayload(array $classified, array $manualInputs = [], array $previousManualInputs = [], array $shareholders = [], array $shareCapitalClasses = [], array $previousShareCapitalClasses = []): array
 {
     $currentPaidUp = manualAmount($manualInputs, 'share_capital_paidup', classifiedAmount($classified, 'share_capital'));
     $previousPaidUp = manualAmount($previousManualInputs, 'share_capital_paidup', classifiedPreviousAmount($classified, 'share_capital'));
@@ -500,7 +500,41 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
         }
 
         if ($masterCode === 'SC') {
-            $closingShares = manualAmount($manualInputs, 'share_capital_issued_shares', 0);
+            $prevClassesByType = [];
+            foreach ($previousShareCapitalClasses as $prevRow) {
+                $prevClassesByType[(string) ($prevRow['share_type'] ?? '')] = $prevRow;
+            }
+
+            $shareClassRows = [];
+            $closingShares = 0.0;
+            foreach ($shareCapitalClasses as $row) {
+                $shareType = (string) ($row['share_type'] ?? '');
+                $faceValue = (float) ($row['face_value'] ?? 0);
+                $authorisedShares = (float) ($row['authorised_shares'] ?? 0);
+                $rowClosingShares = (float) ($row['closing_shares'] ?? 0);
+                $prevRow = $prevClassesByType[$shareType] ?? null;
+                $prevFaceValue = $prevRow !== null ? (float) ($prevRow['face_value'] ?? 0) : 0.0;
+                $prevAuthorisedShares = $prevRow !== null ? (float) ($prevRow['authorised_shares'] ?? 0) : 0.0;
+                $prevClosingShares = $prevRow !== null ? (float) ($prevRow['closing_shares'] ?? 0) : 0.0;
+
+                $shareClassRows[] = [
+                    'share_type' => $shareType,
+                    'face_value' => $faceValue,
+                    'authorised_shares' => $authorisedShares,
+                    'authorised_amount' => $authorisedShares * $faceValue,
+                    'opening_shares' => (float) ($row['opening_shares'] ?? 0),
+                    'issued_during_year' => (float) ($row['issued_during_year'] ?? 0),
+                    'bought_back_during_year' => (float) ($row['bought_back_during_year'] ?? 0),
+                    'closing_shares' => $rowClosingShares,
+                    'closing_amount' => $rowClosingShares * $faceValue,
+                    'previous_face_value' => $prevFaceValue,
+                    'previous_authorised_shares' => $prevAuthorisedShares,
+                    'previous_authorised_amount' => $prevAuthorisedShares * $prevFaceValue,
+                    'previous_closing_shares' => $prevClosingShares,
+                    'previous_closing_amount' => $prevClosingShares * $prevFaceValue,
+                ];
+                $closingShares += $rowClosingShares;
+            }
 
             $shareholdersAbove5Pct = [];
             foreach ($shareholders as $shareholder) {
@@ -539,14 +573,7 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
                 ],
                 'current_total' => $currentPaidUp,
                 'previous_total' => $previousPaidUp,
-                'share_reconciliation' => [
-                    'authorised_shares' => manualAmount($manualInputs, 'share_capital_authorised_shares', 0),
-                    'face_value' => manualAmount($manualInputs, 'share_capital_face_value', 0),
-                    'opening_shares' => manualAmount($manualInputs, 'share_capital_opening_shares', 0),
-                    'issued_during_year' => manualAmount($manualInputs, 'share_capital_shares_issued_during_year', 0),
-                    'bought_back_during_year' => manualAmount($manualInputs, 'share_capital_shares_bought_back_during_year', 0),
-                    'closing_shares' => $closingShares,
-                ],
+                'share_classes' => $shareClassRows,
                 'shareholders_above_5pct' => $shareholdersAbove5Pct,
             ];
             continue;
@@ -1414,7 +1441,9 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
         case 'corporate':
             require_once __DIR__ . '/../helpers/share_capital_helper.php';
             $shareholders = getShareholders($pdo, $company_id, $fy_id);
-            $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs, $shareholders);
+            $shareCapitalClasses = getShareCapitalClasses($pdo, $company_id, $fy_id);
+            $previousShareCapitalClasses = $prevFYId > 0 ? getShareCapitalClasses($pdo, $company_id, $prevFYId) : [];
+            $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs, $shareholders, $shareCapitalClasses, $previousShareCapitalClasses);
             $data = buildCompanySummaryFromNotes($classified, $notes, $fyDisplay);
             $formatTemplate = __DIR__ . '/../../public/reports_dashboard/formats/company_format.php';
             $notesTemplate = __DIR__ . '/../../public/reports_dashboard/formats/notes_company.php';

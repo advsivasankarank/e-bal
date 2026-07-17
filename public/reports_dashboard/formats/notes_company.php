@@ -53,8 +53,7 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
     /* Share Capital with share-count/shareholder detail is not empty even if the
        rupee lines happen to be zero (e.g. face value entered but no amount yet) */
     if (($section['custom_type'] ?? '') === 'share_capital') {
-        $shareRecon = $section['share_reconciliation'] ?? [];
-        if ((float) ($shareRecon['closing_shares'] ?? 0) > 0.0 || !empty($section['shareholders_above_5pct'])) {
+        if (!empty($section['share_classes']) || !empty($section['shareholders_above_5pct'])) {
             $isEmpty = false;
         }
     }
@@ -192,27 +191,99 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
 
     <?php if (($section['custom_type'] ?? '') === 'share_capital'): ?>
         <?php
-        $shareRecon = $section['share_reconciliation'] ?? [];
-        $authorisedShares = (float) ($shareRecon['authorised_shares'] ?? 0);
-        $faceValue = (float) ($shareRecon['face_value'] ?? 0);
-        $openingShares = (float) ($shareRecon['opening_shares'] ?? 0);
-        $issuedDuringYear = (float) ($shareRecon['issued_during_year'] ?? 0);
-        $boughtBackDuringYear = (float) ($shareRecon['bought_back_during_year'] ?? 0);
-        $closingShares = (float) ($shareRecon['closing_shares'] ?? 0);
+        $shareClasses = $section['share_classes'] ?? [];
         $shareholdersAbove5Pct = $section['shareholders_above_5pct'] ?? [];
+        $totalAuthorisedShares = array_sum(array_column($shareClasses, 'authorised_shares'));
+        $totalAuthorisedAmount = array_sum(array_column($shareClasses, 'authorised_amount'));
+        $totalClosingShares = array_sum(array_column($shareClasses, 'closing_shares'));
+        $totalClosingAmount = array_sum(array_column($shareClasses, 'closing_amount'));
+        $prevTotalAuthorisedShares = array_sum(array_column($shareClasses, 'previous_authorised_shares'));
+        $prevTotalAuthorisedAmount = array_sum(array_column($shareClasses, 'previous_authorised_amount'));
+        $prevTotalClosingShares = array_sum(array_column($shareClasses, 'previous_closing_shares'));
+        $prevTotalClosingAmount = array_sum(array_column($shareClasses, 'previous_closing_amount'));
         ?>
-        <?php if ($authorisedShares > 0.0 || $closingShares > 0.0): ?>
+        <?php if (!empty($shareClasses)): ?>
         <table class="note-table" border="1" width="100%" cellpadding="5">
             <thead>
-            <tr><th class="particulars" colspan="2">Reconciliation of Equity Shares Outstanding</th></tr>
+            <tr>
+                <th class="particulars">Share Type</th>
+                <th class="figure">Face Value</th>
+                <th class="figure" colspan="2">Authorised (Current Year)</th>
+                <th class="figure" colspan="2">Issued, Subscribed &amp; Paid-up (Current Year)</th>
+                <th class="figure" colspan="2">Issued, Subscribed &amp; Paid-up (Previous Year)</th>
+            </tr>
+            <tr>
+                <th class="particulars"></th>
+                <th class="figure"></th>
+                <th class="figure">No. of Shares</th>
+                <th class="figure">Amount</th>
+                <th class="figure">No. of Shares</th>
+                <th class="figure">Amount</th>
+                <th class="figure">No. of Shares</th>
+                <th class="figure">Amount</th>
+            </tr>
             </thead>
             <tbody>
-            <tr><td>Authorised Shares (Number)</td><td class="figure"><?= number_format($authorisedShares, 0) ?></td></tr>
-            <tr><td>Face Value per Share</td><td class="figure"><?= \format_inr($faceValue) ?></td></tr>
-            <tr><td>Opening Shares</td><td class="figure"><?= number_format($openingShares, 0) ?></td></tr>
-            <tr><td>Add: Issued During the Year</td><td class="figure"><?= number_format($issuedDuringYear, 0) ?></td></tr>
-            <tr><td>Less: Bought Back During the Year</td><td class="figure"><?= number_format($boughtBackDuringYear, 0) ?></td></tr>
-            <tr><td><b>Closing Shares (Issued, Subscribed &amp; Fully Paid)</b></td><td class="figure"><b><?= number_format($closingShares, 0) ?></b></td></tr>
+            <?php foreach ($shareClasses as $cls): ?>
+            <tr>
+                <td><?= htmlspecialchars((string) ($cls['share_type'] ?? '')) ?></td>
+                <td class="figure"><?= \format_inr((float) ($cls['face_value'] ?? 0)) ?></td>
+                <td class="figure"><?= number_format((float) ($cls['authorised_shares'] ?? 0), 0) ?></td>
+                <td class="figure"><?= \format_inr((float) ($cls['authorised_amount'] ?? 0)) ?></td>
+                <td class="figure"><?= number_format((float) ($cls['closing_shares'] ?? 0), 0) ?></td>
+                <td class="figure"><?= \format_inr((float) ($cls['closing_amount'] ?? 0)) ?></td>
+                <td class="figure previous-year"><?= number_format((float) ($cls['previous_closing_shares'] ?? 0), 0) ?></td>
+                <td class="figure previous-year"><?= \format_inr((float) ($cls['previous_closing_amount'] ?? 0)) ?></td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+            <tfoot>
+            <tr>
+                <td><b>Total</b></td>
+                <td class="figure"></td>
+                <td class="figure"><b><?= number_format($totalAuthorisedShares, 0) ?></b></td>
+                <td class="figure"><b><?= \format_inr($totalAuthorisedAmount) ?></b></td>
+                <td class="figure"><b><?= number_format($totalClosingShares, 0) ?></b></td>
+                <td class="figure"><b><?= \format_inr($totalClosingAmount) ?></b></td>
+                <td class="figure previous-year"><b><?= number_format($prevTotalClosingShares, 0) ?></b></td>
+                <td class="figure previous-year"><b><?= \format_inr($prevTotalClosingAmount) ?></b></td>
+            </tr>
+            </tfoot>
+        </table>
+        <table class="note-table" border="1" width="100%" cellpadding="5">
+            <thead>
+            <tr>
+                <th class="particulars">Reconciliation of Number of Shares</th>
+                <?php foreach ($shareClasses as $cls): ?>
+                <th class="figure"><?= htmlspecialchars((string) ($cls['share_type'] ?? '')) ?></th>
+                <?php endforeach; ?>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>Shares Outstanding at the Beginning of the Year</td>
+                <?php foreach ($shareClasses as $cls): ?>
+                <td class="figure"><?= number_format((float) ($cls['opening_shares'] ?? 0), 0) ?></td>
+                <?php endforeach; ?>
+            </tr>
+            <tr>
+                <td>Add: Issued During the Year</td>
+                <?php foreach ($shareClasses as $cls): ?>
+                <td class="figure"><?= number_format((float) ($cls['issued_during_year'] ?? 0), 0) ?></td>
+                <?php endforeach; ?>
+            </tr>
+            <tr>
+                <td>Less: Bought Back During the Year</td>
+                <?php foreach ($shareClasses as $cls): ?>
+                <td class="figure"><?= number_format((float) ($cls['bought_back_during_year'] ?? 0), 0) ?></td>
+                <?php endforeach; ?>
+            </tr>
+            <tr>
+                <td><b>Shares Outstanding at the End of the Year</b></td>
+                <?php foreach ($shareClasses as $cls): ?>
+                <td class="figure"><b><?= number_format((float) ($cls['closing_shares'] ?? 0), 0) ?></b></td>
+                <?php endforeach; ?>
+            </tr>
             </tbody>
         </table>
         <?php endif; ?>
