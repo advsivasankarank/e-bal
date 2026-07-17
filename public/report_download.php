@@ -10,6 +10,7 @@ require_once __DIR__ . '/../app/helpers/share_capital_helper.php';
 require_once __DIR__ . '/../app/helpers/directors_report_ai_helper.php';
 require_once __DIR__ . '/../app/helpers/readiness_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
+require_once __DIR__ . '/../app/helpers/download_error_helper.php';
 
 $autoload = __DIR__ . '/../vendor/autoload.php';
 if (file_exists($autoload)) {
@@ -43,28 +44,24 @@ $format = strtolower(trim((string) ($_GET['format'] ?? 'pdf')));
 $allowedFormats = ['pdf', 'word', 'excel', 'docx', 'xlsx', 'html'];
 
 if (!in_array($format, $allowedFormats, true)) {
-    http_response_code(400);
-    exit('Unsupported export format.');
+    exitWithDownloadError('Unsupported export format.', 400, BASE_URL . 'deliverables/index.php', 'Back to Deliverables');
 }
 
 $docType = strtolower(trim((string) ($_GET['doc'] ?? 'financial_statements')));
 $allowedDocTypes = ['financial_statements', 'directors_report'];
 
 if (!in_array($docType, $allowedDocTypes, true)) {
-    http_response_code(400);
-    exit('Unsupported document type.');
+    exitWithDownloadError('Unsupported document type.', 400, BASE_URL . 'deliverables/index.php', 'Back to Deliverables');
 }
 
 /* Directors' Report has no spreadsheet form -- it is narrative text, not figures. */
 if ($docType === 'directors_report' && in_array($format, ['excel', 'xlsx'], true)) {
-    http_response_code(400);
-    exit('Directors Report is not available in Excel format.');
+    exitWithDownloadError('Directors Report is not available in Excel format.', 400, BASE_URL . 'deliverables/index.php', 'Back to Deliverables');
 }
 
 /* DEMO: Server-side enforcement — only allow PDF */
 if ($_isDemoExport && in_array($format, ['word', 'docx', 'xlsx', 'excel', 'html'], true)) {
-    http_response_code(403);
-    exit('Demo access allows PDF demo copy only. Please upgrade to generate final deliverables.');
+    exitWithDownloadError('Demo access allows PDF demo copy only. Please upgrade to generate final deliverables.', 403, BASE_URL . 'deliverables/index.php', 'Back to Deliverables');
 }
 
 $manualBundle = loadManualInputsWithCarryForward($pdo, $company_id, $fy_id, $fyName);
@@ -78,8 +75,7 @@ $fs = generateFinancialStatements(
 );
 
 if (!($fs['has_data'] ?? false)) {
-    http_response_code(404);
-    exit('No report data available for export.');
+    exitWithDownloadError('No report data available for export.', 404, BASE_URL . 'reports.php', 'Back to Financial Statements');
 }
 
 /* HARDENED: deliverables/index.php shows a "Delivery Blocked" banner using
@@ -88,19 +84,27 @@ if (!($fs['has_data'] ?? false)) {
    same conditions here so the block is real, not advisory. */
 $readiness = computeReadiness($pdo, $company_id, $fy_id, $fs);
 if ($readiness['validation']['blocking'] ?? false) {
-    http_response_code(403);
     $errorLines = array_map(
         static fn (array $e): string => '- ' . ($e['message'] ?? ''),
         $readiness['validation']['error_messages'] ?? []
     );
-    exit("This report cannot be downloaded yet -- unresolved validation errors:\n" . implode("\n", $errorLines));
+    exitWithDownloadError(
+        "This report cannot be downloaded yet -- unresolved validation errors:\n" . implode("\n", $errorLines),
+        403,
+        BASE_URL . 'review/index.php',
+        'Go to Review Centre'
+    );
 }
 
 $workflow = getWorkflow($company_id, $fy_id);
 $blockingDR = ($fs['entity_category'] ?? '') === 'corporate' && ($workflow['directors_report_prepared'] ?? 0) != 1;
 if ($blockingDR) {
-    http_response_code(403);
-    exit("This report cannot be downloaded yet -- the Directors' Report has not been finalised. Complete and save it on the Directors Report page first.");
+    exitWithDownloadError(
+        "This report cannot be downloaded yet -- the Directors' Report has not been finalised. Complete and save it on the Directors Report page first.",
+        403,
+        BASE_URL . 'directors_report.php',
+        'Go to Directors Report'
+    );
 }
 
 $subcategory = $fs['entity_subcategory'] ?? '';
@@ -120,8 +124,7 @@ if ($directorsReportDate === '') {
 
 if ($docType === 'directors_report') {
     if (($fs['entity_category'] ?? '') !== 'corporate') {
-        http_response_code(404);
-        exit('Directors Report is only available for corporate entities.');
+        exitWithDownloadError('Directors Report is only available for corporate entities.', 404, BASE_URL . 'reports.php', 'Back to Financial Statements');
     }
 
     $shareholders = getShareholders($pdo, $company_id, $fy_id);

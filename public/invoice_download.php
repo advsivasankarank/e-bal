@@ -3,17 +3,16 @@ require_once __DIR__ . '/../app/session_bootstrap.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/../app/helpers/invoice_helper.php';
+require_once __DIR__ . '/../app/helpers/download_error_helper.php';
 
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 if ($userId <= 0) {
-    http_response_code(401);
-    die('Unauthorized');
+    exitWithDownloadError('You must be signed in to download invoices.', 401, BASE_URL . 'login.php', 'Sign In');
 }
 
 $invoiceNumber = trim((string) ($_GET['invoice_number'] ?? ''));
 if (!$invoiceNumber) {
-    http_response_code(400);
-    die('Invoice number required');
+    exitWithDownloadError('Invoice number required.', 400, BASE_URL . 'invoice_history.php', 'Back to Invoices');
 }
 
 try {
@@ -29,8 +28,7 @@ try {
     $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$invoice) {
-        http_response_code(404);
-        die('Invoice not found');
+        exitWithDownloadError('Invoice not found.', 404, BASE_URL . 'invoice_history.php', 'Back to Invoices');
     }
 
     $pdfPath = $invoice['pdf_path'] ?? null;
@@ -41,14 +39,12 @@ try {
         $plan = $planStmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$plan) {
-            http_response_code(500);
-            die('Plan information not found');
+            exitWithDownloadError('Plan information not found.', 500, BASE_URL . 'invoice_history.php', 'Back to Invoices');
         }
 
         $pdfPath = generateInvoicePDF($pdo, $invoice, $plan);
         if (!$pdfPath) {
-            http_response_code(500);
-            die('Failed to generate invoice PDF');
+            exitWithDownloadError('Failed to generate invoice PDF.', 500, BASE_URL . 'invoice_history.php', 'Back to Invoices');
         }
 
         // Update PDF path in database
@@ -56,8 +52,7 @@ try {
     }
 
     if (!file_exists($pdfPath)) {
-        http_response_code(500);
-        die('Invoice file not found');
+        exitWithDownloadError('Invoice file not found.', 500, BASE_URL . 'invoice_history.php', 'Back to Invoices');
     }
 
     // Send PDF to browser
@@ -75,6 +70,5 @@ try {
         'error' => $e->getMessage(),
     ]);
 
-    http_response_code(500);
-    die('Error processing invoice download');
+    exitWithDownloadError('Error processing invoice download.', 500, BASE_URL . 'invoice_history.php', 'Back to Invoices');
 }
