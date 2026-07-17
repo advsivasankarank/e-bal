@@ -7,6 +7,7 @@ require_once __DIR__ . '/../app/helpers/directors_report_ai_helper.php';
 require_once __DIR__ . '/../app/helpers/share_capital_helper.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
+require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
 
 requireFullContext();
 
@@ -31,6 +32,21 @@ if (($fs['entity_category'] ?? '') !== 'corporate') {
     require_once __DIR__ . '/layouts/footer_v2.php';
     exit;
 }
+
+/* Keep balance_sheet_prepared/notes_prepared in sync here too -- this page
+   is a third entry point onto the same workflow flags financials.php and
+   reports.php maintain, and directors_report_prepared should never be
+   markable "done" while the statements it quotes figures from (PAT, net
+   worth, Financial Performance table) are themselves invalid or unbalanced. */
+$hasReportData = (bool) ($fs['has_data'] ?? false);
+$currentDiff = (float) ($fs['validation']['current_balance_difference'] ?? 0);
+$noteCompleteness = $fs['validation']['note_completeness'] ?? ['missing' => [], 'is_complete' => true];
+$validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
+syncWorkflowFromValidation($pdo, $company_id, $fy_id, $hasReportData, $validationResult, $currentDiff, $noteCompleteness);
+$workflow = getWorkflow($company_id, $fy_id);
+$statementsReady = $hasReportData
+    && ($workflow['balance_sheet_prepared'] ?? 0) == 1
+    && ($workflow['notes_prepared'] ?? 0) == 1;
 
 $loadedDirectorsReport = loadDirectorsReportSections($manualBundle, $fs, $companyName, $fyName, $shareholders);
 $sectionDefinitions = $loadedDirectorsReport['definitions'];
@@ -79,9 +95,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $payload['directors_report_' . $key] = $value;
         }
         saveManualInputs($pdo, $company_id, $fy_id, $payload);
-        updateWorkflow($company_id, $fy_id, 'directors_report_prepared');
         $draftSource = 'Saved Draft';
-        $infoMessage = 'Directors report draft saved.';
+        if ($statementsReady) {
+            updateWorkflow($company_id, $fy_id, 'directors_report_prepared');
+            $infoMessage = 'Directors report draft saved and finalised.';
+        } else {
+            $infoMessage = 'Draft saved, but not finalised -- the Balance Sheet must balance and Notes must be complete before this report can be marked ready for delivery.';
+        }
     }
 }
 
@@ -106,6 +126,14 @@ require_once __DIR__ . '/layouts/header_v2.php';
 
 <?php if ($infoMessage !== ''): ?>
     <div class="card section-card"><?= htmlspecialchars($infoMessage) ?></div>
+<?php endif; ?>
+
+<?php if (!$statementsReady): ?>
+    <div class="card section-card" style="background:#fffbeb;border:1px solid #fcd34d;">
+        <strong style="color:#92400e;">Not yet finalisable:</strong>
+        <span style="color:#475569;">The Balance Sheet must balance and Notes must be complete before this Directors' Report can be marked ready for download/delivery. You can still draft and save it below.</span>
+        <a href="<?= BASE_URL ?>reports.php#balance-sheet" style="margin-left:6px;">Review Financial Statements &rarr;</a>
+    </div>
 <?php endif; ?>
 
 <div class="card section-card">
