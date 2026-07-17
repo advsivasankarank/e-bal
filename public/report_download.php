@@ -48,15 +48,16 @@ if (!in_array($format, $allowedFormats, true)) {
 }
 
 $docType = strtolower(trim((string) ($_GET['doc'] ?? 'financial_statements')));
-$allowedDocTypes = ['financial_statements', 'directors_report'];
+$allowedDocTypes = ['financial_statements', 'directors_report', 'management_observations'];
 
 if (!in_array($docType, $allowedDocTypes, true)) {
     exitWithDownloadError('Unsupported document type.', 400, BASE_URL . 'deliverables/index.php', 'Back to Deliverables');
 }
 
-/* Directors' Report has no spreadsheet form -- it is narrative text, not figures. */
-if ($docType === 'directors_report' && in_array($format, ['excel', 'xlsx'], true)) {
-    exitWithDownloadError('Directors Report is not available in Excel format.', 400, BASE_URL . 'deliverables/index.php', 'Back to Deliverables');
+/* Directors' Report and the Management Observations Report have no
+   spreadsheet form -- both are narrative text, not figures. */
+if (in_array($docType, ['directors_report', 'management_observations'], true) && in_array($format, ['excel', 'xlsx'], true)) {
+    exitWithDownloadError('This document is not available in Excel format.', 400, BASE_URL . 'deliverables/index.php', 'Back to Deliverables');
 }
 
 /* DEMO: Server-side enforcement — only allow PDF */
@@ -81,30 +82,36 @@ if (!($fs['has_data'] ?? false)) {
 /* HARDENED: deliverables/index.php shows a "Delivery Blocked" banner using
    this exact same readiness/workflow logic, but that was UI-only -- nothing
    stopped a direct request to this endpoint from bypassing it. Re-check the
-   same conditions here so the block is real, not advisory. */
-$readiness = computeReadiness($pdo, $company_id, $fy_id, $fs);
-if ($readiness['validation']['blocking'] ?? false) {
-    $errorLines = array_map(
-        static fn (array $e): string => '- ' . ($e['message'] ?? ''),
-        $readiness['validation']['error_messages'] ?? []
-    );
-    exitWithDownloadError(
-        "This report cannot be downloaded yet -- unresolved validation errors:\n" . implode("\n", $errorLines),
-        403,
-        BASE_URL . 'review/index.php',
-        'Go to Review Centre'
-    );
-}
+   same conditions here so the block is real, not advisory.
+   The Management Observations Report is deliberately EXEMPT from both
+   gates below -- it exists specifically to disclose issues like an
+   unbalanced Balance Sheet to the client, so it must remain downloadable
+   even when the statements themselves are blocked. */
+if ($docType !== 'management_observations') {
+    $readiness = computeReadiness($pdo, $company_id, $fy_id, $fs);
+    if ($readiness['validation']['blocking'] ?? false) {
+        $errorLines = array_map(
+            static fn (array $e): string => '- ' . ($e['message'] ?? ''),
+            $readiness['validation']['error_messages'] ?? []
+        );
+        exitWithDownloadError(
+            "This report cannot be downloaded yet -- unresolved validation errors:\n" . implode("\n", $errorLines),
+            403,
+            BASE_URL . 'review/index.php',
+            'Go to Review Centre'
+        );
+    }
 
-$workflow = getWorkflow($company_id, $fy_id);
-$blockingDR = ($fs['entity_category'] ?? '') === 'corporate' && ($workflow['directors_report_prepared'] ?? 0) != 1;
-if ($blockingDR) {
-    exitWithDownloadError(
-        "This report cannot be downloaded yet -- the Directors' Report has not been finalised. Complete and save it on the Directors Report page first.",
-        403,
-        BASE_URL . 'directors_report.php',
-        'Go to Directors Report'
-    );
+    $workflow = getWorkflow($company_id, $fy_id);
+    $blockingDR = ($fs['entity_category'] ?? '') === 'corporate' && ($workflow['directors_report_prepared'] ?? 0) != 1;
+    if ($blockingDR) {
+        exitWithDownloadError(
+            "This report cannot be downloaded yet -- the Directors' Report has not been finalised. Complete and save it on the Directors Report page first.",
+            403,
+            BASE_URL . 'directors_report.php',
+            'Go to Directors Report'
+        );
+    }
 }
 
 $subcategory = $fs['entity_subcategory'] ?? '';
@@ -122,7 +129,16 @@ if ($directorsReportDate === '') {
     $directorsReportDate = date('d.m.Y');
 }
 
-if ($docType === 'directors_report') {
+if ($docType === 'management_observations') {
+    require_once __DIR__ . '/../app/helpers/management_findings_helper.php';
+    syncAutoDetectedFindings($pdo, $company_id, $fy_id);
+    $includedFindings = getManagementFindings($pdo, $company_id, $fy_id, 'included');
+    $recurringFindings = getRecurringUnresolvedFindings($pdo, $company_id, $fy_id);
+
+    $documentLabel = 'management-observations';
+    $title = 'Management Observations Report - ' . $companyName . ' - ' . $fyName;
+    $htmlBody = renderManagementObservationsDocument($includedFindings, $recurringFindings, $companyName, $fyName, $fs['company_meta'] ?? []);
+} elseif ($docType === 'directors_report') {
     if (($fs['entity_category'] ?? '') !== 'corporate') {
         exitWithDownloadError('Directors Report is only available for corporate entities.', 404, BASE_URL . 'reports.php', 'Back to Financial Statements');
     }

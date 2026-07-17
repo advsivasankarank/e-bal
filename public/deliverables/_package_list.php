@@ -46,6 +46,23 @@ if ($entityCategory === 'corporate') {
     ];
 }
 
+/* Management Observations Report -- applies to every entity type (findings
+   detection isn't corporate-specific), and is deliberately independent of
+   $hasReportData/statement readiness: it exists partly to disclose an
+   unbalanced Balance Sheet, so it must stay offerable even then. "Ready"
+   here means the CA has triaged every auto-detected finding (none left
+   pending), not that anything was necessarily included -- an empty report
+   is a valid, reviewed position. */
+require_once __DIR__ . '/../../app/helpers/management_findings_helper.php';
+$pendingFindingsCount = count(getManagementFindings($pdo, $company_id, $fy_id, 'pending_review'));
+$docs[] = [
+    'name' => 'Management Observations Report',
+    'ready' => $pendingFindingsCount === 0,
+    'formats' => ['pdf', 'docx'],
+    'fix_url' => BASE_URL . 'findings_recommendations.php',
+    'fix_label' => $pendingFindingsCount > 0 ? ($pendingFindingsCount . ' finding(s) awaiting review') : 'Review Findings',
+];
+
 $readyCount = count(array_filter($docs, fn($d) => $d['ready']));
 $totalCount = count($docs);
 ?>
@@ -54,7 +71,8 @@ $totalCount = count($docs);
 
 <?php foreach ($docs as $doc): ?>
 <?php
-$docParam = $doc['name'] === 'Directors Report' ? 'directors_report' : 'financial_statements';
+$docParam = $doc['name'] === 'Directors Report' ? 'directors_report'
+    : ($doc['name'] === 'Management Observations Report' ? 'management_observations' : 'financial_statements');
 $fixUrl = $doc['fix_url'] ?? (BASE_URL . 'reports.php#balance-sheet');
 $fixLabel = $doc['fix_label'] ?? 'Go to Financial Statements';
 ?>

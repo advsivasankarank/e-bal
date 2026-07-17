@@ -239,7 +239,8 @@ $navData = getWorkflowNavigation($pdo, $company_id, $fy_id);
 echo renderWorkflowNavigation($navData);
 ?>
 
-<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    <a class="btn btn-sm btn-primary" href="<?= BASE_URL ?>findings_recommendations.php">Findings &amp; Recommendations (Management Letter)</a>
     <a class="btn btn-sm" href="<?= BASE_URL ?>assignment_home.php">&larr; Back to Assignment</a>
 </div>
 

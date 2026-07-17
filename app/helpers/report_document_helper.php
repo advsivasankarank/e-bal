@@ -649,6 +649,67 @@ function renderFinancialReportDocument(array $fs, string $companyName, string $f
     return (string) ob_get_clean();
 }
 
+/**
+ * "Management Observations Report" -- the client-facing export of
+ * app/helpers/management_findings_helper.php's included findings. Only
+ * findings the CA has explicitly marked 'included' (with a recommendation)
+ * appear here; 'pending_review' and 'excluded' findings never reach this
+ * document, per the "CA must review & promote each one" design decision.
+ */
+function renderManagementObservationsDocument(array $includedFindings, array $recurringFindings, string $companyName, string $fyName, array $company_meta = []): string
+{
+    $cin = trim((string) ($company_meta['cin'] ?? ''));
+    $registeredAddress = trim((string) ($company_meta['registered_address'] ?? ''));
+
+    $severityLabel = static function (string $s): string {
+        return ['critical' => 'Critical', 'significant' => 'Significant', 'observation' => 'Observation'][$s] ?? ucfirst($s);
+    };
+
+    $recurringByKey = [];
+    foreach ($recurringFindings as $r) {
+        $recurringByKey[$r['finding_key']][] = $r;
+    }
+
+    ob_start();
+    ?>
+    <div class="report-shell">
+        <div class="ebal-stat-header ebal-stat-header--compact">
+            <div class="ebal-company-name"><?= htmlspecialchars($companyName) ?></div>
+            <?php if ($cin): ?><div class="ebal-company-detail">CIN: <?= htmlspecialchars($cin) ?></div><?php endif; ?>
+            <?php if ($registeredAddress): ?><div class="ebal-company-detail">Registered Office: <?= htmlspecialchars($registeredAddress) ?></div><?php endif; ?>
+        </div>
+
+        <h2 class="report-page-title">Management Observations Report</h2>
+        <p class="report-page-subtitle">Financial Year <?= htmlspecialchars($fyName) ?> -- Observations and recommendations arising from the preparation of the financial statements, for the attention of management.</p>
+
+        <?php if ($includedFindings === []): ?>
+            <p style="margin-top:24px;">No matters have been identified for management's attention for this financial year.</p>
+        <?php else: ?>
+            <?php foreach ($includedFindings as $i => $f): ?>
+            <div style="margin:20px 0;padding:14px 18px;border:1px solid #e2e8f0;border-radius:8px;page-break-inside:avoid;">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+                    <strong style="font-size:1rem;"><?= ($i + 1) ?>. <?= htmlspecialchars((string) $f['title']) ?></strong>
+                    <span style="font-size:0.78rem;font-weight:600;text-transform:uppercase;color:<?= $f['severity'] === 'critical' ? '#b91c1c' : ($f['severity'] === 'significant' ? '#b45309' : '#475569') ?>;"><?= $severityLabel((string) $f['severity']) ?></span>
+                </div>
+                <p style="margin:4px 0;"><?= nl2br(htmlspecialchars((string) $f['detected_message'])) ?></p>
+                <?php if (trim((string) ($f['ca_recommendation'] ?? '')) !== ''): ?>
+                <p style="margin:8px 0 0;"><strong>Recommendation:</strong> <?= nl2br(htmlspecialchars((string) $f['ca_recommendation'])) ?></p>
+                <?php endif; ?>
+                <?php if (!empty($recurringByKey[$f['finding_key']])): ?>
+                <p style="margin:8px 0 0;font-size:0.82rem;color:#b45309;">
+                    &#9888; Also raised in <?= htmlspecialchars(implode(', ', array_map(static fn ($r) => 'FY ' . $r['fy_label'], $recurringByKey[$f['finding_key']]))) ?> -- still unresolved.
+                </p>
+                <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+
+        <p style="margin-top:32px;font-size:0.82rem;color:#64748b;">This report is prepared for the internal use of management and is based on information available at the time of preparing the financial statements. It does not constitute an audit opinion or assurance report.</p>
+    </div>
+    <?php
+    return (string) ob_get_clean();
+}
+
 function wrapReportHtmlDocument(string $title, string $bodyHtml): string
 {
     $footer = <<<'FOOTER'
