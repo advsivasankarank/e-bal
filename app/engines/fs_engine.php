@@ -96,6 +96,21 @@ function sumLines(array $lines, string $key): float
     return $total;
 }
 
+/**
+ * True for the small set of ledger names Tally uses for the brought-forward
+ * P&L balance itself (as opposed to other reserve components -- General
+ * Reserve, Capital Reserve, Securities Premium, etc. -- that also classify
+ * under the same 'reserves' schedule code but are NOT part of the P&L
+ * roll-forward). Same canonical name list the ReconHub risk detector uses
+ * (app/services/reconhub_data_loading_service.php) to flag a P&L ledger
+ * that isn't mapped to 'reserves'.
+ */
+function isProfitLossLedgerName(string $name): bool
+{
+    static $variants = ['profit & loss a/c', 'profit and loss a/c', 'profit & loss account', 'profit and loss account', 'p&l a/c', 'p and l a/c', 'surplus in statement of profit and loss'];
+    return in_array(strtolower(trim($name)), $variants, true);
+}
+
 function buildDetailedNote(string $title, array $lines, string $emptyLabel = 'No ledger breakup available'): array
 {
     if ($lines === []) {
@@ -208,9 +223,19 @@ function buildInventoryChangeSection(array $manualInputs, array $previousManualI
 
 function buildOtherEquitySection(array $classified, array $manualInputs, array $previousManualInputs, int $noteNo, string $title): array
 {
-    $openingFromTally = classifiedPreviousAmount($classified, 'reserves');
+    /* The 'reserves' schedule code lumps together every reserve component --
+       General Reserve, Capital Reserve, Securities Premium, AND the P&L
+       Account ledger itself. Note 2's "Opening balance in P&L Account" must
+       come from just the P&L-account ledger(s), not the whole group total,
+       or it silently absorbs unrelated reserves whenever a company has more
+       than one reserve ledger. */
+    $reserveLines = buildLedgerLines($classified, ['reserves']);
+    $plLines = array_values(array_filter($reserveLines, static fn (array $line): bool => isProfitLossLedgerName((string) $line['label'])));
+    $otherReserveLines = array_values(array_filter($reserveLines, static fn (array $line): bool => !isProfitLossLedgerName((string) $line['label'])));
+
+    $openingFromTally = sumLines($plLines, 'previous');
     if ($openingFromTally == 0.0) {
-        $openingFromTally = classifiedAmount($classified, 'reserves');
+        $openingFromTally = sumLines($plLines, 'current');
     }
     $previousOpening = manualAmount($previousManualInputs, 'note2_opening_profit_loss', 0);
     $previousMovement = buildCompanyProfitAfterTax($classified, $manualInputs, $previousManualInputs, true);
@@ -219,10 +244,9 @@ function buildOtherEquitySection(array $classified, array $manualInputs, array $
     $currentOpening = manualAmount($manualInputs, 'note2_opening_profit_loss', $openingFromTally !== 0.0 ? $openingFromTally : $previousClosing);
     $currentMovement = buildCompanyProfitAfterTax($classified, $manualInputs, $previousManualInputs, false);
     $currentClosing = $currentOpening + $currentMovement;
-    $reserveLines = buildLedgerLines($classified, ['reserves']);
-    $reserveCurrent = sumLines($reserveLines, 'current');
-    $reservePrevious = sumLines($reserveLines, 'previous');
-    $lines = $reserveLines;
+    $otherReserveCurrent = sumLines($otherReserveLines, 'current');
+    $otherReservePrevious = sumLines($otherReserveLines, 'previous');
+    $lines = $otherReserveLines;
     $lines[] = [
         'label' => 'Opening balance in Profit and Loss Account',
         'current' => $currentOpening,
@@ -239,6 +263,20 @@ function buildOtherEquitySection(array $classified, array $manualInputs, array $
         'previous' => $previousClosing,
     ];
 
+    /* Only fold the carried-forward opening balance into the Balance Sheet
+       total when this FY actually has some reserves activity of its own
+       (current-year P&L ledger data, other reserves, computed movement, or
+       an explicit manual entry). A brand-new FY with no trial balance
+       imported yet has $currentOpening carried forward from last year but
+       nothing on the asset side to match it -- folding it in there would
+       manufacture a Balance Sheet mismatch out of an FY nobody has started
+       populating yet. */
+    $hasCurrentYearReserveActivity = sumLines($plLines, 'current') != 0.0
+        || $otherReserveCurrent != 0.0
+        || $currentMovement != 0.0
+        || trim((string) ($manualInputs['note2_opening_profit_loss'] ?? '')) !== '';
+    $currentTotal = $hasCurrentYearReserveActivity ? ($otherReserveCurrent + $currentClosing) : $otherReserveCurrent;
+
     return [
         'title' => $title,
         'note_no' => $noteNo,
@@ -248,8 +286,8 @@ function buildOtherEquitySection(array $classified, array $manualInputs, array $
         'movement' => $currentMovement,
         'previous_movement' => $previousMovement,
         'lines' => $lines,
-        'current_total' => $reserveCurrent + $currentMovement,
-        'previous_total' => $reservePrevious + $previousMovement,
+        'current_total' => $currentTotal,
+        'previous_total' => $otherReservePrevious + $previousClosing,
     ];
 }
 
