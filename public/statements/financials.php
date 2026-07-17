@@ -37,6 +37,16 @@ $hasPreviousShareCapitalDetail = trim((string) ($manualBundle['previous']['share
     || !empty($prevShareholders);
 $showShareCapitalCarryForwardPrompt = !$hasCurrentShareCapitalDetail && $hasPreviousShareCapitalDetail;
 
+/* Closing stock (Note 24) has no sensible auto-fill -- Tally only ever gives
+   an opening-stock-style ledger total, never a closing figure -- so it must
+   be entered fresh every year. Flag it as incomplete whenever none of the
+   three closing components have been saved for the current year. */
+$hasClosingStockDetail = trim((string) ($manualBundle['saved_current']['note24_closing_finished_goods'] ?? '')) !== ''
+    || trim((string) ($manualBundle['saved_current']['note24_closing_work_in_progress'] ?? '')) !== ''
+    || trim((string) ($manualBundle['saved_current']['note24_closing_stock_in_trade'] ?? '')) !== '';
+
+$manualNoteDataIncomplete = !$hasCurrentShareCapitalDetail || !$hasClosingStockDetail;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') === 'carry_forward_share_capital') {
     requireCsrfToken();
     saveManualInputs($pdo, $company_id, $fy_id, [
@@ -256,6 +266,21 @@ echo renderWorkflowNavigation($navData);
 </div>
 <?php endif; ?>
 
+<?php if ($hasReportData && $isCorporate && $manualNoteDataIncomplete): ?>
+<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;margin-bottom:14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:0.85rem;">
+    <span>&#9998;</span>
+    <div style="flex:1;">
+        <strong style="color:#92400e;">Manual entry needed:</strong>
+        <span style="color:#475569;">
+            <?php if (!$hasCurrentShareCapitalDetail): ?>Note 1 (Share Capital) details -- authorised/issued shares, face value, shareholders &gt;5%<?= !$hasClosingStockDetail ? ' and ' : '' ?><?php endif; ?>
+            <?php if (!$hasClosingStockDetail): ?>Closing Stock for the year (Tally only provides an opening figure)<?php endif; ?>
+            <?= !$hasCurrentShareCapitalDetail || !$hasClosingStockDetail ? ' -- required for a complete Balance Sheet and Note 1/Note 24.' : '' ?>
+        </span>
+    </div>
+    <button type="button" class="btn" onclick="document.getElementById('fsWorkspace').classList.add('input-open');document.getElementById('fsTogglePanel').innerHTML='&#9664; Hide';document.getElementById('fsInputPanel').scrollIntoView({behavior:'smooth'});" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Enter Details</button>
+</div>
+<?php endif; ?>
+
 <?php if (!$hasReportData): ?>
     <div class="fs-no-data">
         <div class="icon">&#128202;</div>
@@ -408,7 +433,7 @@ echo renderWorkflowNavigation($navData);
 <?php endif; ?>
 
 <!-- Three-Panel Workspace -->
-<div class="fs-workspace" id="fsWorkspace">
+<div class="fs-workspace<?= $manualNoteDataIncomplete ? ' input-open' : '' ?>" id="fsWorkspace">
     <!-- LEFT: Sections -->
     <div class="fs-section-sidebar">
         <h3 id="fsSectionTitle">Sections</h3>
