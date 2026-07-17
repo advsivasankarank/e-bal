@@ -57,6 +57,12 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
             $isEmpty = false;
         }
     }
+    /* Manual disclosure notes (Contingent Liabilities, Commitments, MSME,
+       Related Party) always carry text -- default boilerplate at minimum --
+       so they're never "empty" even though they have no rupee lines. */
+    if (($section['custom_type'] ?? '') === 'manual_disclosure') {
+        $isEmpty = trim((string) ($section['disclosure_text'] ?? '')) === '';
+    }
 ?>
     <div class="note-block" id="note-<?= $noteNo ?>">
     <h3 class="note-heading">
@@ -161,6 +167,33 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
             <tr><td><b>Total</b></td><td class="figure"><b><?= \format_inr($currentTotal) ?></b></td><td class="figure previous-year"><b><?= \format_inr($previousTotal) ?></b></td></tr>
             </tfoot>
         </table>
+    <?php elseif (($section['custom_type'] ?? '') === 'manual_disclosure'): ?>
+        <p><?= nl2br(htmlspecialchars((string) ($section['disclosure_text'] ?? ''))) ?></p>
+    <?php elseif (($section['custom_type'] ?? '') === 'eps'): ?>
+        <table class="note-table" border="1" width="100%" cellpadding="5">
+            <thead>
+            <tr>
+                <th class="particulars">Particulars</th>
+                <th class="figure current-year">Current Year</th>
+                <th class="figure previous-year">Previous Year</th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($lines as $i => $line): ?>
+                <tr>
+                    <td><?= htmlspecialchars($line['label'] ?? '') ?></td>
+                    <?php if ($i === 1): ?>
+                        <td class="figure"><?= number_format((float) ($line['current'] ?? 0), 0) ?></td>
+                        <td class="figure previous-year"><?= number_format((float) ($line['previous'] ?? 0), 0) ?></td>
+                    <?php else: ?>
+                        <td class="figure"><?= \format_inr((float) ($line['current'] ?? 0)) ?></td>
+                        <td class="figure previous-year"><?= \format_inr((float) ($line['previous'] ?? 0)) ?></td>
+                    <?php endif; ?>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p style="font-size:0.85rem;color:#64748b;">Weighted average number of equity shares is approximated as the simple average of opening and closing equity share counts for the year, in the absence of exact issue/buy-back dates.</p>
     <?php else: ?>
         <table class="note-table" border="1" width="100%" cellpadding="5">
             <thead>

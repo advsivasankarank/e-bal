@@ -113,6 +113,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'note24_closing_work_in_progress' => trim((string) ($_POST['note24_closing_work_in_progress'] ?? '')),
         'note24_closing_stock_in_trade' => trim((string) ($_POST['note24_closing_stock_in_trade'] ?? '')),
         'tax_provision' => trim((string) ($_POST['tax_provision'] ?? '')),
+        'note_disclosure_cl' => trim((string) ($_POST['note_disclosure_cl'] ?? '')),
+        'note_disclosure_com' => trim((string) ($_POST['note_disclosure_com'] ?? '')),
+        'note_disclosure_msme' => trim((string) ($_POST['note_disclosure_msme'] ?? '')),
+        'note_disclosure_rpt' => trim((string) ($_POST['note_disclosure_rpt'] ?? '')),
     ];
 
     $derivedOpeningFinishedGoods = $manualBundle['previous']['note24_closing_finished_goods'] ?? $manualBundle['current']['note24_opening_finished_goods'] ?? '';
@@ -144,6 +148,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'note24_closing_work_in_progress' => $postedManualInputs['note24_closing_work_in_progress'],
         'note24_closing_stock_in_trade' => $postedManualInputs['note24_closing_stock_in_trade'],
         'tax_provision' => $postedManualInputs['tax_provision'],
+        'note_disclosure_cl' => $postedManualInputs['note_disclosure_cl'],
+        'note_disclosure_com' => $postedManualInputs['note_disclosure_com'],
+        'note_disclosure_msme' => $postedManualInputs['note_disclosure_msme'],
+        'note_disclosure_rpt' => $postedManualInputs['note_disclosure_rpt'],
     ]);
 
     $shareClassTypes = $_POST['share_class_type'] ?? [];
@@ -1032,6 +1040,26 @@ require_once __DIR__ . '/layouts/header_v2.php';
                         <label for="tax_provision">Provision for Tax, Current Year (&#8377;)</label>
                         <input id="tax_provision" name="tax_provision" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['tax_provision'] ?? '')) ?>">
                     </div>
+
+                    <h4 style="margin:16px 0 8px;font-size:0.85rem;color:var(--muted);">Disclosure Notes</h4>
+                    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">Each starts from a standard "nothing to disclose" position -- edit only if this company actually has one of these.</div>
+                    <div class="form-group">
+                        <label for="note_disclosure_cl">Contingent Liabilities</label>
+                        <textarea id="note_disclosure_cl" name="note_disclosure_cl" rows="2"><?= htmlspecialchars((string) ($manualBundle['current']['note_disclosure_cl'] ?? '')) ?></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="note_disclosure_com">Commitments</label>
+                        <textarea id="note_disclosure_com" name="note_disclosure_com" rows="2"><?= htmlspecialchars((string) ($manualBundle['current']['note_disclosure_com'] ?? '')) ?></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="note_disclosure_msme">MSME Disclosure</label>
+                        <textarea id="note_disclosure_msme" name="note_disclosure_msme" rows="2"><?= htmlspecialchars((string) ($manualBundle['current']['note_disclosure_msme'] ?? '')) ?></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="note_disclosure_rpt">Related Party Transactions</label>
+                        <textarea id="note_disclosure_rpt" name="note_disclosure_rpt" rows="2"><?= htmlspecialchars((string) ($manualBundle['current']['note_disclosure_rpt'] ?? '')) ?></textarea>
+                    </div>
+
                     <button class="btn btn-primary" type="submit" style="width:100%;">Save Manual Inputs</button>
                 </form>
                 <script>

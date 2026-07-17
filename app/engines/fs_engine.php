@@ -167,6 +167,105 @@ function buildDetailedNote(string $title, array $lines, string $emptyLabel = 'No
     ];
 }
 
+/**
+ * Contingent Liabilities, Commitments, MSME Disclosure and Related Party
+ * Transactions are narrative disclosures, not ledger-derived figures -- there
+ * is nothing to classify a Trial Balance ledger into for any of them. Each
+ * starts from a standard, editable boilerplate position (the common "nothing
+ * to disclose" case) that the CA overrides via a manual-input textarea when
+ * the company actually has one of these to report.
+ */
+function manualDisclosureDefaultText(string $masterCode): string
+{
+    switch ($masterCode) {
+        case 'CL':
+            return 'The Company does not have any contingent liabilities as at the Balance Sheet date, other than those disclosed above, if any.';
+        case 'COM':
+            return 'The Company does not have any capital or other commitments outstanding as at the Balance Sheet date, other than those disclosed above, if any.';
+        case 'MSME':
+            return 'Based on the information available with the Company regarding the status of suppliers as defined under the Micro, Small and Medium Enterprises Development Act, 2006 ("MSMED Act"), there are no amounts overdue to Micro and Small Enterprises as at the Balance Sheet date, and no interest has been paid or is payable under the MSMED Act during the year.';
+        case 'RPT':
+            return 'There were no related party transactions during the year that require disclosure under Accounting Standard (AS) 18, other than managerial remuneration (if any) disclosed elsewhere in these financial statements.';
+        default:
+            return '';
+    }
+}
+
+function manualDisclosureInputKey(string $masterCode): string
+{
+    return 'note_disclosure_' . strtolower($masterCode);
+}
+
+function buildManualDisclosureSection(string $masterCode, string $title, int $noteNo, array $manualInputs): array
+{
+    $key = manualDisclosureInputKey($masterCode);
+    $text = trim((string) ($manualInputs[$key] ?? ''));
+    if ($text === '') {
+        $text = manualDisclosureDefaultText($masterCode);
+    }
+
+    return [
+        'title' => $title,
+        'note_no' => $noteNo,
+        'master_code' => $masterCode,
+        'custom_type' => 'manual_disclosure',
+        'lines' => [],
+        'current_total' => 0.0,
+        'previous_total' => 0.0,
+        'disclosure_text' => $text,
+    ];
+}
+
+/**
+ * Basic EPS (AS-20) = Profit After Tax attributable to equity shareholders
+ * divided by the weighted average number of equity shares outstanding
+ * during the year. Share issues/buybacks don't carry issue dates anywhere
+ * in this app (Note 1's per-share-type rows only track year-total
+ * movement), so the weighted average is approximated as the simple average
+ * of opening and closing equity share counts -- exact for a company with
+ * no share movement during the year, and disclosed as an approximation
+ * otherwise rather than silently presented as precise.
+ */
+function buildEpsSection(float $pat, float $previousPat, array $shareCapitalClasses, array $previousShareCapitalClasses, int $noteNo, string $title): array
+{
+    $sumEquityShares = static function (array $classes, string $openingKey, string $closingKey): array {
+        $opening = 0.0;
+        $closing = 0.0;
+        foreach ($classes as $row) {
+            if (stripos((string) ($row['share_type'] ?? ''), 'equity') === false) {
+                continue;
+            }
+            $opening += (float) ($row[$openingKey] ?? 0);
+            $closing += (float) ($row[$closingKey] ?? 0);
+        }
+        return [$opening, $closing];
+    };
+
+    [$openingShares, $closingShares] = $sumEquityShares($shareCapitalClasses, 'opening_shares', 'closing_shares');
+    $weightedAvgShares = $openingShares > 0.0 || $closingShares > 0.0 ? ($openingShares + $closingShares) / 2 : $closingShares;
+
+    [$prevOpeningShares, $prevClosingShares] = $sumEquityShares($previousShareCapitalClasses, 'opening_shares', 'closing_shares');
+    $prevWeightedAvgShares = $prevOpeningShares > 0.0 || $prevClosingShares > 0.0 ? ($prevOpeningShares + $prevClosingShares) / 2 : $prevClosingShares;
+
+    $eps = $weightedAvgShares > 0.0 ? round($pat / $weightedAvgShares, 2) : 0.0;
+    $prevEps = $prevWeightedAvgShares > 0.0 ? round($previousPat / $prevWeightedAvgShares, 2) : 0.0;
+
+    return [
+        'title' => $title,
+        'note_no' => $noteNo,
+        'master_code' => 'EPS',
+        'custom_type' => 'eps',
+        'lines' => [
+            ['label' => 'Profit After Tax attributable to Equity Shareholders (₹)', 'current' => $pat, 'previous' => $previousPat],
+            ['label' => 'Weighted Average Number of Equity Shares Outstanding', 'current' => $weightedAvgShares, 'previous' => $prevWeightedAvgShares],
+            ['label' => 'Basic & Diluted Earnings Per Share (₹)', 'current' => $eps, 'previous' => $prevEps],
+        ],
+        'current_total' => $eps,
+        'previous_total' => $prevEps,
+        'is_approximation' => true,
+    ];
+}
+
 function assignSequentialNoteMetadata(array $sections, array $fallbackTitles = []): array
 {
     foreach ($sections as $index => &$section) {
@@ -760,6 +859,11 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
             );
             $section['master_code'] = $masterCode;
             $sections[] = $section;
+            continue;
+        }
+
+        if (in_array($masterCode, ['CL', 'COM', 'MSME', 'RPT'], true)) {
+            $sections[] = buildManualDisclosureSection($masterCode, $title, (int) $noteNo, $manualInputs);
             continue;
         }
 
@@ -1542,6 +1646,19 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
             $previousShareCapitalClasses = $prevFYId > 0 ? getShareCapitalClasses($pdo, $company_id, $prevFYId) : [];
             $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs, $shareholders, $shareCapitalClasses, $previousShareCapitalClasses);
             $data = buildCompanySummaryFromNotes($classified, $notes, $fyDisplay);
+            foreach ($notes['sections'] as $sectionIndex => $sectionRow) {
+                if (($sectionRow['master_code'] ?? '') === 'EPS') {
+                    $notes['sections'][$sectionIndex] = buildEpsSection(
+                        (float) ($data['pat'] ?? 0),
+                        (float) ($data['prev_pat'] ?? 0),
+                        $shareCapitalClasses,
+                        $previousShareCapitalClasses,
+                        (int) ($sectionRow['note_no'] ?? 33),
+                        (string) ($sectionRow['title'] ?? 'Earnings Per Share')
+                    );
+                    break;
+                }
+            }
             $formatTemplate = __DIR__ . '/../../public/reports_dashboard/formats/company_format.php';
             $notesTemplate = __DIR__ . '/../../public/reports_dashboard/formats/notes_company.php';
             $title = 'Schedule III Financial Statements';

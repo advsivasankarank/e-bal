@@ -146,6 +146,26 @@ if (!isset($isCorporate)) return;
             <label for="note24_closing_stock_in_trade">Closing Stock-in-Trade</label>
             <input id="note24_closing_stock_in_trade" name="note24_closing_stock_in_trade" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['note24_closing_stock_in_trade'] ?? '')) ?>">
         </div>
+
+        <h4 style="margin:16px 0 8px;font-size:0.85rem;color:var(--muted);">Disclosure Notes</h4>
+        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">Each starts from a standard "nothing to disclose" position -- edit only if this company actually has one of these.</div>
+        <div class="form-group">
+            <label for="note_disclosure_cl">Contingent Liabilities</label>
+            <textarea id="note_disclosure_cl" name="note_disclosure_cl" rows="2"><?= htmlspecialchars((string) ($manualBundle['current']['note_disclosure_cl'] ?? '')) ?></textarea>
+        </div>
+        <div class="form-group">
+            <label for="note_disclosure_com">Commitments</label>
+            <textarea id="note_disclosure_com" name="note_disclosure_com" rows="2"><?= htmlspecialchars((string) ($manualBundle['current']['note_disclosure_com'] ?? '')) ?></textarea>
+        </div>
+        <div class="form-group">
+            <label for="note_disclosure_msme">MSME Disclosure</label>
+            <textarea id="note_disclosure_msme" name="note_disclosure_msme" rows="2"><?= htmlspecialchars((string) ($manualBundle['current']['note_disclosure_msme'] ?? '')) ?></textarea>
+        </div>
+        <div class="form-group">
+            <label for="note_disclosure_rpt">Related Party Transactions</label>
+            <textarea id="note_disclosure_rpt" name="note_disclosure_rpt" rows="2"><?= htmlspecialchars((string) ($manualBundle['current']['note_disclosure_rpt'] ?? '')) ?></textarea>
+        </div>
+
         <button class="btn btn-primary" type="submit" style="width:100%;">Save Adjustments</button>
     </form>
     <script>

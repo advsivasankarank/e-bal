@@ -118,6 +118,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'tax_provision' => trim((string) ($_POST['tax_provision'] ?? '')),
         'note24_opening_stock_in_trade' => trim((string) ($_POST['note24_opening_stock_in_trade'] ?? '')),
         'note24_closing_stock_in_trade' => trim((string) ($_POST['note24_closing_stock_in_trade'] ?? '')),
+        'note_disclosure_cl' => trim((string) ($_POST['note_disclosure_cl'] ?? '')),
+        'note_disclosure_com' => trim((string) ($_POST['note_disclosure_com'] ?? '')),
+        'note_disclosure_msme' => trim((string) ($_POST['note_disclosure_msme'] ?? '')),
+        'note_disclosure_rpt' => trim((string) ($_POST['note_disclosure_rpt'] ?? '')),
     ];
     $derivedOpeningFinishedGoods = $manualBundle['previous']['note24_closing_finished_goods'] ?? $manualBundle['current']['note24_opening_finished_goods'] ?? '';
     $derivedOpeningWip = $manualBundle['previous']['note24_closing_work_in_progress'] ?? $manualBundle['current']['note24_opening_work_in_progress'] ?? '';
@@ -146,6 +150,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'tax_provision' => $postedManualInputs['tax_provision'],
         'note24_opening_stock_in_trade' => $postedManualInputs['note24_opening_stock_in_trade'] !== '' ? $postedManualInputs['note24_opening_stock_in_trade'] : (string) $derivedOpeningStockInTrade,
         'note24_closing_stock_in_trade' => $postedManualInputs['note24_closing_stock_in_trade'],
+        'note_disclosure_cl' => $postedManualInputs['note_disclosure_cl'],
+        'note_disclosure_com' => $postedManualInputs['note_disclosure_com'],
+        'note_disclosure_msme' => $postedManualInputs['note_disclosure_msme'],
+        'note_disclosure_rpt' => $postedManualInputs['note_disclosure_rpt'],
     ]);
 
     $shareClassTypes = $_POST['share_class_type'] ?? [];
