@@ -150,8 +150,15 @@ function buildDirectorsReportFallbackSections(array $fs, string $companyName, st
         'subsidiaries_jv_associates' => "The Company does not have any subsidiary, joint venture or associate company during the year under review.",
         'loans_guarantees_investments' => "The Company has not made any loan or investment, or given any guarantee, or provided any security under Section 186 of the Companies Act, 2013 during the year under review.",
         'related_party_transactions' => "The Company has not entered into any related party transactions as defined under Section 188 of the Companies Act, 2013 during the year under review.",
-        'cost_audit_applicability' => "The Company does not come under the purview of cost audit for the year ended {$fyEndDate}.",
-        'secretarial_audit_applicability' => "The Company does not come under the purview of Secretarial Audit for the year ended {$fyEndDate}.",
+        /* Cost audit and Secretarial Audit applicability are threshold-driven --
+           turnover / paid-up capital / net worth under the Companies (Cost
+           Records and Audit) Rules, 2014 and Section 204 of the Companies Act,
+           2013 respectively. This app has no such threshold data wired in, so
+           the fallback text must prompt the CA to confirm the position rather
+           than assert non-applicability by default -- an unedited report
+           should visibly show the gap, not silently claim compliance. */
+        'cost_audit_applicability' => "[Confirm: cost audit applicability under the Companies (Cost Records and Audit) Rules, 2014 has not been assessed by this system -- verify against the Company's turnover and net worth for the year ended {$fyEndDate} before finalising.]",
+        'secretarial_audit_applicability' => "[Confirm: Secretarial Audit applicability under Section 204 of the Companies Act, 2013 has not been assessed by this system -- verify against the Company's paid-up share capital and turnover for the year ended {$fyEndDate} before finalising.]",
         'iepf_transfer' => "The Company does not have any funds lying unpaid or unclaimed for a period of seven years. There were no funds required to be transferred to the Investor Education and Protection Fund (IEPF) during the year under review.",
         'equity_shares_differential_rights' => "The Company has not issued any equity shares with differential voting rights during the year under review.",
         'sweat_equity_shares' => "The Company has not issued any sweat equity shares during the year under review.",

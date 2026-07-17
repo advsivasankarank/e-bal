@@ -616,6 +616,16 @@ function buildDeferredTaxSection(array $classified, int $noteNo, string $title):
         'lines' => $lines,
         'current_total' => $currentTotal,
         'previous_total' => $previousTotal,
+        /* AS-22 requires deferred tax to be recognised on actual timing
+           differences between accounting and taxable income -- this figure
+           is a pass-through net of whatever DTA/DTL ledger balances already
+           exist in the Trial Balance, not an independent recomputation by
+           this app. Correct only insofar as the CA's own Tally entries were
+           themselves computed correctly outside the system; disclosed here
+           rather than presented as independently verified. */
+        'disclosure' => $lines !== [] && ($lines[0]['label'] ?? '') !== 'No deferred tax balances'
+            ? 'Deferred tax figures above are carried forward as recorded in the Trial Balance and are not independently recomputed by this system under AS 22 (timing-difference method). The preparer should confirm these balances were correctly computed outside the system before finalisation.'
+            : '',
     ];
 }
 

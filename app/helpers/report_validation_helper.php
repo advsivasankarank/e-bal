@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../engines/classification_engine.php';
 require_once __DIR__ . '/fy_closure_helper.php';
 require_once __DIR__ . '/figure_helper.php';
+require_once __DIR__ . '/report_manual_helper.php';
 
 function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $fs): array
 {
@@ -146,6 +147,23 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
         $warnings[] = $mismatch;
     }
 
+    /* Opening/closing pair gap warning (P1.1). A real incident this session:
+       Note 24's opening Stock-in-Trade was entered but Closing was left
+       blank -- Closing has no carry-forward fallback (unlike Opening, which
+       inherits last year's Closing), so it silently defaulted to ₹0 and
+       created a ₹24,537 phantom P&L movement with no matching Balance Sheet
+       entry. Same risk shape exists for Note 24's other components, Note 16
+       raw materials, and Note 2's P&L opening/closing. */
+    if (($fs['entity_category'] ?? '') === 'corporate') {
+        $fyLabel = (string) ($data['date'] ?? '');
+        if ($fyLabel !== '') {
+            $manualBundle = loadManualInputsWithCarryForward($pdo, $company_id, $fy_id, $fyLabel);
+            foreach (detectOpeningClosingPairGaps($manualBundle) as $gap) {
+                $warnings[] = $gap;
+            }
+        }
+    }
+
     return [
         'can_generate' => empty($errors),
         'errors' => $errors,
@@ -215,6 +233,51 @@ function detectBorrowingMaturityMismatches(array $notes): array
                     break;
                 }
             }
+        }
+    }
+
+    return $warnings;
+}
+
+/**
+ * Flags an opening/closing manual-input pair where Opening has an effective
+ * (possibly carried-forward) nonzero value but Closing was never entered for
+ * the current year. Closing figures have no carry-forward fallback anywhere
+ * in fs_engine.php -- they always default to 0 -- so an unentered Closing
+ * silently manufactures a full-opening-balance "movement" in the P&L with
+ * nothing on the Balance Sheet to match it. Non-blocking: a genuinely nil
+ * closing balance is a valid real-world position, this only flags the
+ * ambiguous case of "never entered" so the CA can confirm it either way.
+ */
+function detectOpeningClosingPairGaps(array $manualBundle): array
+{
+    $pairs = [
+        ['open' => 'note24_opening_finished_goods', 'close' => 'note24_closing_finished_goods', 'label' => 'Finished Goods (Note 24 -- Changes in Inventories)'],
+        ['open' => 'note24_opening_work_in_progress', 'close' => 'note24_closing_work_in_progress', 'label' => 'Work-in-Progress (Note 24 -- Changes in Inventories)'],
+        ['open' => 'note24_opening_stock_in_trade', 'close' => 'note24_closing_stock_in_trade', 'label' => 'Stock-in-Trade (Note 24 -- Changes in Inventories)'],
+        ['open' => 'note16_opening_raw_materials', 'close' => 'note16_closing_raw_materials', 'label' => 'Raw Materials (Note 16 / Cost of Materials Consumed)'],
+        ['open' => 'note2_opening_profit_loss', 'close' => 'note2_closing_profit_loss', 'label' => 'Profit and Loss Account balance (Note 2 -- Reserves & Surplus)'],
+    ];
+
+    $warnings = [];
+    foreach ($pairs as $pair) {
+        $savedCurrent = $manualBundle['saved_current'] ?? [];
+        $previous = $manualBundle['previous'] ?? [];
+
+        $openingCurrent = trim((string) ($savedCurrent[$pair['open']] ?? ''));
+        $openingCarriedForward = trim((string) ($previous[$pair['close']] ?? ''));
+        $effectiveOpening = $openingCurrent !== '' ? (float) $openingCurrent : (float) $openingCarriedForward;
+
+        $closingCurrent = trim((string) ($savedCurrent[$pair['close']] ?? ''));
+
+        if ($effectiveOpening != 0.0 && $closingCurrent === '') {
+            $warnings[] = [
+                'check' => 'opening_closing_pair_gap',
+                'message' => $pair['label'] . ' has an opening balance of ₹' . format_inr_number($effectiveOpening)
+                    . ' but no Closing figure has been entered for this year. Closing defaults to ₹0 when left blank, which '
+                    . 'silently treats the entire opening balance as consumed/utilised during the year. Enter the actual '
+                    . 'Closing figure (even if genuinely nil) to confirm this is correct.',
+            ];
         }
     }
 
