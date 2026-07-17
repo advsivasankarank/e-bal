@@ -828,12 +828,12 @@ function getDemoWatermarkCss(): string
  * Build demo-specific PDF filename.
  * Appends -DEMO-COPY to the standard filename.
  */
-function buildDemoExportFilename(string $companyName, string $fyName, string $extension): string
+function buildDemoExportFilename(string $companyName, string $fyName, string $extension, string $documentLabel = 'financial-statements'): string
 {
     $base = trim($companyName) !== '' ? $companyName : 'financial-statements';
     $fy = trim($fyName) !== '' ? $fyName : 'financial-year';
-    $filename = $base . '-' . $fy . '-financial-statements-DEMO-COPY';
-    $filename = preg_replace('/[^A-Za-z0-9._-]+/', '-', $filename) ?: 'financial-statements-DEMO-COPY';
+    $filename = $base . '-' . $fy . '-' . $documentLabel . '-DEMO-COPY';
+    $filename = preg_replace('/[^A-Za-z0-9._-]+/', '-', $filename) ?: $documentLabel . '-DEMO-COPY';
     $filename = trim($filename, '-');
 
     return $filename . '.' . ltrim($extension, '.');

@@ -114,6 +114,31 @@ function buildDirectorsReportFallbackSections(array $fs, string $companyName, st
     ];
 }
 
+/**
+ * Loads this year's saved Directors' Report sections, falling back to the
+ * generated boilerplate wherever no section has been saved yet. Shared by
+ * the on-screen editor (public/directors_report.php) and the PDF/DOCX
+ * export path (public/report_download.php) so both always show identical
+ * content for a given company/FY.
+ *
+ * @return array{definitions: array<string,string>, sections: array<string,string>}
+ */
+function loadDirectorsReportSections(array $manualBundle, array $fs, string $companyName, string $fyName, array $shareholders = []): array
+{
+    $sectionDefinitions = getDirectorsReportSectionDefinitions();
+    $draftSections = [];
+    foreach ($sectionDefinitions as $key => $title) {
+        $draftSections[$key] = (string) ($manualBundle['saved_current']['directors_report_' . $key] ?? '');
+    }
+
+    $hasSavedSections = array_filter($draftSections, static fn ($value) => trim((string) $value) !== '') !== [];
+    if (!$hasSavedSections) {
+        $draftSections = buildDirectorsReportFallbackSections($fs, $companyName, $fyName, $shareholders);
+    }
+
+    return ['definitions' => $sectionDefinitions, 'sections' => $draftSections];
+}
+
 function combineDirectorsReportSections(array $sections, string $companyName): string
 {
     $definitions = getDirectorsReportSectionDefinitions();

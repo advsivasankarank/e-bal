@@ -6,6 +6,8 @@ require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
 require_once __DIR__ . '/../app/helpers/report_document_helper.php';
 require_once __DIR__ . '/../app/helpers/report_fallback_export_helper.php';
 require_once __DIR__ . '/../app/helpers/figure_helper.php';
+require_once __DIR__ . '/../app/helpers/share_capital_helper.php';
+require_once __DIR__ . '/../app/helpers/directors_report_ai_helper.php';
 
 $autoload = __DIR__ . '/../vendor/autoload.php';
 if (file_exists($autoload)) {
@@ -43,6 +45,20 @@ if (!in_array($format, $allowedFormats, true)) {
     exit('Unsupported export format.');
 }
 
+$docType = strtolower(trim((string) ($_GET['doc'] ?? 'financial_statements')));
+$allowedDocTypes = ['financial_statements', 'directors_report'];
+
+if (!in_array($docType, $allowedDocTypes, true)) {
+    http_response_code(400);
+    exit('Unsupported document type.');
+}
+
+/* Directors' Report has no spreadsheet form -- it is narrative text, not figures. */
+if ($docType === 'directors_report' && in_array($format, ['excel', 'xlsx'], true)) {
+    http_response_code(400);
+    exit('Directors Report is not available in Excel format.');
+}
+
 /* DEMO: Server-side enforcement — only allow PDF */
 if ($_isDemoExport && in_array($format, ['word', 'docx', 'xlsx', 'excel', 'html'], true)) {
     http_response_code(403);
@@ -73,8 +89,30 @@ if ($subcategory === 'trust') {
     $fs['notes_template'] = __DIR__ . '/reports_dashboard/formats/notes_society.php';
 }
 
-$title = ($fs['title'] ?? 'Financial Statements') . ' - ' . $companyName . ' - ' . $fyName;
-$htmlBody = renderFinancialReportDocument($fs, $companyName, $fyName);
+if ($docType === 'directors_report') {
+    if (($fs['entity_category'] ?? '') !== 'corporate') {
+        http_response_code(404);
+        exit('Directors Report is only available for corporate entities.');
+    }
+
+    $shareholders = getShareholders($pdo, $company_id, $fy_id);
+    $loadedDirectorsReport = loadDirectorsReportSections($manualBundle, $fs, $companyName, $fyName, $shareholders);
+
+    $documentLabel = 'directors-report';
+    $title = "Directors' Report - " . $companyName . ' - ' . $fyName;
+    $htmlBody = renderDirectorsReportDocument($loadedDirectorsReport['sections'], $companyName, $fyName, $fs['company_meta'] ?? []);
+} else {
+    $directorsReportSections = [];
+    if (($fs['entity_category'] ?? '') === 'corporate') {
+        $shareholders = getShareholders($pdo, $company_id, $fy_id);
+        $loadedDirectorsReport = loadDirectorsReportSections($manualBundle, $fs, $companyName, $fyName, $shareholders);
+        $directorsReportSections = $loadedDirectorsReport['sections'];
+    }
+
+    $documentLabel = 'financial-statements';
+    $title = ($fs['title'] ?? 'Financial Statements') . ' - ' . $companyName . ' - ' . $fyName;
+    $htmlBody = renderFinancialReportDocument($fs, $companyName, $fyName, $directorsReportSections);
+}
 $htmlDocument = wrapReportHtmlDocument($title, $htmlBody);
 
 if ($format === 'html') {
@@ -105,16 +143,16 @@ if ($format === 'pdf') {
 
         /* DEMO: Use DEMO-COPY filename */
         $exportFilename = $_isDemoExport
-            ? buildDemoExportFilename($companyName, $fyName, 'pdf')
-            : buildReportExportFilename($companyName, $fyName, 'pdf');
+            ? buildDemoExportFilename($companyName, $fyName, 'pdf', $documentLabel)
+            : buildReportExportFilename($companyName, $fyName, 'pdf', $documentLabel);
 
         $dompdf->stream($exportFilename, ['Attachment' => true]);
     } else {
         appLog('WARN', 'Dompdf not available, using fallback PDF export', ['company_id' => $company_id, 'fy_id' => $fy_id]);
         $pdfPath = createFallbackPdf($htmlDocument, $title);
         $exportFilename = $_isDemoExport
-            ? buildDemoExportFilename($companyName, $fyName, 'pdf')
-            : buildReportExportFilename($companyName, $fyName, 'pdf');
+            ? buildDemoExportFilename($companyName, $fyName, 'pdf', $documentLabel)
+            : buildReportExportFilename($companyName, $fyName, 'pdf', $documentLabel);
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="' . $exportFilename . '"');
         header('Content-Length: ' . filesize($pdfPath));
@@ -126,12 +164,15 @@ if ($format === 'pdf') {
 }
 
 if (in_array($format, ['word', 'docx'], true)) {
-    $useAdvancedDocx = function_exists('exportFinancialStatementsToDocx');
+    /* The advanced PhpWord exporter only knows the Financial Statements
+       structure ($fs) -- Directors Report is narrative text, so it always
+       goes through the generic HTML-to-DOCX fallback. */
+    $useAdvancedDocx = $docType === 'financial_statements' && function_exists('exportFinancialStatementsToDocx');
     $docxPath = $useAdvancedDocx
         ? exportFinancialStatementsToDocx($fs, $companyName, $fyName)
         : createFallbackDocx($htmlDocument);
     header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'docx') . '"');
+    header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'docx', $documentLabel) . '"');
     header('Cache-Control: max-age=0');
     header('Content-Length: ' . filesize($docxPath));
     if (!$useAdvancedDocx) {
@@ -149,7 +190,7 @@ if (in_array($format, ['excel', 'xlsx'], true)) {
         ? exportFinancialStatementsToXlsx($fs, $companyName, $fyName)
         : createFallbackXlsx($htmlDocument);
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'xlsx') . '"');
+    header('Content-Disposition: attachment; filename="' . buildReportExportFilename($companyName, $fyName, 'xlsx', $documentLabel) . '"');
     header('Cache-Control: max-age=0');
     header('Content-Length: ' . filesize($xlsxPath));
     if (!$useAdvancedXlsx) {

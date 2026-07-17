@@ -53,12 +53,13 @@ $totalCount = count($docs);
 <div class="dw-pkg-title"><?= htmlspecialchars($pkgName) ?></div>
 
 <?php foreach ($docs as $doc): ?>
+<?php $docParam = $doc['name'] === 'Directors Report' ? 'directors_report' : 'financial_statements'; ?>
 <div class="dw-doc-item">
     <span class="dw-doc-icon <?= $doc['ready'] ? 'ready' : 'not-ready' ?>"><?= $doc['ready'] ? '&#10003;' : '&#10007;' ?></span>
     <span class="dw-doc-name"><?= htmlspecialchars($doc['name']) ?></span>
     <div class="dw-doc-formats">
         <?php foreach ($doc['formats'] as $fmt): ?>
-        <a href="<?= BASE_URL ?>report_download.php?format=<?= $fmt ?>" class="dw-format-btn <?= $doc['ready'] ? '' : 'disabled' ?>" title="Download <?= strtoupper($fmt) ?>"><?= strtoupper($fmt) ?></a>
+        <a href="<?= BASE_URL ?>report_download.php?doc=<?= $docParam ?>&format=<?= $fmt ?>" class="dw-format-btn <?= $doc['ready'] ? '' : 'disabled' ?>" title="Download <?= strtoupper($fmt) ?>"><?= strtoupper($fmt) ?></a>
         <?php endforeach; ?>
     </div>
 </div>

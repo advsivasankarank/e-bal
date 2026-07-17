@@ -32,23 +32,14 @@ if (($fs['entity_category'] ?? '') !== 'corporate') {
     exit;
 }
 
-$sectionDefinitions = getDirectorsReportSectionDefinitions();
-$draftSections = [];
-foreach ($sectionDefinitions as $key => $title) {
-    $draftSections[$key] = (string) ($manualBundle['saved_current']['directors_report_' . $key] ?? '');
-}
+$loadedDirectorsReport = loadDirectorsReportSections($manualBundle, $fs, $companyName, $fyName, $shareholders);
+$sectionDefinitions = $loadedDirectorsReport['definitions'];
+$draftSections = $loadedDirectorsReport['sections'];
 
 $hasSavedSections = array_filter($draftSections, static fn ($value) => trim((string) $value) !== '') !== [];
 $draft = (string) ($manualBundle['saved_current']['directors_report_draft'] ?? '');
 $draftSource = $hasSavedSections ? 'Saved Draft' : ($draft !== '' ? 'Saved Draft' : 'Not Generated');
 $infoMessage = '';
-
-if (!$hasSavedSections && trim($draft) !== '') {
-    $generatedFallback = buildDirectorsReportFallbackSections($fs, $companyName, $fyName, $shareholders);
-    $draftSections = $generatedFallback;
-} elseif (!$hasSavedSections) {
-    $draftSections = buildDirectorsReportFallbackSections($fs, $companyName, $fyName, $shareholders);
-}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrfToken();

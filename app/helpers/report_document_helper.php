@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/directors_report_ai_helper.php';
+
 function reportDocumentStyles(): string
 {
     return <<<'CSS'
@@ -236,6 +238,19 @@ body {
     font-size: 11px;
     margin-top: 4px;
 }
+.toc-entry a {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    text-decoration: none;
+    color: inherit;
+}
+.toc-page-num::before {
+    content: target-counter(attr(href), page);
+}
+.exec-summary-page {
+    padding-top: 4mm;
+}
 .page-footer {
     text-align: center;
     font-size: 7px;
@@ -378,7 +393,98 @@ body {
 CSS;
 }
 
-function renderFinancialReportDocument(array $fs, string $companyName, string $fyName): string
+function renderExecutiveSummaryPage(array $fs, string $companyName, string $fyName): string
+{
+    $data = $fs['data'] ?? [];
+    $company_meta = $fs['company_meta'] ?? [];
+    $cin = trim((string) ($company_meta['cin'] ?? ''));
+    $registeredAddress = trim((string) ($company_meta['registered_address'] ?? ''));
+    $plLabel = ($fs['entity_subcategory'] ?? '') === 'trust' ? 'Income & Expenditure Account' : 'Profit & Loss Account';
+
+    $highlights = [
+        ['label' => 'Revenue', 'current' => $data['revenue'] ?? 0, 'previous' => $data['prev_revenue'] ?? 0],
+        ['label' => 'Total Expenses', 'current' => $data['expenses'] ?? 0, 'previous' => $data['prev_expenses'] ?? 0],
+        ['label' => 'Profit Before Tax', 'current' => $data['pbt'] ?? 0, 'previous' => $data['prev_pbt'] ?? 0],
+        ['label' => 'Profit After Tax', 'current' => $data['pat'] ?? 0, 'previous' => $data['prev_pat'] ?? 0],
+        ['label' => 'Total Assets', 'current' => $data['total_assets'] ?? 0, 'previous' => $data['prev_total_assets'] ?? 0],
+        ['label' => 'Total Liabilities', 'current' => $data['total_liabilities'] ?? 0, 'previous' => $data['prev_total_liabilities'] ?? 0],
+    ];
+
+    ob_start();
+    ?>
+    <div class="report-page exec-summary-page" id="executive-summary">
+        <div class="ebal-stat-header">
+            <div class="ebal-company-name"><?= htmlspecialchars($companyName ?: 'Company Name Not Configured') ?></div>
+            <?php if ($registeredAddress): ?>
+            <div class="ebal-company-detail">Registered Office: <?= htmlspecialchars($registeredAddress) ?></div>
+            <?php else: ?>
+            <div class="ebal-company-detail ebal-placeholder">Registered Office: Not configured</div>
+            <?php endif; ?>
+            <?php if ($cin): ?>
+            <div class="ebal-company-detail">CIN: <?= htmlspecialchars($cin) ?></div>
+            <?php else: ?>
+            <div class="ebal-company-detail ebal-placeholder">CIN: Not configured</div>
+            <?php endif; ?>
+        </div>
+
+        <h2 class="report-page-title">Executive Summary</h2>
+        <p class="report-page-subtitle">Key financial highlights for FY <?= htmlspecialchars($fyName) ?> (figures in Indian Rupees).</p>
+
+        <table class="statement-table" border="1" width="100%" cellpadding="5">
+            <tr><th class="particulars">Particulars</th><th class="figure current-year">Current Year</th><th class="figure previous-year">Previous Year</th></tr>
+            <?php foreach ($highlights as $row): ?>
+            <tr>
+                <td><?= htmlspecialchars($row['label']) ?></td>
+                <td class="figure"><?= format_inr((float) $row['current']) ?></td>
+                <td class="figure previous-year"><?= format_inr((float) $row['previous']) ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+
+        <p style="margin-top:14px;font-size:9px;color:#475569;">This Executive Summary is provided for quick reference only. The Directors' Report, Balance Sheet, Statement of <?= htmlspecialchars($plLabel) ?> and Notes to Accounts that follow form part of, and should be read together with, this summary.</p>
+    </div>
+    <?php
+    return (string) ob_get_clean();
+}
+
+function renderDirectorsReportSection(array $sections, string $companyName, string $fyName, array $company_meta): string
+{
+    $cin = trim((string) ($company_meta['cin'] ?? ''));
+    $registeredAddress = trim((string) ($company_meta['registered_address'] ?? ''));
+
+    ob_start();
+    ?>
+    <section class="report-page" id="directors-report">
+        <div class="ebal-stat-header">
+            <div class="ebal-company-name"><?= htmlspecialchars($companyName ?: 'Company Name Not Configured') ?></div>
+            <?php if ($registeredAddress): ?>
+            <div class="ebal-company-detail">Registered Office: <?= htmlspecialchars($registeredAddress) ?></div>
+            <?php else: ?>
+            <div class="ebal-company-detail ebal-placeholder">Registered Office: Not configured</div>
+            <?php endif; ?>
+            <?php if ($cin): ?>
+            <div class="ebal-company-detail">CIN: <?= htmlspecialchars($cin) ?></div>
+            <?php else: ?>
+            <div class="ebal-company-detail ebal-placeholder">CIN: Not configured</div>
+            <?php endif; ?>
+        </div>
+        <p class="report-page-subtitle">Financial Year: <?= htmlspecialchars($fyName) ?></p>
+        <?php include __DIR__ . '/../../public/reports_dashboard/formats/directors_report_company.php'; ?>
+    </section>
+    <?php
+    return (string) ob_get_clean();
+}
+
+/**
+ * Standalone Directors' Report document (its own cover-free single PDF/DOCX,
+ * not embedded in the Financial Statements bundle).
+ */
+function renderDirectorsReportDocument(array $sections, string $companyName, string $fyName, array $company_meta): string
+{
+    return '<div class="report-shell">' . renderDirectorsReportSection($sections, $companyName, $fyName, $company_meta) . '</div>';
+}
+
+function renderFinancialReportDocument(array $fs, string $companyName, string $fyName, array $directorsReportSections = []): string
 {
     $data = $fs['data'];
     $notes = $fs['notes'];
@@ -391,6 +497,7 @@ function renderFinancialReportDocument(array $fs, string $companyName, string $f
 
     $cin = trim((string) ($company_meta['cin'] ?? ''));
     $registeredAddress = trim((string) ($company_meta['registered_address'] ?? ''));
+    $hasDirectorsReport = ($fs['entity_category'] ?? '') === 'corporate' && !empty($directorsReportSections);
 
     ob_start();
     ?>
@@ -428,15 +535,26 @@ function renderFinancialReportDocument(array $fs, string $companyName, string $f
         </div>
     </div>
 
+    <?= renderExecutiveSummaryPage($fs, $companyName, $fyName) ?>
+
     <div class="toc-page">
         <h2>Table of Contents</h2>
-        <div class="toc-entry main"><span>Balance Sheet</span></div>
-        <div class="toc-entry main"><span>Statement of <?= htmlspecialchars($plLabel) ?></span></div>
-        <div class="toc-entry main"><span>Notes to Accounts</span></div>
+        <?php if ($hasDirectorsReport): ?>
+        <div class="toc-entry main"><a href="#directors-report"><span>Directors' Report</span><span class="toc-page-num"></span></a></div>
+        <?php endif; ?>
+        <div class="toc-entry main"><a href="#balance-sheet"><span>Balance Sheet</span><span class="toc-page-num"></span></a></div>
+        <div class="toc-entry main"><a href="#profit-loss"><span>Statement of <?= htmlspecialchars($plLabel) ?></span><span class="toc-page-num"></span></a></div>
+        <div class="toc-entry main"><a href="#notes-to-accounts"><span>Notes to Accounts</span><span class="toc-page-num"></span></a></div>
         <?php foreach ($noteSections as $noteSection): ?>
             <div class="toc-entry"><span style="padding-left:16px;"><?= htmlspecialchars($noteSection['title'] ?? '') ?></span></div>
         <?php endforeach; ?>
     </div>
+
+    <?php if ($hasDirectorsReport): ?>
+    <div class="report-shell">
+        <?= renderDirectorsReportSection($directorsReportSections, $companyName, $fyName, $company_meta) ?>
+    </div>
+    <?php endif; ?>
 
     <div class="report-shell">
         <?php include $formatTemplate; ?>
@@ -458,12 +576,12 @@ FOOTER;
         '</title>' . reportDocumentStyles() . '</head><body>' . $bodyHtml . $footer . '</body></html>';
 }
 
-function buildReportExportFilename(string $companyName, string $fyName, string $extension): string
+function buildReportExportFilename(string $companyName, string $fyName, string $extension, string $documentLabel = 'financial-statements'): string
 {
     $base = trim($companyName) !== '' ? $companyName : 'financial-statements';
     $fy = trim($fyName) !== '' ? $fyName : 'financial-year';
-    $filename = $base . '-' . $fy . '-financial-statements';
-    $filename = preg_replace('/[^A-Za-z0-9._-]+/', '-', $filename) ?: 'financial-statements';
+    $filename = $base . '-' . $fy . '-' . $documentLabel;
+    $filename = preg_replace('/[^A-Za-z0-9._-]+/', '-', $filename) ?: $documentLabel;
     $filename = trim($filename, '-');
 
     return $filename . '.' . ltrim($extension, '.');
