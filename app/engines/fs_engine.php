@@ -296,7 +296,7 @@ function assignSequentialNoteMetadata(array $sections, array $fallbackTitles = [
     return $sections;
 }
 
-function buildCompanyProfitAfterTax(array $classified, array $manualInputs = [], array $previousManualInputs = [], bool $usePrevious = false): float
+function buildCompanyProfitAfterTax(array $classified, array $manualInputs = [], array $previousManualInputs = [], bool $usePrevious = false, ?float $depreciationOverride = null): float
 {
     $inventoryChangeSection = buildInventoryChangeSection($manualInputs, $previousManualInputs, 24, 'Changes in Inventories');
     $inventoryChange = (float) ($usePrevious ? ($inventoryChangeSection['previous_total'] ?? 0) : ($inventoryChangeSection['current_total'] ?? 0));
@@ -317,13 +317,23 @@ function buildCompanyProfitAfterTax(array $classified, array $manualInputs = [],
 
     $revenue = $sumCodes(['revenue']);
     $otherIncome = $sumCodes(['other_income']);
+    /* Depreciation defaults to the flat TB ledger balance, but when the
+       Asset Register has a computed Schedule II figure for the current
+       year (see the $depreciationOverride caller in buildOtherEquitySection()
+       below), that figure must be used here too -- otherwise the P&L's
+       depreciation line and the Reserves & Surplus roll-forward (which is
+       built from THIS function's return value) would silently disagree,
+       exactly the class of bug already found and fixed once this session
+       for tax_provision. Only applies to the current year: the register
+       may not have comparative-year data, so previous-year depreciation
+       always falls back to the TB figure. */
+    $depreciation = (!$usePrevious && $depreciationOverride !== null) ? $depreciationOverride : $sumCodes(['depreciation']);
     $expenses = $sumCodes([
         'purchase_stock',
         'employee_cost',
         'finance_cost',
-        'depreciation',
         'other_expenses',
-    ]);
+    ]) + $depreciation;
 
     $pbt = ($revenue + $otherIncome) - ($materialsConsumed + $expenses + $inventoryChange);
     $tax = manualAmount($usePrevious ? $previousManualInputs : $manualInputs, 'tax_provision', 0);
@@ -373,7 +383,7 @@ function buildInventoryChangeSection(array $manualInputs, array $previousManualI
     ];
 }
 
-function buildOtherEquitySection(array $classified, array $manualInputs, array $previousManualInputs, int $noteNo, string $title): array
+function buildOtherEquitySection(array $classified, array $manualInputs, array $previousManualInputs, int $noteNo, string $title, ?float $depreciationOverride = null): array
 {
     /* The 'reserves' schedule code lumps together every reserve component --
        General Reserve, Capital Reserve, Securities Premium, AND the P&L
@@ -404,7 +414,7 @@ function buildOtherEquitySection(array $classified, array $manualInputs, array $
         $plOpeningCurrent = sumLines($plLines, 'current');
     }
 
-    $currentMovement = buildCompanyProfitAfterTax($classified, $manualInputs, $previousManualInputs, false);
+    $currentMovement = buildCompanyProfitAfterTax($classified, $manualInputs, $previousManualInputs, false, $depreciationOverride);
     $previousMovement = buildCompanyProfitAfterTax($classified, $manualInputs, $previousManualInputs, true);
 
     $previousOpening = manualAmount($previousManualInputs, 'note2_opening_profit_loss', 0);
@@ -683,7 +693,7 @@ function manualAmount(array $manualInputs, string $key, float $fallback = 0.0): 
     return (float) $value;
 }
 
-function buildCompanyNotesPayload(array $classified, array $manualInputs = [], array $previousManualInputs = [], array $shareholders = [], array $shareCapitalClasses = [], array $previousShareCapitalClasses = []): array
+function buildCompanyNotesPayload(array $classified, array $manualInputs = [], array $previousManualInputs = [], array $shareholders = [], array $shareCapitalClasses = [], array $previousShareCapitalClasses = [], ?array $depreciationSchedule = null): array
 {
     $currentPaidUp = manualAmount($manualInputs, 'share_capital_paidup', classifiedAmount($classified, 'share_capital'));
     $previousPaidUp = manualAmount($previousManualInputs, 'share_capital_paidup', classifiedPreviousAmount($classified, 'share_capital'));
@@ -714,6 +724,28 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
         $title = (string) ($noteDef['title'] ?? ('Note ' . $noteNo));
 
         if (in_array($masterCode, ['POL', 'GEN'], true)) {
+            continue;
+        }
+
+        if ($masterCode === 'PPE' && $depreciationSchedule !== null) {
+            $lines = [];
+            foreach ($depreciationSchedule['by_category'] as $cat) {
+                $lines[] = [
+                    'label' => $cat['category'],
+                    'current' => $cat['closing_wdv'],
+                    'previous' => $cat['opening_gross_block'] - $cat['opening_accumulated_depreciation'],
+                ];
+            }
+            $sections[] = [
+                'title' => $title,
+                'note_no' => $noteNo,
+                'master_code' => $masterCode,
+                'custom_type' => 'depreciation_schedule',
+                'lines' => $lines,
+                'current_total' => $depreciationSchedule['totals']['closing_wdv'],
+                'previous_total' => $depreciationSchedule['totals']['opening_gross_block'] - $depreciationSchedule['totals']['opening_accumulated_depreciation'],
+                'schedule' => $depreciationSchedule,
+            ];
             continue;
         }
 
@@ -803,7 +835,8 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
                 $manualInputs,
                 $previousManualInputs,
                 (int) $noteNo,
-                $title
+                $title,
+                $depreciationSchedule !== null ? (float) $depreciationSchedule['totals']['depreciation_for_year'] : null
             );
             $section['master_code'] = $masterCode;
             $sections[] = $section;
@@ -1193,6 +1226,20 @@ function buildCompanySummaryFromNotes(array $classified, array $notes, string $f
         'tax' => (float) ($notes['tax_provision']['current'] ?? 0),
         'prev_tax' => (float) ($notes['tax_provision']['previous'] ?? 0),
     ];
+
+    /* When the Asset Register (public/asset_register.php) has been
+       populated for this FY, use its computed Schedule II depreciation
+       figure for the P&L instead of the flat TB "Depreciation" ledger
+       balance -- the register's SLM/WDV/pro-rata computation is the more
+       accurate figure once it exists. Previous-year depreciation is left
+       as the TB-derived figure since the register may not have been
+       populated for the comparative year. */
+    foreach (($notes['sections'] ?? []) as $section) {
+        if (($section['custom_type'] ?? '') === 'depreciation_schedule') {
+            $data['depreciation'] = (float) ($section['schedule']['totals']['depreciation_for_year'] ?? $data['depreciation']);
+            break;
+        }
+    }
 
     /* ---- Branch / Divisions — Standalone Balance Sheet Treatment ---- */
     // TODO: Future consolidation module should eliminate Branch / Division balances
@@ -1666,7 +1713,28 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
             $shareholders = getShareholders($pdo, $company_id, $fy_id);
             $shareCapitalClasses = getShareCapitalClasses($pdo, $company_id, $fy_id);
             $previousShareCapitalClasses = $prevFYId > 0 ? getShareCapitalClasses($pdo, $company_id, $prevFYId) : [];
-            $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs, $shareholders, $shareCapitalClasses, $previousShareCapitalClasses);
+
+            /* Depreciation schedule (Schedule II) -- fetched here rather than
+               inside the note builders below because it needs $pdo, same
+               reasoning as the Partner Capital Schedule above. Only replaces
+               the generic Fixed Assets ledger-list note when the CA has
+               actually populated the Asset Register (public/asset_register.php)
+               for this company/FY -- otherwise every existing company would
+               suddenly lose its Fixed Assets note the moment this feature
+               shipped, before anyone had a chance to set up their register. */
+            require_once __DIR__ . '/../helpers/fixed_asset_helper.php';
+            $depreciationSchedule = null;
+            $fyDatesStmt = $pdo->prepare('SELECT fy_start, fy_end FROM financial_years WHERE id = ? AND company_id = ?');
+            $fyDatesStmt->execute([$fy_id, $company_id]);
+            $fyDatesRow = $fyDatesStmt->fetch(PDO::FETCH_ASSOC);
+            if ($fyDatesRow !== false && !empty($fyDatesRow['fy_start']) && !empty($fyDatesRow['fy_end'])) {
+                $candidateSchedule = computeDepreciationSchedule($pdo, $company_id, $fy_id, (string) $fyDatesRow['fy_start'], (string) $fyDatesRow['fy_end']);
+                if ($candidateSchedule['has_data']) {
+                    $depreciationSchedule = $candidateSchedule;
+                }
+            }
+
+            $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs, $shareholders, $shareCapitalClasses, $previousShareCapitalClasses, $depreciationSchedule);
             $data = buildCompanySummaryFromNotes($classified, $notes, $fyDisplay);
             foreach ($notes['sections'] as $sectionIndex => $sectionRow) {
                 if (($sectionRow['master_code'] ?? '') === 'EPS') {

@@ -1,6 +1,18 @@
 <?php
 
-function getAccountingPolicies(string $entity): array
+/**
+ * $depreciationInfo, when supplied by notes_company.php from the computed
+ * Depreciation Schedule (app/helpers/fixed_asset_helper.php), lets the
+ * Depreciation policy line disclose what was ACTUALLY done (method(s) in
+ * use, whether opening balances came from an uploaded prior-year schedule)
+ * rather than a generic assertion the engine may not back up -- the same
+ * "policy text must match what the code actually computes" principle
+ * already applied to the Deferred Tax and Cash Flow Statement policy lines.
+ * Shape: ['methods_used' => ['SLM','WDV',...], 'has_excel_import' => bool].
+ * Null (or omitted) falls back to the original generic wording, used when
+ * no Asset Register has been populated for this company/FY yet.
+ */
+function getAccountingPolicies(string $entity, ?array $depreciationInfo = null): array
 {
     switch ($entity) {
         case 'corporate':
@@ -9,7 +21,7 @@ function getAccountingPolicies(string $entity): array
                 'Use of Estimates: The preparation of financial statements requires management to make estimates and assumptions that affect the reported amounts of assets, liabilities, income and expenses, and disclosure of contingent liabilities as at the date of the financial statements. Actual results could differ from these estimates; differences, if any, are recognised in the period in which they are known.',
                 'Revenue Recognition (AS 9): Revenue from sale of goods is recognised when the significant risks and rewards of ownership are transferred to the buyer. Revenue from services is recognised on rendering of the service. Interest income is recognised on a time-proportion basis; dividend income is recognised when the right to receive payment is established.',
                 'Property, Plant & Equipment (AS 10): Property, plant and equipment are stated at cost of acquisition or construction, less accumulated depreciation and impairment losses, if any. Cost includes the purchase price and directly attributable costs of bringing the asset to its working condition for intended use.',
-                'Depreciation: Depreciation on property, plant and equipment is provided on the straight-line / written-down value method at the rates and in the manner prescribed under Schedule II to the Companies Act, 2013, based on the useful life of the assets.',
+                buildDepreciationPolicyStatement($depreciationInfo),
                 'Intangible Assets (AS 26): Intangible assets are recognised at cost and are carried at cost less accumulated amortisation and impairment losses, if any.',
                 'Impairment of Assets (AS 28): The carrying amount of assets is reviewed at each balance sheet date for indications of impairment. An impairment loss is recognised in the Statement of Profit and Loss wherever the carrying amount of an asset exceeds its recoverable amount.',
                 'Investments (AS 13): Long-term investments are stated at cost, less provision for diminution other than temporary in nature. Current investments are carried at the lower of cost and fair value.',
@@ -40,6 +52,31 @@ function getAccountingPolicies(string $entity): array
                 'Inventories are valued at the lower of cost and net realisable value.',
             ];
     }
+}
+
+function buildDepreciationPolicyStatement(?array $depreciationInfo): string
+{
+    if ($depreciationInfo === null || empty($depreciationInfo['methods_used'])) {
+        /* No Asset Register populated for this company/FY yet -- generic
+           wording only, since the engine has nothing more specific to
+           disclose (falls back to a flat Trial Balance ledger figure). */
+        return 'Depreciation: Depreciation on property, plant and equipment is provided on the straight-line / written-down value method at the rates and in the manner prescribed under Schedule II to the Companies Act, 2013, based on the useful life of the assets.';
+    }
+
+    $methods = $depreciationInfo['methods_used'];
+    $methodLabel = static function (string $m): string {
+        return $m === 'WDV' ? 'Written-Down Value (WDV)' : 'Straight-Line Method (SLM)';
+    };
+    $methodText = count($methods) > 1
+        ? implode(' and ', array_map($methodLabel, $methods)) . ', as applicable to each class of asset,'
+        : $methodLabel($methods[0]);
+
+    $openingSource = !empty($depreciationInfo['has_excel_import'])
+        ? ' Opening balances for the current year have been derived from a prior-year depreciation schedule uploaded by the preparer.'
+        : '';
+
+    return 'Depreciation: Depreciation on property, plant and equipment is provided on the basis of useful lives prescribed under Schedule II of the Companies Act, 2013, using the '
+        . $methodText . ', with pro-rata depreciation for assets acquired or disposed during the year.' . $openingSource;
 }
 
 function renderAccountingPolicies(array $policies): void

@@ -1049,6 +1049,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
     <strong>Next Step</strong><br>
     After reviewing the Balance Sheet, Profit &amp; Loss, and Notes to Accounts, continue to the Directors Report for the same company and financial year.<br><br>
     <a class="btn" href="<?= BASE_URL ?>directors_report.php">Open Directors Report</a>
+    <a class="btn" href="<?= BASE_URL ?>asset_register.php" style="margin-left:8px;">Fixed Asset Register &amp; Depreciation Schedule</a>
 </div>
 <?php else: ?>
 <div class="card" style="margin-top:16px;">

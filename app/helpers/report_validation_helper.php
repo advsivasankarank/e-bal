@@ -162,13 +162,19 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
                 $warnings[] = $gap;
             }
         }
+
+        /* Fixed Asset Register / Depreciation Schedule checks (Schedule II). */
+        require_once __DIR__ . '/fixed_asset_helper.php';
+        foreach (detectFixedAssetRegisterIssues($pdo, $company_id, $fy_id, getClassifiedData($pdo, $company_id, $fy_id)) as $issue) {
+            $warnings[] = $issue;
+        }
     }
 
     return [
         'can_generate' => empty($errors),
         'errors' => $errors,
         'warnings' => $warnings,
-        'total_checks' => 10,
+        'total_checks' => 11,
     ];
 }
 
@@ -277,6 +283,93 @@ function detectOpeningClosingPairGaps(array $manualBundle): array
                     . ' but no Closing figure has been entered for this year. Closing defaults to ₹0 when left blank, which '
                     . 'silently treats the entire opening balance as consumed/utilised during the year. Enter the actual '
                     . 'Closing figure (even if genuinely nil) to confirm this is correct.',
+            ];
+        }
+    }
+
+    return $warnings;
+}
+
+/**
+ * Fixed Asset Register / Depreciation Schedule checks (Schedule II).
+ * Non-blocking -- these are all things a CA should review, not conditions
+ * that should stop statement generation, since the register is an optional
+ * enhancement over the flat TB "Depreciation" ledger figure.
+ */
+function detectFixedAssetRegisterIssues(PDO $pdo, int $company_id, int $fy_id, array $classified): array
+{
+    $assets = getFixedAssets($pdo, $company_id, $fy_id);
+    if ($assets === []) {
+        return [];
+    }
+
+    $warnings = [];
+
+    foreach ($assets as $asset) {
+        $label = trim((string) ($asset['asset_description'] ?? '')) ?: ('Asset #' . ($asset['id'] ?? '?'));
+
+        /* 1. Residual value exceeding 5% of cost -- Schedule II guidance
+              (carried over from the pre-2013 Companies Act practice, still
+              commonly applied) treats 5% as the ordinary ceiling; a higher
+              residual should be a deliberate, documented management estimate,
+              not a default left unexamined. */
+        $residualPct = (float) ($asset['residual_value_pct'] ?? 5);
+        if ($residualPct > 5.0) {
+            $warnings[] = [
+                'check' => 'fixed_asset_residual_value_high',
+                'message' => "\"{$label}\": residual value is set to " . number_format($residualPct, 2)
+                    . '% of cost, above the 5% ordinarily expected under Schedule II guidance -- confirm this is a deliberate, documented management estimate.',
+            ];
+        }
+
+        /* 2. Missing category means no sensible useful-life default and no
+              way to group this asset into a Schedule III class in the note. */
+        if (trim((string) ($asset['asset_category'] ?? '')) === '') {
+            $warnings[] = [
+                'check' => 'fixed_asset_missing_category',
+                'message' => "\"{$label}\": no asset category assigned yet -- classify it in the Asset Register so a Schedule II useful life can be applied and it groups correctly in the Fixed Assets note.",
+            ];
+        }
+
+        /* 3. A disposed asset with no disposal date can't be pro-rated --
+              computeAssetDepreciation() falls back to treating it as held
+              the whole year in that case, which is very likely wrong for
+              an asset flagged as disposed. */
+        if (!empty($asset['is_disposed']) && trim((string) ($asset['disposal_date'] ?? '')) === '') {
+            $warnings[] = [
+                'check' => 'fixed_asset_disposed_missing_date',
+                'message' => "\"{$label}\" is marked as disposed but has no disposal date -- depreciation is being calculated as if it were held for the full year. Enter the disposal date for an accurate pro-rata charge.",
+            ];
+        }
+    }
+
+    /* 4. Reconcile Excel-imported opening balances against what Tally's
+          current-year TB actually reports for classified PPE/CWIP ledgers.
+          A mismatch commonly means the uploaded schedule's opening figures
+          don't correspond to the same asset base Tally is now tracking
+          (assets since disposed and removed from Tally, ledgers renamed,
+          or the accumulated depreciation in the upload not matching what
+          Tally's own books show) -- worth flagging even though the two
+          are legitimately allowed to differ (Tally often has no formal
+          accumulated-depreciation ledger at all). */
+    $excelImportedOpeningNet = 0.0;
+    $hasExcelImport = false;
+    foreach ($assets as $asset) {
+        if (($asset['source'] ?? '') === 'excel_import') {
+            $hasExcelImport = true;
+            $excelImportedOpeningNet += (float) ($asset['opening_gross_block'] ?? 0) - (float) ($asset['opening_accumulated_depreciation'] ?? 0);
+        }
+    }
+    if ($hasExcelImport) {
+        $tallyPreviousPpeNet = classifiedPreviousAmount($classified, 'ppe') + classifiedPreviousAmount($classified, 'cwip');
+        $difference = $excelImportedOpeningNet - $tallyPreviousPpeNet;
+        if (abs($difference) > 1000 && $tallyPreviousPpeNet != 0.0) {
+            $warnings[] = [
+                'check' => 'fixed_asset_excel_reconciliation',
+                'message' => 'Excel-uploaded opening net block (₹' . format_inr_number($excelImportedOpeningNet)
+                    . ') does not match Tally\'s previous-year closing PPE/CWIP balance (₹' . format_inr_number($tallyPreviousPpeNet)
+                    . ', difference ₹' . format_inr_number($difference) . '). This can be legitimate (Tally may not separately '
+                    . 'track accumulated depreciation), but verify the uploaded schedule corresponds to the same asset base before relying on it.',
             ];
         }
     }
