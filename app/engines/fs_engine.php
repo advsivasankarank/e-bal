@@ -186,6 +186,18 @@ function manualDisclosureDefaultText(string $masterCode): string
             return 'Based on the information available with the Company regarding the status of suppliers as defined under the Micro, Small and Medium Enterprises Development Act, 2006 ("MSMED Act"), there are no amounts overdue to Micro and Small Enterprises as at the Balance Sheet date, and no interest has been paid or is payable under the MSMED Act during the year.';
         case 'RPT':
             return 'There were no related party transactions during the year that require disclosure under Accounting Standard (AS) 18, other than managerial remuneration (if any) disclosed elsewhere in these financial statements.';
+        /* Segment Reporting (AS 17) and Financial Instruments disclosures are
+           applicability-gated by size/listing status in a way this app has
+           no threshold data to determine (unlike CL/COM/MSME/RPT above,
+           which are genuinely "no ledger data exists" cases for any
+           company). Render an explicit, editable "not applicable" position
+           for the small-private-company segment this app targets, rather
+           than a silent empty stub -- the CA can override if this specific
+           company is large enough to actually require these disclosures. */
+        case 'SEG':
+            return 'Segment Reporting under Accounting Standard (AS) 17 is not applicable to the Company for the year, being a single-segment entity / not meeting the applicability thresholds prescribed thereunder. Confirm this remains correct if the Company\'s operations have diversified during the year.';
+        case 'FI':
+            return 'Detailed Financial Instruments disclosures are not applicable to the Company for the year, being a small private company below the applicability thresholds that ordinarily trigger such disclosure. Confirm this remains correct if the Company has since become a listed entity or otherwise falls within scope.';
         default:
             return '';
     }
@@ -872,7 +884,7 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
             continue;
         }
 
-        if (in_array($masterCode, ['CL', 'COM', 'MSME', 'RPT'], true)) {
+        if (in_array($masterCode, ['CL', 'COM', 'MSME', 'RPT', 'SEG', 'FI'], true)) {
             $sections[] = buildManualDisclosureSection($masterCode, $title, (int) $noteNo, $manualInputs);
             continue;
         }
