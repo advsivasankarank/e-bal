@@ -49,7 +49,8 @@ $hasClosingStockDetail = trim((string) ($manualBundle['saved_current']['note24_c
    that for certain. Rather than silently guessing, ask the CA to
    explicitly confirm it (or override it) before it's used for Note 2. */
 $plOpeningCandidate = detectProfitLossLedgerOpeningCandidate(getClassifiedData($pdo, $company_id, $fy_id));
-$hasNote2OpeningConfirmed = trim((string) ($manualBundle['saved_current']['note2_opening_profit_loss'] ?? '')) !== '';
+$savedNote2Opening = trim((string) ($manualBundle['saved_current']['note2_opening_profit_loss'] ?? ''));
+$hasNote2OpeningConfirmed = $savedNote2Opening !== '' && (float) $savedNote2Opening != 0.0;
 $showNote2OpeningConfirmPrompt = !$hasNote2OpeningConfirmed && $plOpeningCandidate !== null;
 
 $manualNoteDataIncomplete = !$hasCurrentShareCapitalDetail || !$hasClosingStockDetail;
