@@ -111,6 +111,44 @@ function isProfitLossLedgerName(string $name): bool
     return in_array(strtolower(trim($name)), $variants, true);
 }
 
+/**
+ * Surfaces the current year's P&L-account-style ledger from the Trial
+ * Balance, if any, so the UI can ask the CA to explicitly confirm it as
+ * Note 2's opening balance rather than silently guessing. This is the
+ * same figure buildOtherEquitySection() would otherwise fall back to
+ * automatically -- making it an explicit, saved confirmation instead
+ * removes the ambiguity around whether a given Trial Balance figure is
+ * this ledger's opening or closing position.
+ *
+ * @return array{ledger_name: string, amount: float}|null
+ */
+function detectProfitLossLedgerOpeningCandidate(array $classified): ?array
+{
+    $rows = $classified['schedule_items']['reserves']['rows'] ?? [];
+    $matches = [];
+    foreach ($rows as $row) {
+        $name = trim((string) ($row['ledger_name'] ?? ''));
+        if ($name === '' || !isProfitLossLedgerName($name)) {
+            continue;
+        }
+        $matches[$name] = ($matches[$name] ?? 0.0) + (float) ($row['amount'] ?? 0);
+    }
+
+    if ($matches === []) {
+        return null;
+    }
+
+    arsort($matches);
+    $name = (string) array_key_first($matches);
+    $amount = round((float) $matches[$name], 2);
+
+    if ($amount == 0.0) {
+        return null;
+    }
+
+    return ['ledger_name' => $name, 'amount' => $amount];
+}
+
 function buildDetailedNote(string $title, array $lines, string $emptyLabel = 'No ledger breakup available'): array
 {
     if ($lines === []) {

@@ -43,6 +43,15 @@ $hasClosingStockDetail = trim((string) ($manualBundle['saved_current']['note24_c
     || trim((string) ($manualBundle['saved_current']['note24_closing_work_in_progress'] ?? '')) !== ''
     || trim((string) ($manualBundle['saved_current']['note24_closing_stock_in_trade'] ?? '')) !== '';
 
+/* A "Profit & Loss A/c"-style ledger in the Trial Balance is normally an
+   OPENING figure (brought forward from prior years), not this year's
+   closing balance -- but a bare Trial Balance import has no way to know
+   that for certain. Rather than silently guessing, ask the CA to
+   explicitly confirm it (or override it) before it's used for Note 2. */
+$plOpeningCandidate = detectProfitLossLedgerOpeningCandidate(getClassifiedData($pdo, $company_id, $fy_id));
+$hasNote2OpeningConfirmed = trim((string) ($manualBundle['saved_current']['note2_opening_profit_loss'] ?? '')) !== '';
+$showNote2OpeningConfirmPrompt = !$hasNote2OpeningConfirmed && $plOpeningCandidate !== null;
+
 $manualNoteDataIncomplete = !$hasCurrentShareCapitalDetail || !$hasClosingStockDetail;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') === 'carry_forward_share_capital') {
@@ -68,6 +77,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         static fn (array $row): array => ['name' => $row['name'], 'shares' => $row['shares']],
         $prevShareholders
     ));
+    header("Location: " . BASE_URL . "statements/financials.php");
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') === 'confirm_note2_opening_balance') {
+    requireCsrfToken();
+    $classifiedForConfirm = getClassifiedData($pdo, $company_id, $fy_id);
+    $confirmCandidate = detectProfitLossLedgerOpeningCandidate($classifiedForConfirm);
+    if ($confirmCandidate !== null) {
+        $confirmOpening = (string) $confirmCandidate['amount'];
+        $confirmClosing = (string) (
+            $confirmCandidate['amount']
+            + buildCompanyProfitAfterTax($classifiedForConfirm, $manualBundle['current'] ?? [], $manualBundle['previous'] ?? [])
+        );
+        saveManualInputs($pdo, $company_id, $fy_id, [
+            'note2_opening_profit_loss' => $confirmOpening,
+            'note2_closing_profit_loss' => $confirmClosing,
+        ]);
+    }
     header("Location: " . BASE_URL . "statements/financials.php");
     exit;
 }
@@ -290,6 +318,26 @@ echo renderWorkflowNavigation($navData);
         </span>
     </div>
     <button type="button" class="btn" onclick="document.getElementById('fsWorkspace').classList.add('input-open');document.getElementById('fsTogglePanel').innerHTML='&#9664; Hide';document.getElementById('fsInputPanel').scrollIntoView({behavior:'smooth'});" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Enter Details</button>
+</div>
+<?php endif; ?>
+
+<?php if ($hasReportData && $isCorporate && $showNote2OpeningConfirmPrompt): ?>
+<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;margin-bottom:14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:0.85rem;">
+    <span>&#9432;</span>
+    <div style="flex:1;">
+        <strong style="color:#1e3a8a;">Confirm Note 2 opening balance:</strong>
+        <span style="color:#475569;">
+            Found "<?= htmlspecialchars($plOpeningCandidate['ledger_name']) ?>" (<?= format_inr($plOpeningCandidate['amount']) ?>) in the Trial Balance.
+            This is normally your <strong>opening</strong> balance carried forward from prior years, not this year's closing figure.
+            Confirm to use it as the Opening Balance for Note 2 (Reserves &amp; Surplus), or enter a different figure manually below.
+        </span>
+    </div>
+    <form method="post" style="margin:0;" onsubmit="return confirm('Use <?= htmlspecialchars(addslashes(format_inr($plOpeningCandidate['amount']))) ?> as the Opening Balance for Note 2? You can still edit it afterward.');">
+        <?= csrfInput() ?>
+        <input type="hidden" name="report_action" value="confirm_note2_opening_balance">
+        <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Confirm <?= format_inr($plOpeningCandidate['amount']) ?></button>
+    </form>
+    <button type="button" class="btn" onclick="document.getElementById('fsWorkspace').classList.add('input-open');document.getElementById('fsTogglePanel').innerHTML='&#9664; Hide';document.getElementById('note2_opening_profit_loss').scrollIntoView({behavior:'smooth'});document.getElementById('note2_opening_profit_loss').focus();" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Enter Different Figure</button>
 </div>
 <?php endif; ?>
 
