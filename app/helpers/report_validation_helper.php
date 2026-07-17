@@ -133,10 +133,90 @@ function validateReportGeneration(PDO $pdo, int $company_id, int $fy_id, array $
         ];
     }
 
+    /* Current / Non-Current maturity mismatch warning.
+       Schedule III requires bifurcating borrowings by the 12-month rule, but
+       classification here is purely whichever schedule code a preparer (or
+       Tally's own group) assigned -- there is no actual maturity/date check
+       anywhere in the app. This is a best-effort heuristic on ledger naming
+       (mirrors isProfitLossLedgerName()'s approach) to catch the common case
+       of a term loan sitting in Short-Term Borrowings or a cash-credit/OD
+       facility sitting in Long-Term Borrowings -- advisory only, never
+       blocking, since only the preparer can confirm actual maturity. */
+    foreach (detectBorrowingMaturityMismatches($notes) as $mismatch) {
+        $warnings[] = $mismatch;
+    }
+
     return [
         'can_generate' => empty($errors),
         'errors' => $errors,
         'warnings' => $warnings,
-        'total_checks' => 9,
+        'total_checks' => 10,
     ];
+}
+
+function detectBorrowingMaturityMismatches(array $notes): array
+{
+    /* "term loan" etc. is a much stronger structural signal than "working
+       capital"/"cash credit" wording -- real facilities like a GECL "Working
+       Capital Term Loan" are genuinely long-term despite the short-term-
+       sounding product name, so a long-term keyword match always wins over
+       a short-term one on the same ledger name to avoid flagging those. */
+    $longTermKeywords = ['term loan', 'vehicle loan', 'car loan', 'machinery loan', 'equipment loan', 'housing loan', 'mortgage', 'debenture', 'hire purchase'];
+    $shortTermKeywords = ['cash credit', 'overdraft', 'bank od', 'od a/c', 'od limit', 'cc limit', 'cc a/c', 'working capital'];
+
+    $warnings = [];
+    foreach (($notes['sections'] ?? []) as $section) {
+        $masterCode = (string) ($section['master_code'] ?? '');
+        if ($masterCode !== 'BOR' && $masterCode !== 'STB') {
+            continue;
+        }
+
+        $noteLabel = $masterCode === 'STB' ? 'Short-Term Borrowings' : 'Long-Term Borrowings';
+        $suggestedLabel = $masterCode === 'STB' ? 'Long-Term Borrowings' : 'Short-Term Borrowings';
+
+        foreach (($section['lines'] ?? []) as $line) {
+            $label = strtolower(trim((string) ($line['label'] ?? '')));
+            if ($label === '') {
+                continue;
+            }
+
+            $hasLongTermSignal = false;
+            foreach ($longTermKeywords as $keyword) {
+                if (strpos($label, $keyword) !== false) {
+                    $hasLongTermSignal = true;
+                    break;
+                }
+            }
+
+            if ($masterCode === 'STB') {
+                if ($hasLongTermSignal) {
+                    $warnings[] = [
+                        'check' => 'borrowing_maturity_mismatch',
+                        'message' => 'Ledger "' . htmlspecialchars((string) ($line['label'] ?? '')) . '" is classified under '
+                            . $noteLabel . ' but its name suggests it may belong under ' . $suggestedLabel
+                            . ' -- verify the current/non-current split against actual maturity (Schedule III, 12-month rule).',
+                    ];
+                }
+                continue;
+            }
+
+            // masterCode === 'BOR': only flag a short-term signal when there's no competing long-term signal
+            if ($hasLongTermSignal) {
+                continue;
+            }
+            foreach ($shortTermKeywords as $keyword) {
+                if (strpos($label, $keyword) !== false) {
+                    $warnings[] = [
+                        'check' => 'borrowing_maturity_mismatch',
+                        'message' => 'Ledger "' . htmlspecialchars((string) ($line['label'] ?? '')) . '" is classified under '
+                            . $noteLabel . ' but its name suggests it may belong under ' . $suggestedLabel
+                            . ' -- verify the current/non-current split against actual maturity (Schedule III, 12-month rule).',
+                    ];
+                    break;
+                }
+            }
+        }
+    }
+
+    return $warnings;
 }
