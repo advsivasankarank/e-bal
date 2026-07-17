@@ -63,6 +63,46 @@ function updateWorkflow($company_id, $fy_id, $field) {
 }
 
 /**
+ * Single source of truth for marking/clearing notes_prepared,
+ * profit_loss_prepared and balance_sheet_prepared from the current
+ * validation state of a generated financial statement.
+ *
+ * statements/financials.php and public/reports.php are two separate,
+ * parallel implementations of the Financial Statement Console that both
+ * need to run this exact same recompute -- previously financials.php
+ * cleared the flags on validation failure and reports.php silently left
+ * them set, so a statement broken via one page could still show as
+ * "prepared" via the other. Call this identically from both.
+ */
+function syncWorkflowFromValidation(
+    PDO $pdo,
+    $company_id,
+    $fy_id,
+    bool $hasReportData,
+    array $validationResult,
+    float $currentDiff,
+    array $noteCompleteness
+): void {
+    if (!$hasReportData) {
+        return;
+    }
+
+    $hasBlockingErrors = !empty($validationResult['errors']);
+    $bsBalanced = abs($currentDiff) <= 0.01;
+    $notesComplete = $noteCompleteness['is_complete'] ?? true;
+
+    if (!$hasBlockingErrors && $bsBalanced && $notesComplete) {
+        updateWorkflow($company_id, $fy_id, 'notes_prepared');
+        updateWorkflow($company_id, $fy_id, 'profit_loss_prepared');
+        updateWorkflow($company_id, $fy_id, 'balance_sheet_prepared');
+        return;
+    }
+
+    $pdo->prepare("UPDATE workflow_status SET notes_prepared=0, profit_loss_prepared=0, balance_sheet_prepared=0, updated_at=NOW() WHERE company_id=? AND fy_id=?")
+        ->execute([$company_id, $fy_id]);
+}
+
+/**
  * Set verified status. Called only by approval_policy_helper.php.
  * NEVER call updateWorkflow() with 'verified' directly.
  */

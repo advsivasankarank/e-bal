@@ -198,17 +198,7 @@ $noteCompleteness = $fs['validation']['note_completeness'] ?? ['missing' => [], 
 
 $validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
 
-if ($hasReportData) {
-    $hasBlockingErrorsV = !empty($validationResult['errors']);
-    $bsBalanced = abs($currentDiff) <= 0.01;
-    $notesComplete = $noteCompleteness['is_complete'] ?? true;
-
-    if (!$hasBlockingErrorsV && $bsBalanced && $notesComplete) {
-        updateWorkflow($company_id, $fy_id, 'notes_prepared');
-        updateWorkflow($company_id, $fy_id, 'profit_loss_prepared');
-        updateWorkflow($company_id, $fy_id, 'balance_sheet_prepared');
-    }
-}
+syncWorkflowFromValidation($pdo, $company_id, $fy_id, $hasReportData, $validationResult, $currentDiff, $noteCompleteness);
 
 /* ============================================================
    PART A — READINESS STATUS COMPUTATION

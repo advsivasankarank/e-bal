@@ -196,23 +196,7 @@ $noteCompleteness = $fs['validation']['note_completeness'] ?? ['missing' => [], 
 
 $validationResult = validateReportGeneration($pdo, $company_id, $fy_id, $fs);
 
-if ($hasReportData) {
-    /* HARDENED: Only mark workflow stages complete if validation passes.
-       No blocking errors, BS must be balanced, notes must be complete. */
-    $hasBlockingErrors = !empty($validationResult['errors']);
-    $bsBalanced = abs($currentDiff) <= 0.01;
-    $notesComplete = $noteCompleteness['is_complete'] ?? true;
-
-    if (!$hasBlockingErrors && $bsBalanced && $notesComplete) {
-        updateWorkflow($company_id, $fy_id, 'notes_prepared');
-        updateWorkflow($company_id, $fy_id, 'profit_loss_prepared');
-        updateWorkflow($company_id, $fy_id, 'balance_sheet_prepared');
-    } else {
-        /* CLEAR workflow stages if conditions no longer met */
-        $pdo->prepare("UPDATE workflow_status SET notes_prepared=0, profit_loss_prepared=0, balance_sheet_prepared=0, updated_at=NOW() WHERE company_id=? AND fy_id=?")
-            ->execute([$company_id, $fy_id]);
-    }
-}
+syncWorkflowFromValidation($pdo, $company_id, $fy_id, $hasReportData, $validationResult, $currentDiff, $noteCompleteness);
 
 $entityCategory = $fs['entity_category'] ?? '';
 $entitySubcategory = $fs['entity_subcategory'] ?? '';
