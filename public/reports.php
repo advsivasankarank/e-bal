@@ -5,6 +5,8 @@ require_once __DIR__ . '/../app/engines/fs_engine.php';
 require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
 require_once __DIR__ . '/../app/helpers/figure_helper.php';
 require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
+require_once __DIR__ . '/../app/helpers/share_capital_helper.php';
+require_once __DIR__ . '/../app/helpers/financial_year_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 $showSidebar = true;
 $page_title = 'Management Reports';
@@ -17,6 +19,26 @@ $companyName = $_SESSION['company_name'] ?? 'Not Selected';
 $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 
 $manualBundle = loadManualInputsWithCarryForward($pdo, $company_id, $fy_id, $fyName);
+$shareholders = getShareholders($pdo, $company_id, $fy_id);
+$shareCapitalClasses = getShareCapitalClasses($pdo, $company_id, $fy_id);
+
+$prevFyLabel = getPreviousFinancialYearLabel($fyName);
+$prevFy = $prevFyLabel !== '' ? findFinancialYearByLabel($pdo, $prevFyLabel, $company_id) : null;
+$prevFyId = $prevFy !== null ? (int) ($prevFy['id'] ?? 0) : 0;
+$prevShareholders = $prevFyId > 0 ? getShareholders($pdo, $company_id, $prevFyId) : [];
+$prevShareCapitalClasses = $prevFyId > 0 ? getShareCapitalClasses($pdo, $company_id, $prevFyId) : [];
+
+/* A saved share-class row (Equity/Preference/...) is this year's own Note 1
+   detail. Closing stock (Note 24) has no sensible auto-fill -- Tally only
+   ever gives an opening-stock-style ledger total, never a closing figure --
+   so it must be entered fresh every year. */
+$hasCurrentShareCapitalDetail = !empty($shareCapitalClasses);
+$hasPreviousShareCapitalDetail = !empty($prevShareCapitalClasses);
+$showShareCapitalCarryForwardPrompt = !$hasCurrentShareCapitalDetail && $hasPreviousShareCapitalDetail;
+$hasClosingStockDetail = trim((string) ($manualBundle['saved_current']['note24_closing_finished_goods'] ?? '')) !== ''
+    || trim((string) ($manualBundle['saved_current']['note24_closing_work_in_progress'] ?? '')) !== ''
+    || trim((string) ($manualBundle['saved_current']['note24_closing_stock_in_trade'] ?? '')) !== '';
+$manualNoteDataIncomplete = !$hasCurrentShareCapitalDetail || !$hasClosingStockDetail;
 
 /* A "Profit & Loss A/c"-style ledger in the Trial Balance is normally an
    OPENING figure (brought forward from prior years), not this year's
@@ -26,6 +48,33 @@ $manualBundle = loadManualInputsWithCarryForward($pdo, $company_id, $fy_id, $fyN
 $plOpeningCandidate = detectProfitLossLedgerOpeningCandidate(getClassifiedData($pdo, $company_id, $fy_id));
 $hasNote2OpeningConfirmed = trim((string) ($manualBundle['saved_current']['note2_opening_profit_loss'] ?? '')) !== '';
 $showNote2OpeningConfirmPrompt = !$hasNote2OpeningConfirmed && $plOpeningCandidate !== null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') === 'carry_forward_share_capital') {
+    requireCsrfToken();
+    saveManualInputs($pdo, $company_id, $fy_id, [
+        'share_capital_authorised' => (string) ($manualBundle['previous']['share_capital_authorised'] ?? ''),
+        'share_capital_issued' => (string) ($manualBundle['previous']['share_capital_issued'] ?? ''),
+        'share_capital_paidup' => (string) ($manualBundle['previous']['share_capital_paidup'] ?? ''),
+    ]);
+    saveShareCapitalClasses($pdo, $company_id, $fy_id, array_map(
+        static fn (array $row): array => [
+            'share_type' => $row['share_type'],
+            'face_value' => $row['face_value'],
+            'authorised_shares' => $row['authorised_shares'],
+            'opening_shares' => $row['closing_shares'],
+            'issued_during_year' => 0,
+            'bought_back_during_year' => 0,
+            'closing_shares' => $row['closing_shares'],
+        ],
+        $prevShareCapitalClasses
+    ));
+    saveShareholders($pdo, $company_id, $fy_id, array_map(
+        static fn (array $row): array => ['name' => $row['name'], 'shares' => $row['shares']],
+        $prevShareholders
+    ));
+    header("Location: " . BASE_URL . "reports.php#balance-sheet");
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') === 'confirm_note2_opening_balance') {
     requireCsrfToken();
@@ -95,6 +144,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') ===
         'note24_closing_stock_in_trade' => $postedManualInputs['note24_closing_stock_in_trade'],
         'tax_provision' => $postedManualInputs['tax_provision'],
     ]);
+
+    $shareClassTypes = $_POST['share_class_type'] ?? [];
+    $shareClassFaceValues = $_POST['share_class_face_value'] ?? [];
+    $shareClassAuthorisedShares = $_POST['share_class_authorised_shares'] ?? [];
+    $shareClassOpeningShares = $_POST['share_class_opening_shares'] ?? [];
+    $shareClassIssuedDuringYear = $_POST['share_class_issued_during_year'] ?? [];
+    $shareClassBoughtBackDuringYear = $_POST['share_class_bought_back_during_year'] ?? [];
+    $shareClassClosingShares = $_POST['share_class_closing_shares'] ?? [];
+    $shareClassRowsToSave = [];
+    foreach ($shareClassTypes as $index => $shareType) {
+        $shareClassRowsToSave[] = [
+            'share_type' => $shareType,
+            'face_value' => $shareClassFaceValues[$index] ?? 0,
+            'authorised_shares' => $shareClassAuthorisedShares[$index] ?? 0,
+            'opening_shares' => $shareClassOpeningShares[$index] ?? 0,
+            'issued_during_year' => $shareClassIssuedDuringYear[$index] ?? 0,
+            'bought_back_during_year' => $shareClassBoughtBackDuringYear[$index] ?? 0,
+            'closing_shares' => $shareClassClosingShares[$index] ?? 0,
+        ];
+    }
+    saveShareCapitalClasses($pdo, $company_id, $fy_id, $shareClassRowsToSave);
+
+    $shareholderNames = $_POST['shareholder_name'] ?? [];
+    $shareholderShares = $_POST['shareholder_shares'] ?? [];
+    $shareholderRowsToSave = [];
+    foreach ($shareholderNames as $index => $name) {
+        $shareholderRowsToSave[] = [
+            'name' => $name,
+            'shares' => $shareholderShares[$index] ?? 0,
+        ];
+    }
+    saveShareholders($pdo, $company_id, $fy_id, $shareholderRowsToSave);
 
     header("Location: " . BASE_URL . "reports.php#notes-to-accounts");
     exit;
@@ -251,7 +332,38 @@ require_once __DIR__ . '/layouts/header_v2.php';
         <input type="hidden" name="report_action" value="confirm_note2_opening_balance">
         <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Confirm <?= format_inr($plOpeningCandidate['amount']) ?></button>
     </form>
-    <a href="#notes-to-accounts" class="btn" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Enter Different Figure</a>
+    <button type="button" class="btn" onclick="document.getElementById('fsWorkspace').classList.add('input-panel-open');document.getElementById('fsTogglePanel').innerHTML='&#9654; Hide';var t=document.querySelector('.panel-tab[data-panel=&quot;adjustments&quot;]');if(t)t.click();document.getElementById('fsInputPanel').scrollIntoView({behavior:'smooth'});" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Enter Different Figure</button>
+</div>
+<?php endif; ?>
+
+<?php if ($hasReportData && $isCorporate && $showShareCapitalCarryForwardPrompt): ?>
+<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;margin-bottom:14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:0.85rem;">
+    <span>&#8635;</span>
+    <div style="flex:1;">
+        <strong style="color:#1e3a8a;">Share Capital details found for FY <?= htmlspecialchars($prevFyLabel) ?>:</strong>
+        <span style="color:#475569;">No Note 1 (Share Capital) details are saved yet for this year. Carry forward last year's share-type breakup (Equity/Preference etc.) and shareholder list as-is, or enter fresh values in the Adjustments panel.</span>
+    </div>
+    <form method="post" style="margin:0;" onsubmit="return confirm('Carry forward Note 1 Share Capital details from FY <?= htmlspecialchars(addslashes($prevFyLabel)) ?> as-is? You can still edit them afterward.');">
+        <?= csrfInput() ?>
+        <input type="hidden" name="report_action" value="carry_forward_share_capital">
+        <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Carry Forward As-Is</button>
+    </form>
+    <button type="button" class="btn" onclick="document.getElementById('fsWorkspace').classList.add('input-panel-open');document.getElementById('fsTogglePanel').innerHTML='&#9654; Hide';var t=document.querySelector('.panel-tab[data-panel=&quot;adjustments&quot;]');if(t)t.click();document.getElementById('fsInputPanel').scrollIntoView({behavior:'smooth'});" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Enter Fresh</button>
+</div>
+<?php endif; ?>
+
+<?php if ($hasReportData && $isCorporate && $manualNoteDataIncomplete): ?>
+<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;margin-bottom:14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:0.85rem;">
+    <span>&#9998;</span>
+    <div style="flex:1;">
+        <strong style="color:#92400e;">Manual entry needed:</strong>
+        <span style="color:#475569;">
+            <?php if (!$hasCurrentShareCapitalDetail): ?>Note 1 (Share Capital) details -- authorised/issued shares, face value, shareholders &gt;5%<?= !$hasClosingStockDetail ? ' and ' : '' ?><?php endif; ?>
+            <?php if (!$hasClosingStockDetail): ?>Closing Stock for the year (Tally only provides an opening figure)<?php endif; ?>
+            <?= !$hasCurrentShareCapitalDetail || !$hasClosingStockDetail ? ' -- required for a complete Balance Sheet and Note 1/Note 24.' : '' ?>
+        </span>
+    </div>
+    <button type="button" class="btn" onclick="document.getElementById('fsWorkspace').classList.add('input-panel-open');document.getElementById('fsTogglePanel').innerHTML='&#9654; Hide';var t=document.querySelector('.panel-tab[data-panel=&quot;adjustments&quot;]');if(t)t.click();document.getElementById('fsInputPanel').scrollIntoView({behavior:'smooth'});" style="font-size:0.8rem;padding:6px 14px;white-space:nowrap;">Enter Details</button>
 </div>
 <?php endif; ?>
 
@@ -826,6 +938,69 @@ require_once __DIR__ . '/layouts/header_v2.php';
                         <label for="share_capital_paidup">Paid-up Capital (&#8377;)</label>
                         <input id="share_capital_paidup" name="share_capital_paidup" type="number" step="0.01" value="<?= htmlspecialchars((string) ($manualBundle['current']['share_capital_paidup'] ?? '')) ?>">
                     </div>
+                    <h4 style="margin:16px 0 8px;font-size:0.85rem;color:var(--muted);">Share Capital Details by Share Type (Note 1)</h4>
+                    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">Add one row per share type (e.g. Equity Shares, 8% Preference Shares). Authorised/Issued/Paid-up amounts are computed as Face Value &times; Number of Shares.</div>
+                    <div id="shareClassRows">
+                        <?php $shareClassRowsData = $shareCapitalClasses ?: [['share_type' => '', 'face_value' => '', 'authorised_shares' => '', 'opening_shares' => '', 'issued_during_year' => '', 'bought_back_during_year' => '', 'closing_shares' => '']]; ?>
+                        <?php foreach ($shareClassRowsData as $cls): ?>
+                        <div class="form-group share-class-row" style="border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:10px;margin-bottom:10px;">
+                            <div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:6px;">
+                                <div style="flex:2;">
+                                    <label>Share Type</label>
+                                    <input type="text" name="share_class_type[]" placeholder="e.g. Equity Shares" value="<?= htmlspecialchars((string) ($cls['share_type'] ?? '')) ?>">
+                                </div>
+                                <div style="flex:1;">
+                                    <label>Face Value</label>
+                                    <input type="number" step="0.01" name="share_class_face_value[]" value="<?= htmlspecialchars((string) ($cls['face_value'] ?? '')) ?>">
+                                </div>
+                                <button type="button" class="btn-outline btn-sm remove-share-class-row" style="padding:6px 10px;">&times;</button>
+                            </div>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                <div style="flex:1;min-width:110px;">
+                                    <label>Authorised Shares</label>
+                                    <input type="number" step="1" name="share_class_authorised_shares[]" value="<?= htmlspecialchars((string) ($cls['authorised_shares'] ?? '')) ?>">
+                                </div>
+                                <div style="flex:1;min-width:110px;">
+                                    <label>Opening Shares</label>
+                                    <input type="number" step="1" name="share_class_opening_shares[]" value="<?= htmlspecialchars((string) ($cls['opening_shares'] ?? '')) ?>">
+                                </div>
+                                <div style="flex:1;min-width:110px;">
+                                    <label>Issued During Year</label>
+                                    <input type="number" step="1" name="share_class_issued_during_year[]" value="<?= htmlspecialchars((string) ($cls['issued_during_year'] ?? '')) ?>">
+                                </div>
+                                <div style="flex:1;min-width:110px;">
+                                    <label>Bought Back During Year</label>
+                                    <input type="number" step="1" name="share_class_bought_back_during_year[]" value="<?= htmlspecialchars((string) ($cls['bought_back_during_year'] ?? '')) ?>">
+                                </div>
+                                <div style="flex:1;min-width:110px;">
+                                    <label>Closing Shares (Paid-up)</label>
+                                    <input type="number" step="1" name="share_class_closing_shares[]" value="<?= htmlspecialchars((string) ($cls['closing_shares'] ?? '')) ?>">
+                                </div>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <button type="button" id="addShareClassRow" class="btn-outline btn-sm" style="margin-bottom:12px;">+ Add Share Type</button>
+
+                    <h4 style="margin:16px 0 8px;font-size:0.85rem;color:var(--muted);">Shareholders Holding &gt;5% (Note 1)</h4>
+                    <div id="shareholderRows">
+                        <?php $shareholderRowsData = $shareholders ?: [['name' => '', 'shares' => '']]; ?>
+                        <?php foreach ($shareholderRowsData as $sh): ?>
+                        <div class="form-group shareholder-row" style="display:flex;gap:6px;align-items:flex-end;">
+                            <div style="flex:2;">
+                                <label>Name</label>
+                                <input type="text" name="shareholder_name[]" value="<?= htmlspecialchars((string) ($sh['name'] ?? '')) ?>">
+                            </div>
+                            <div style="flex:1;">
+                                <label>Shares</label>
+                                <input type="number" step="1" name="shareholder_shares[]" value="<?= htmlspecialchars((string) ($sh['shares'] ?? '')) ?>">
+                            </div>
+                            <button type="button" class="btn-outline btn-sm remove-shareholder-row" style="padding:6px 10px;">&times;</button>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <button type="button" id="addShareholderRow" class="btn-outline btn-sm" style="margin-bottom:12px;">+ Add Shareholder</button>
+
                     <div class="form-group">
                         <label for="note2_opening_profit_loss">Note 2 Opening P&amp;L (&#8377;)</label>
                         <input id="note2_opening_profit_loss" name="note2_opening_profit_loss" type="number" step="0.01" value="<?= htmlspecialchars((string) (($manualBundle['saved_current']['note2_opening_profit_loss'] ?? '') !== '' ? $manualBundle['saved_current']['note2_opening_profit_loss'] : ($fs['notes']['other_equity']['opening_balance'] ?? ''))) ?>">
@@ -868,6 +1043,75 @@ require_once __DIR__ . '/layouts/header_v2.php';
                     </div>
                     <button class="btn btn-primary" type="submit" style="width:100%;">Save Manual Inputs</button>
                 </form>
+                <script>
+                (function () {
+                    var rowsContainer = document.getElementById('shareClassRows');
+                    var addBtn = document.getElementById('addShareClassRow');
+                    if (rowsContainer && addBtn) {
+                        var wireRemove = function (row) {
+                            var btn = row.querySelector('.remove-share-class-row');
+                            if (!btn) return;
+                            btn.addEventListener('click', function () {
+                                if (rowsContainer.querySelectorAll('.share-class-row').length > 1) {
+                                    row.remove();
+                                } else {
+                                    row.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+                                }
+                            });
+                        };
+                        rowsContainer.querySelectorAll('.share-class-row').forEach(wireRemove);
+                        addBtn.addEventListener('click', function () {
+                            var row = document.createElement('div');
+                            row.className = 'form-group share-class-row';
+                            row.style.cssText = 'border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:10px;margin-bottom:10px;';
+                            row.innerHTML =
+                                '<div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:6px;">' +
+                                '<div style="flex:2;"><label>Share Type</label><input type="text" name="share_class_type[]" placeholder="e.g. Equity Shares" value=""></div>' +
+                                '<div style="flex:1;"><label>Face Value</label><input type="number" step="0.01" name="share_class_face_value[]" value=""></div>' +
+                                '<button type="button" class="btn-outline btn-sm remove-share-class-row" style="padding:6px 10px;">&times;</button>' +
+                                '</div>' +
+                                '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                                '<div style="flex:1;min-width:110px;"><label>Authorised Shares</label><input type="number" step="1" name="share_class_authorised_shares[]" value=""></div>' +
+                                '<div style="flex:1;min-width:110px;"><label>Opening Shares</label><input type="number" step="1" name="share_class_opening_shares[]" value=""></div>' +
+                                '<div style="flex:1;min-width:110px;"><label>Issued During Year</label><input type="number" step="1" name="share_class_issued_during_year[]" value=""></div>' +
+                                '<div style="flex:1;min-width:110px;"><label>Bought Back During Year</label><input type="number" step="1" name="share_class_bought_back_during_year[]" value=""></div>' +
+                                '<div style="flex:1;min-width:110px;"><label>Closing Shares (Paid-up)</label><input type="number" step="1" name="share_class_closing_shares[]" value=""></div>' +
+                                '</div>';
+                            rowsContainer.appendChild(row);
+                            wireRemove(row);
+                        });
+                    }
+                })();
+                (function () {
+                    var rowsContainer = document.getElementById('shareholderRows');
+                    var addBtn = document.getElementById('addShareholderRow');
+                    if (rowsContainer && addBtn) {
+                        var wireRemove = function (row) {
+                            var btn = row.querySelector('.remove-shareholder-row');
+                            if (!btn) return;
+                            btn.addEventListener('click', function () {
+                                if (rowsContainer.querySelectorAll('.shareholder-row').length > 1) {
+                                    row.remove();
+                                } else {
+                                    row.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+                                }
+                            });
+                        };
+                        rowsContainer.querySelectorAll('.shareholder-row').forEach(wireRemove);
+                        addBtn.addEventListener('click', function () {
+                            var row = document.createElement('div');
+                            row.className = 'form-group shareholder-row';
+                            row.style.cssText = 'display:flex;gap:6px;align-items:flex-end;';
+                            row.innerHTML =
+                                '<div style="flex:2;"><label>Name</label><input type="text" name="shareholder_name[]" value=""></div>' +
+                                '<div style="flex:1;"><label>Shares</label><input type="number" step="1" name="shareholder_shares[]" value=""></div>' +
+                                '<button type="button" class="btn-outline btn-sm remove-shareholder-row" style="padding:6px 10px;">&times;</button>';
+                            rowsContainer.appendChild(row);
+                            wireRemove(row);
+                        });
+                    }
+                })();
+                </script>
                 <?php else: ?>
                 <div style="font-size:0.85rem;color:var(--muted);">Manual adjustments for this entity type are configured in the report engine.</div>
                 <?php endif; ?>
