@@ -8,6 +8,8 @@ require_once __DIR__ . '/../app/helpers/report_fallback_export_helper.php';
 require_once __DIR__ . '/../app/helpers/figure_helper.php';
 require_once __DIR__ . '/../app/helpers/share_capital_helper.php';
 require_once __DIR__ . '/../app/helpers/directors_report_ai_helper.php';
+require_once __DIR__ . '/../app/helpers/readiness_helper.php';
+require_once __DIR__ . '/../app/workflow_engine.php';
 
 $autoload = __DIR__ . '/../vendor/autoload.php';
 if (file_exists($autoload)) {
@@ -78,6 +80,27 @@ $fs = generateFinancialStatements(
 if (!($fs['has_data'] ?? false)) {
     http_response_code(404);
     exit('No report data available for export.');
+}
+
+/* HARDENED: deliverables/index.php shows a "Delivery Blocked" banner using
+   this exact same readiness/workflow logic, but that was UI-only -- nothing
+   stopped a direct request to this endpoint from bypassing it. Re-check the
+   same conditions here so the block is real, not advisory. */
+$readiness = computeReadiness($pdo, $company_id, $fy_id, $fs);
+if ($readiness['validation']['blocking'] ?? false) {
+    http_response_code(403);
+    $errorLines = array_map(
+        static fn (array $e): string => '- ' . ($e['message'] ?? ''),
+        $readiness['validation']['error_messages'] ?? []
+    );
+    exit("This report cannot be downloaded yet -- unresolved validation errors:\n" . implode("\n", $errorLines));
+}
+
+$workflow = getWorkflow($company_id, $fy_id);
+$blockingDR = ($fs['entity_category'] ?? '') === 'corporate' && ($workflow['directors_report_prepared'] ?? 0) != 1;
+if ($blockingDR) {
+    http_response_code(403);
+    exit("This report cannot be downloaded yet -- the Directors' Report has not been finalised. Complete and save it on the Directors Report page first.");
 }
 
 $subcategory = $fs['entity_subcategory'] ?? '';
