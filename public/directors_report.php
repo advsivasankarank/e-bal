@@ -41,6 +41,12 @@ $draft = (string) ($manualBundle['saved_current']['directors_report_draft'] ?? '
 $draftSource = $hasSavedSections ? 'Saved Draft' : ($draft !== '' ? 'Saved Draft' : 'Not Generated');
 $infoMessage = '';
 
+$directorsReportPlace = trim((string) ($manualBundle['saved_current']['directors_report_place'] ?? ''));
+$directorsReportDate = trim((string) ($manualBundle['saved_current']['directors_report_date'] ?? ''));
+if ($directorsReportDate === '') {
+    $directorsReportDate = date('d.m.Y');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrfToken();
 
@@ -61,8 +67,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($sectionDefinitions as $key => $title) {
             $draftSections[$key] = trim((string) ($_POST['directors_report_' . $key] ?? ''));
         }
+        $directorsReportPlace = trim((string) ($_POST['directors_report_place'] ?? ''));
+        $directorsReportDate = trim((string) ($_POST['directors_report_date'] ?? '')) ?: date('d.m.Y');
         $draft = combineDirectorsReportSections($draftSections, $companyName);
-        $payload = ['directors_report_draft' => $draft];
+        $payload = [
+            'directors_report_draft' => $draft,
+            'directors_report_place' => $directorsReportPlace,
+            'directors_report_date' => $directorsReportDate,
+        ];
         foreach ($draftSections as $key => $value) {
             $payload['directors_report_' . $key] = $value;
         }
@@ -123,6 +135,14 @@ require_once __DIR__ . '/layouts/header_v2.php';
                 <textarea id="directors_report_<?= htmlspecialchars($key) ?>" name="directors_report_<?= htmlspecialchars($key) ?>"><?= htmlspecialchars((string) ($draftSections[$key] ?? '')) ?></textarea>
             </div>
         <?php endforeach; ?>
+        <div class="form-group">
+            <label for="directors_report_place">Place (Signature Block)</label>
+            <input type="text" id="directors_report_place" name="directors_report_place" value="<?= htmlspecialchars($directorsReportPlace) ?>" placeholder="e.g. Chennai">
+        </div>
+        <div class="form-group">
+            <label for="directors_report_date">Date (Signature Block)</label>
+            <input type="text" id="directors_report_date" name="directors_report_date" value="<?= htmlspecialchars($directorsReportDate) ?>" placeholder="DD.MM.YYYY">
+        </div>
         <button class="btn-primary" type="submit">Save Directors Report Draft</button>
     </form>
 </div>
@@ -132,6 +152,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
     <?php
     $sections = $draftSections;
     $company_meta = $fs['company_meta'] ?? [];
+    $data = $fs['data'] ?? [];
     include __DIR__ . '/reports_dashboard/formats/directors_report_company.php';
     ?>
 </div>

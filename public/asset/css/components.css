@@ -381,6 +381,25 @@ a.ui-stat-card:hover { box-shadow: var(--shadow); }
 .ui-section-title { font-size: .88rem; font-weight: 700; color: var(--text); }
 
 /* ============================================================
+   DIRECTORS' REPORT PREVIEW (on-screen "Frozen Preview" box)
+   ============================================================ */
+.preview-box { background: #fff; border: 1px solid var(--border, #e0e4e8); border-radius: 10px; padding: 24px 28px; margin-top: 16px; }
+.directors-report-preview { font-size: 0.85rem; line-height: 1.6; color: var(--text, #1e293b); }
+.directors-report-preview h2 { font-size: 1.3rem; text-align: center; margin: 0 0 6px; }
+.directors-report-preview > p:first-of-type { text-align: center; margin: 0 0 18px; }
+.directors-report-preview h3 { font-size: 0.92rem; margin: 18px 0 6px; border-bottom: 1px solid var(--border, #e0e4e8); padding-bottom: 4px; }
+.directors-report-preview .report-section-text { text-align: justify; margin: 0 0 4px; word-wrap: break-word; overflow-wrap: break-word; }
+.directors-report-preview .directors-report-table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; }
+.directors-report-preview .directors-report-table th,
+.directors-report-preview .directors-report-table td { border: 1px solid var(--border, #e0e4e8); padding: 6px 8px; font-size: 0.82rem; }
+.directors-report-preview .directors-report-table thead th { background: #f5f8fc; }
+.directors-report-preview .directors-report-table tr.total-row td { background: #f7fafc; }
+.directors-report-preview .directors-report-table td.figure,
+.directors-report-preview .directors-report-table th.figure { text-align: right; }
+.directors-report-preview .directors-report-signoff { margin-top: 32px; }
+.directors-report-preview .directors-report-place-date { margin-top: 18px; font-size: 0.82rem; color: var(--muted, #6b7280); }
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 1024px) {

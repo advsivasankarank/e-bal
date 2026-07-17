@@ -89,6 +89,12 @@ if ($subcategory === 'trust') {
     $fs['notes_template'] = __DIR__ . '/reports_dashboard/formats/notes_society.php';
 }
 
+$directorsReportPlace = trim((string) ($manualBundle['saved_current']['directors_report_place'] ?? ''));
+$directorsReportDate = trim((string) ($manualBundle['saved_current']['directors_report_date'] ?? ''));
+if ($directorsReportDate === '') {
+    $directorsReportDate = date('d.m.Y');
+}
+
 if ($docType === 'directors_report') {
     if (($fs['entity_category'] ?? '') !== 'corporate') {
         http_response_code(404);
@@ -100,7 +106,7 @@ if ($docType === 'directors_report') {
 
     $documentLabel = 'directors-report';
     $title = "Directors' Report - " . $companyName . ' - ' . $fyName;
-    $htmlBody = renderDirectorsReportDocument($loadedDirectorsReport['sections'], $companyName, $fyName, $fs['company_meta'] ?? []);
+    $htmlBody = renderDirectorsReportDocument($loadedDirectorsReport['sections'], $companyName, $fyName, $fs['company_meta'] ?? [], $fs['data'] ?? [], $directorsReportPlace, $directorsReportDate);
 } else {
     $directorsReportSections = [];
     if (($fs['entity_category'] ?? '') === 'corporate') {
@@ -111,7 +117,7 @@ if ($docType === 'directors_report') {
 
     $documentLabel = 'financial-statements';
     $title = ($fs['title'] ?? 'Financial Statements') . ' - ' . $companyName . ' - ' . $fyName;
-    $htmlBody = renderFinancialReportDocument($fs, $companyName, $fyName, $directorsReportSections);
+    $htmlBody = renderFinancialReportDocument($fs, $companyName, $fyName, $directorsReportSections, $directorsReportPlace, $directorsReportDate);
 }
 $htmlDocument = wrapReportHtmlDocument($title, $htmlBody);
 

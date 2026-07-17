@@ -203,6 +203,91 @@ body {
 .signature-table td { border: 0 !important; }
 .signature-block { margin-top: 16px; }
 .signature-caption { color: #475569; font-size: 9px; margin-top: 4px; }
+.directors-report-preview {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 9px;
+    line-height: 1.55;
+    color: #1e293b;
+}
+.directors-report-preview p {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 8px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+.directors-report-preview h2 {
+    font-size: 16px;
+    text-align: center;
+    margin: 0 0 4px;
+    color: #0f172a;
+    letter-spacing: 0.4px;
+}
+.directors-report-preview > p:first-of-type {
+    text-align: center;
+    margin: 0 0 16px;
+    font-size: 9px;
+}
+.directors-report-preview h3 {
+    font-size: 10px;
+    margin: 14px 0 5px;
+    color: #0f172a;
+    border-bottom: 1px solid #d9e5f2;
+    padding-bottom: 3px;
+}
+.report-section-text {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 4px;
+    text-align: left;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+.directors-report-table {
+    margin: 6px 0 16px;
+    border: 1px solid #d9e5f2;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+.directors-report-table th,
+.directors-report-table td {
+    border: 1px solid #dbe3ef;
+    padding: 3px 5px;
+    font-size: 8.5px;
+    word-wrap: break-word;
+}
+.directors-report-table th.particulars,
+.directors-report-table td:first-child {
+    width: 52%;
+    text-align: left;
+}
+.directors-report-table th.figure,
+.directors-report-table td.figure {
+    width: 24%;
+    text-align: right;
+    white-space: nowrap;
+}
+.directors-report-table thead th {
+    background: #eef4f9;
+    color: #334155;
+}
+.directors-report-table tr.total-row td {
+    background: #f3f7fb;
+}
+.directors-report-signoff {
+    margin-top: 30px;
+    font-size: 9.5px;
+    line-height: 1.6;
+}
+.directors-report-place-date {
+    margin-top: 18px;
+    font-size: 9px;
+    color: #334155;
+}
+.directors-report-place-date div {
+    margin-bottom: 2px;
+}
 .report-export-cover {
     margin: 0 auto 10px;
     width: 100%;
@@ -447,7 +532,7 @@ function renderExecutiveSummaryPage(array $fs, string $companyName, string $fyNa
     return (string) ob_get_clean();
 }
 
-function renderDirectorsReportSection(array $sections, string $companyName, string $fyName, array $company_meta): string
+function renderDirectorsReportSection(array $sections, string $companyName, string $fyName, array $company_meta, array $data = [], string $directorsReportPlace = '', string $directorsReportDate = ''): string
 {
     $cin = trim((string) ($company_meta['cin'] ?? ''));
     $registeredAddress = trim((string) ($company_meta['registered_address'] ?? ''));
@@ -479,12 +564,12 @@ function renderDirectorsReportSection(array $sections, string $companyName, stri
  * Standalone Directors' Report document (its own cover-free single PDF/DOCX,
  * not embedded in the Financial Statements bundle).
  */
-function renderDirectorsReportDocument(array $sections, string $companyName, string $fyName, array $company_meta): string
+function renderDirectorsReportDocument(array $sections, string $companyName, string $fyName, array $company_meta, array $data = [], string $directorsReportPlace = '', string $directorsReportDate = ''): string
 {
-    return '<div class="report-shell">' . renderDirectorsReportSection($sections, $companyName, $fyName, $company_meta) . '</div>';
+    return '<div class="report-shell">' . renderDirectorsReportSection($sections, $companyName, $fyName, $company_meta, $data, $directorsReportPlace, $directorsReportDate) . '</div>';
 }
 
-function renderFinancialReportDocument(array $fs, string $companyName, string $fyName, array $directorsReportSections = []): string
+function renderFinancialReportDocument(array $fs, string $companyName, string $fyName, array $directorsReportSections = [], string $directorsReportPlace = '', string $directorsReportDate = ''): string
 {
     $data = $fs['data'];
     $notes = $fs['notes'];
@@ -552,7 +637,7 @@ function renderFinancialReportDocument(array $fs, string $companyName, string $f
 
     <?php if ($hasDirectorsReport): ?>
     <div class="report-shell">
-        <?= renderDirectorsReportSection($directorsReportSections, $companyName, $fyName, $company_meta) ?>
+        <?= renderDirectorsReportSection($directorsReportSections, $companyName, $fyName, $company_meta, $data, $directorsReportPlace, $directorsReportDate) ?>
     </div>
     <?php endif; ?>
 

@@ -1,19 +1,50 @@
 <?php
 $sectionTitles = getDirectorsReportSectionDefinitions();
+$fyEndDateForTitle = isset($fyName) ? directorsReportFyEndDate((string) $fyName) : '';
+$financialPerformanceRows = buildDirectorsReportFinancialPerformanceRows($data ?? []);
 ?>
 
 <div class="directors-report-preview">
     <h2>Directors' Report</h2>
     <p>To,<br>The Members of <?= htmlspecialchars($companyName) ?></p>
 
-    <?php $counter = 1; foreach ($sectionTitles as $key => $title): ?>
+    <p><?= nl2br(htmlspecialchars((string) ($sections['intro'] ?? ''))) ?></p>
+
+    <h3 class="financial-performance-heading">Financial Performance</h3>
+    <table class="directors-report-table" border="1" width="100%" cellpadding="5">
+        <thead>
+        <tr>
+            <th class="particulars" rowspan="2">Particulars</th>
+            <th class="figure" colspan="2">Amount (in Rs.)</th>
+        </tr>
+        <tr>
+            <th class="figure">Current Year<?= $fyEndDateForTitle !== '' ? ' (' . htmlspecialchars($fyEndDateForTitle) . ')' : '' ?></th>
+            <th class="figure">Previous Year</th>
+        </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($financialPerformanceRows as $row): ?>
+        <tr<?= !empty($row['bold']) ? ' class="total-row"' : '' ?>>
+            <td><?= !empty($row['bold']) ? '<b>' . htmlspecialchars($row['label']) . '</b>' : htmlspecialchars($row['label']) ?></td>
+            <td class="figure"><?= !empty($row['bold']) ? '<b>' . \format_inr((float) $row['current']) . '</b>' : \format_inr((float) $row['current']) ?></td>
+            <td class="figure"><?= !empty($row['bold']) ? '<b>' . \format_inr((float) $row['previous']) . '</b>' : \format_inr((float) $row['previous']) ?></td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+
+    <?php $counter = 1; foreach ($sectionTitles as $key => $title): if ($key === 'intro') { $counter++; continue; } ?>
         <h3><?= $counter ?>. <?= htmlspecialchars($title) ?></h3>
         <div class="report-section-text"><?= nl2br(htmlspecialchars((string) ($sections[$key] ?? ''))) ?></div>
         <?php $counter++; ?>
     <?php endforeach; ?>
 
-    <div style="margin-top:36px;">
-        <strong>For and on behalf of the Board of Directors</strong>
+    <div class="directors-report-signoff">
+        <strong>For and on behalf of the Board of Directors of</strong><br>
+        <strong><?= htmlspecialchars(strtoupper($companyName)) ?></strong>
+        <?php if (!empty($company_meta['cin'])): ?>
+        <br>CIN: <?= htmlspecialchars($company_meta['cin']) ?>
+        <?php endif; ?>
     </div>
 
     <table width="100%" style="border:0; border-collapse:collapse; margin-top:28px;">
@@ -30,4 +61,11 @@ $sectionTitles = getDirectorsReportSectionDefinitions();
             </td>
         </tr>
     </table>
+
+    <?php if (!empty($directorsReportPlace) || !empty($directorsReportDate)): ?>
+    <div class="directors-report-place-date">
+        <?php if (!empty($directorsReportPlace)): ?><div>Place: <?= htmlspecialchars($directorsReportPlace) ?></div><?php endif; ?>
+        <?php if (!empty($directorsReportDate)): ?><div>Date: <?= htmlspecialchars($directorsReportDate) ?></div><?php endif; ?>
+    </div>
+    <?php endif; ?>
 </div>
