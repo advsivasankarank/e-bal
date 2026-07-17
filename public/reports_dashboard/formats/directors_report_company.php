@@ -33,7 +33,7 @@ $financialPerformanceRows = buildDirectorsReportFinancialPerformanceRows($data ?
         </tbody>
     </table>
 
-    <?php $counter = 1; foreach ($sectionTitles as $key => $title): if ($key === 'intro') { $counter++; continue; } ?>
+    <?php $counter = 1; foreach ($sectionTitles as $key => $title): if ($key === 'intro') { continue; } ?>
         <h3><?= $counter ?>. <?= htmlspecialchars($title) ?></h3>
         <div class="report-section-text"><?= nl2br(htmlspecialchars((string) ($sections[$key] ?? ''))) ?></div>
         <?php $counter++; ?>

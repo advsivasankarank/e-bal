@@ -225,7 +225,7 @@ body {
     letter-spacing: 0.4px;
 }
 .directors-report-preview > p:first-of-type {
-    text-align: center;
+    text-align: left;
     margin: 0 0 16px;
     font-size: 9px;
 }

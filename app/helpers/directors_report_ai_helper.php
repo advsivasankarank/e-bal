@@ -142,7 +142,7 @@ function buildDirectorsReportFallbackSections(array $fs, string $companyName, st
         'directors_responsibility' => buildDirectorsResponsibilityStatement($fyEndDate),
         'conservation_energy' => "There is no captive generation of energy. The Company's operations do not involve activities having a significant impact on energy conservation. However, wherever possible, the Company strives to conserve energy.",
         'technology_absorption' => "The Company has not imported any technology during the year under review, and there is no expenditure incurred on research and development during the year.",
-        'forex_earnings_outgo' => "Foreign Exchange Earned through Direct Export: Nil\nOther Foreign Exchange Earnings: Nil\nTotal Foreign Exchange Earned: Nil\nForeign Exchange Outgo: Nil",
+        'forex_earnings_outgo' => "- Foreign Exchange Earned through Direct Export: Nil\n- Other Foreign Exchange Earnings: Nil\n- Total Foreign Exchange Earned: Nil\n- Foreign Exchange Outgo: Nil",
         'risk_management' => "The Board considers that there is no significant risk involved in the affairs of the Company. Where there exist insurable risks, they are adequately insured to the extent considered necessary.",
         'deposits' => "The Company has not accepted any deposits covered under Chapter V of the Companies Act, 2013 during the year under review.",
         'significant_orders' => "There were no significant and material orders passed by the regulators or courts or tribunals impacting the going concern status and the Company's operations in future.",
