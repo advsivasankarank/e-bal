@@ -4,6 +4,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/engines/fs_engine.php';
 require_once __DIR__ . '/../app/helpers/report_manual_helper.php';
 require_once __DIR__ . '/../app/helpers/directors_report_ai_helper.php';
+require_once __DIR__ . '/../app/helpers/share_capital_helper.php';
 require_once __DIR__ . '/../app/helpers/plan_helper.php';
 require_once __DIR__ . '/../app/workflow_engine.php';
 
@@ -15,6 +16,7 @@ $companyName = $_SESSION['company_name'] ?? 'Not Selected';
 $fyName = $_SESSION['fy_name'] ?? 'Not Selected';
 
 $manualBundle = loadManualInputsWithCarryForward($pdo, $company_id, $fy_id, $fyName);
+$shareholders = getShareholders($pdo, $company_id, $fy_id);
 $fs = generateFinancialStatements(
     $pdo,
     $company_id,
@@ -42,10 +44,10 @@ $draftSource = $hasSavedSections ? 'Saved Draft' : ($draft !== '' ? 'Saved Draft
 $infoMessage = '';
 
 if (!$hasSavedSections && trim($draft) !== '') {
-    $generatedFallback = buildDirectorsReportFallbackSections($fs, $companyName, $fyName);
+    $generatedFallback = buildDirectorsReportFallbackSections($fs, $companyName, $fyName, $shareholders);
     $draftSections = $generatedFallback;
 } elseif (!$hasSavedSections) {
-    $draftSections = buildDirectorsReportFallbackSections($fs, $companyName, $fyName);
+    $draftSections = buildDirectorsReportFallbackSections($fs, $companyName, $fyName, $shareholders);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -58,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($userId > 0 && !hasFeature($userId, 'directors_report_ai', $pdo)) {
             $infoMessage = 'AI draft is not available on your current plan. Upgrade to use AI features.';
         } else {
-            $generated = generateDirectorsReportDraft($fs, $companyName, $fyName);
+            $generated = generateDirectorsReportDraft($fs, $companyName, $fyName, $shareholders);
             $draft = (string) ($generated['draft'] ?? '');
             $draftSections = $generated['sections'] ?? $draftSections;
             $draftSource = (string) ($generated['source'] ?? 'Built-in Draft');
