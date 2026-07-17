@@ -18,6 +18,20 @@ function ensureTallyLedgersComparativeColumns(PDO $pdo): void
     if (!in_array('opening_dr_cr', $columns, true)) {
         $pdo->exec("ALTER TABLE tally_ledgers ADD COLUMN opening_dr_cr VARCHAR(2) DEFAULT NULL AFTER opening_amount");
     }
+
+    /* Distinct from opening_amount/opening_dr_cr above, which is e-BAL's
+       OWN carry-forward (copied from the previous FY's closing balance
+       already stored in e-BAL). tally_reported_opening_* captures the
+       opening balance Tally itself reports for the ledger in the same
+       Trial Balance export, independent of whether e-BAL has any prior FY
+       on file -- so the two can be reconciled against each other. */
+    if (!in_array('tally_reported_opening_amount', $columns, true)) {
+        $pdo->exec("ALTER TABLE tally_ledgers ADD COLUMN tally_reported_opening_amount DECIMAL(18,2) NOT NULL DEFAULT 0 AFTER opening_dr_cr");
+    }
+
+    if (!in_array('tally_reported_opening_dr_cr', $columns, true)) {
+        $pdo->exec("ALTER TABLE tally_ledgers ADD COLUMN tally_reported_opening_dr_cr VARCHAR(2) DEFAULT NULL AFTER tally_reported_opening_amount");
+    }
 }
 
 function mapOpeningRowsByLedger(array $rows): array
@@ -68,8 +82,8 @@ function importTrialBalanceRows(PDO $pdo, int $company_id, int $fy_id, array $ro
 
     $insertTbStmt = $pdo->prepare("
         INSERT INTO tally_ledgers
-        (company_id, fy_id, ledger_name, parent_group, amount, dr_cr, opening_amount, opening_dr_cr, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        (company_id, fy_id, ledger_name, parent_group, amount, dr_cr, opening_amount, opening_dr_cr, tally_reported_opening_amount, tally_reported_opening_dr_cr, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ");
 
     $parentStmt = $pdo->prepare("
@@ -160,6 +174,11 @@ function importTrialBalanceRows(PDO $pdo, int $company_id, int $fy_id, array $ro
             }
 
             $opening = $openingMap[$normalizedName] ?? ['amount' => 0.0, 'type' => null];
+            $tallyReportedOpeningAmount = abs((float) ($row['opening_amount'] ?? 0));
+            $tallyReportedOpeningType = strtoupper(trim((string) ($row['opening_type'] ?? '')));
+            if (!in_array($tallyReportedOpeningType, ['DR', 'CR'], true)) {
+                $tallyReportedOpeningType = null;
+            }
 
             $insertTbStmt->execute([
                 $company_id,
@@ -169,7 +188,9 @@ function importTrialBalanceRows(PDO $pdo, int $company_id, int $fy_id, array $ro
                 $amount,
                 $dr_cr,
                 (float) ($opening['amount'] ?? 0),
-                ($opening['type'] ?? null)
+                ($opening['type'] ?? null),
+                $tallyReportedOpeningAmount,
+                $tallyReportedOpeningType,
             ]);
 
             $dataInserted++;

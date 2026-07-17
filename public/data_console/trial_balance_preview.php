@@ -6,6 +6,7 @@ require_once '../../app/engines/ai_mapping_engine.php';
 require_once '../../app/helpers/schedule3_master_helper.php';
 require_once '../../app/helpers/figure_helper.php';
 require_once '../../app/helpers/parent_group_validation_helper.php';
+require_once '../../app/helpers/opening_balance_diagnostics_helper.php';
 
 requireFullContext();
 
@@ -19,6 +20,13 @@ $mappingEngine = new AIMappingEngine($companyCategory);
 $mappingOptions = $mappingEngine->getMappingOptions();
 asort($mappingOptions, SORT_NATURAL | SORT_FLAG_CASE);
 $previewMappingOptions = $mappingOptions;
+
+try {
+    $openingBalanceDiagnostics = computeOpeningBalanceDiagnostics($pdo, $company_id, $fy_id);
+} catch (Throwable $e) {
+    $openingBalanceDiagnostics = ['mismatches' => [], 'first_year_gaps' => [], 'compared' => 0, 'has_previous_fy' => false];
+}
+$openingBalanceIssueCount = count($openingBalanceDiagnostics['mismatches']) + count($openingBalanceDiagnostics['first_year_gaps']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mapping_data'])) {
     $decoded = json_decode((string) $_POST['mapping_data'], true);
@@ -353,13 +361,18 @@ require_once __DIR__ . '/../layouts/header_v2.php';
 ?>
 
 <link rel="stylesheet" href="<?= BASE_URL ?>asset/css/bs_diagnostics_panel.css?v=<?= filemtime(__DIR__ . '/../asset/css/bs_diagnostics_panel.css') ?>">
+<link rel="stylesheet" href="<?= BASE_URL ?>asset/css/opening_balance_diagnostics_panel.css?v=<?= filemtime(__DIR__ . '/../asset/css/opening_balance_diagnostics_panel.css') ?>">
 <meta name="csrf-token" content="<?= htmlspecialchars(csrfToken()) ?>">
 <script>
     window.BS_DIAG_BASE_URL = <?= json_encode(BASE_URL) ?>;
     window.BS_DIAG_ENTITY_ID = <?= (int) $company_id ?>;
     window.BS_DIAG_FY_ID = <?= (int) $fy_id ?>;
+    window.OB_DIAG_BASE_URL = <?= json_encode(BASE_URL) ?>;
+    window.OB_DIAG_ENTITY_ID = <?= (int) $company_id ?>;
+    window.OB_DIAG_FY_ID = <?= (int) $fy_id ?>;
 </script>
 <script src="<?= BASE_URL ?>asset/js/bs_diagnostics_panel.js?v=<?= filemtime(__DIR__ . '/../asset/js/bs_diagnostics_panel.js') ?>"></script>
+<script src="<?= BASE_URL ?>asset/js/opening_balance_diagnostics_panel.js?v=<?= filemtime(__DIR__ . '/../asset/js/opening_balance_diagnostics_panel.js') ?>"></script>
 
 <style>
 :root {
@@ -586,6 +599,17 @@ $cardParams = ['company_id' => (int)$company_id, 'fy_id' => (int)$fy_id, 'per_pa
         <a href="<?= $cardBase ?>&filter=all" style="color:var(--brand);font-weight:600;text-decoration:none;font-size:0.82rem;">Clear Filter</a>
     <?php endif; ?>
 </div>
+
+<?php if ($openingBalanceDiagnostics['compared'] > 0 || $openingBalanceIssueCount > 0): ?>
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:10px 16px;background:<?= $openingBalanceIssueCount > 0 ? '#fef3c7' : '#dcfce7' ?>;border-radius:8px;font-size:0.85rem;">
+    <?php if ($openingBalanceIssueCount > 0): ?>
+        <strong style="color:var(--warning);">Opening Balances: <?= $openingBalanceIssueCount ?> ledger(s) need review</strong>
+        <button type="button" onclick="openOpeningBalanceDiagnosticsPanel()" style="color:var(--warning);font-weight:600;text-decoration:underline;font-size:0.82rem;background:none;border:none;cursor:pointer;padding:0;">View Opening Balance Diagnostics</button>
+    <?php else: ?>
+        <strong style="color:var(--success);">Opening Balances: <?= $openingBalanceDiagnostics['compared'] ?> ledger(s) verified against Tally, no differences</strong>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div class="stepper">
     <a href="<?= BASE_URL ?>data/index.php?entity_id=<?= (int)$company_id ?>&fy_id=<?= (int)$fy_id ?>" class="step" style="text-decoration:none;color:inherit;">

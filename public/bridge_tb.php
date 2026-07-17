@@ -114,6 +114,8 @@ function extractTrialBalanceRows(SimpleXMLElement $xmlObj): array
             $name = trim((string) ($nameNodes[$i]->DSPDISPNAME ?? ''));
             $dr = (float) ($infoNodes[$i]->DSPCLDRAMT->DSPCLDRAMTA ?? 0);
             $cr = (float) ($infoNodes[$i]->DSPCLCRAMT->DSPCLCRAMTA ?? 0);
+            $openDr = (float) ($infoNodes[$i]->DSPOPDRAMT->DSPOPDRAMTA ?? 0);
+            $openCr = (float) ($infoNodes[$i]->DSPOPCRAMT->DSPOPCRAMTA ?? 0);
 
             if ($name === '' || ($dr == 0.0 && $cr == 0.0)) {
                 continue;
@@ -124,6 +126,8 @@ function extractTrialBalanceRows(SimpleXMLElement $xmlObj): array
                 'parent_group' => '',
                 'amount' => $dr != 0.0 ? abs($dr) : abs($cr),
                 'type' => $dr != 0.0 ? 'DR' : 'CR',
+                'opening_amount' => $openDr != 0.0 ? abs($openDr) : abs($openCr),
+                'opening_type' => $openDr != 0.0 ? 'DR' : ($openCr != 0.0 ? 'CR' : ''),
             ];
         }
 
@@ -135,6 +139,8 @@ function extractTrialBalanceRows(SimpleXMLElement $xmlObj): array
         $name = trim((string) ($node->DSPACCNAME->DSPDISPNAME ?? ''));
         $dr = (float) ($node->DSPACCINFO->DSPCLDRAMT->DSPCLDRAMTA ?? 0);
         $cr = (float) ($node->DSPACCINFO->DSPCLCRAMT->DSPCLCRAMTA ?? 0);
+        $openDr = (float) ($node->DSPACCINFO->DSPOPDRAMT->DSPOPDRAMTA ?? 0);
+        $openCr = (float) ($node->DSPACCINFO->DSPOPCRAMT->DSPOPCRAMTA ?? 0);
 
         if ($name !== '' && ($dr != 0.0 || $cr != 0.0)) {
             $rows[] = [
@@ -142,6 +148,8 @@ function extractTrialBalanceRows(SimpleXMLElement $xmlObj): array
                 'parent_group' => '',
                 'amount' => $dr != 0.0 ? abs($dr) : abs($cr),
                 'type' => $dr != 0.0 ? 'DR' : 'CR',
+                'opening_amount' => $openDr != 0.0 ? abs($openDr) : abs($openCr),
+                'opening_type' => $openDr != 0.0 ? 'DR' : ($openCr != 0.0 ? 'CR' : ''),
             ];
         }
 
@@ -150,12 +158,16 @@ function extractTrialBalanceRows(SimpleXMLElement $xmlObj): array
                 $childName = trim((string) ($childNode->DSPACCNAME->DSPDISPNAME ?? ''));
                 $childDr = (float) ($childNode->DSPACCINFO->DSPCLDRAMT->DSPCLDRAMTA ?? 0);
                 $childCr = (float) ($childNode->DSPACCINFO->DSPCLCRAMT->DSPCLCRAMTA ?? 0);
+                $childOpenDr = (float) ($childNode->DSPACCINFO->DSPOPDRAMT->DSPOPDRAMTA ?? 0);
+                $childOpenCr = (float) ($childNode->DSPACCINFO->DSPOPCRAMT->DSPOPCRAMTA ?? 0);
                 if ($childName !== '' && ($childDr != 0.0 || $childCr != 0.0)) {
                     $rows[] = [
                         'ledger_name' => $childName,
                         'parent_group' => '',
                         'amount' => $childDr != 0.0 ? abs($childDr) : abs($childCr),
                         'type' => $childDr != 0.0 ? 'DR' : 'CR',
+                        'opening_amount' => $childOpenDr != 0.0 ? abs($childOpenDr) : abs($childOpenCr),
+                        'opening_type' => $childOpenDr != 0.0 ? 'DR' : ($childOpenCr != 0.0 ? 'CR' : ''),
                     ];
                 }
             }
@@ -178,11 +190,14 @@ function extractTrialBalanceRows(SimpleXMLElement $xmlObj): array
             if ($closing == 0.0) {
                 continue;
             }
+            $opening = (float) ($ledger->OPENINGBALANCE ?? 0);
             $rows[] = [
                 'ledger_name' => $name,
                 'parent_group' => trim((string) ($ledger->PARENT ?? '')),
                 'amount' => abs($closing),
                 'type' => $closing < 0 ? 'CR' : 'DR',
+                'opening_amount' => abs($opening),
+                'opening_type' => $opening != 0.0 ? ($opening < 0 ? 'CR' : 'DR') : '',
             ];
         }
     }

@@ -1,0 +1,84 @@
+/**
+ * e-BAL — Opening Balance Diagnostics Panel
+ *
+ * Reuses the modal chrome (.bs-diag-overlay/.bs-diag-modal/.bs-diag-banner/
+ * .bs-diag-btn/...) from bs_diagnostics_panel.css, which must be loaded
+ * alongside this file. Only the comparison table below is specific to this
+ * panel.
+ */
+
+.ob-diag-body {
+    padding: 16px 20px 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.ob-diag-section-title {
+    margin: 0 0 6px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text, #1e293b);
+}
+
+.ob-diag-section-title:not(:first-child) {
+    margin-top: 24px;
+}
+
+.ob-diag-section-note {
+    margin: 0 0 10px;
+    font-size: 0.8rem;
+    color: var(--muted, #6b7280);
+}
+
+.ob-diag-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border, #e0e4e8);
+    border-radius: 8px;
+}
+
+.ob-diag-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.ob-diag-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border-bottom: 2px solid var(--border, #e0e4e8);
+    font-weight: 600;
+    color: var(--muted, #6b7280);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.ob-diag-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    color: var(--text, #1e293b);
+    vertical-align: middle;
+}
+
+.ob-diag-table tr:last-child td {
+    border-bottom: none;
+}
+
+.ob-diag-figure {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.ob-diag-diff {
+    font-weight: 700;
+    color: #b45309;
+}
+
+.ob-diag-actions {
+    display: flex;
+    gap: 6px;
+    white-space: nowrap;
+}

@@ -215,6 +215,8 @@ XML
                 $name = trim((string) ($nameNodes[$i]->DSPDISPNAME ?? ''));
                 $dr = (float) ($infoNodes[$i]->DSPCLDRAMT->DSPCLDRAMTA ?? 0);
                 $cr = (float) ($infoNodes[$i]->DSPCLCRAMT->DSPCLCRAMTA ?? 0);
+                $openDr = (float) ($infoNodes[$i]->DSPOPDRAMT->DSPOPDRAMTA ?? 0);
+                $openCr = (float) ($infoNodes[$i]->DSPOPCRAMT->DSPOPCRAMTA ?? 0);
 
                 if ($name === '' || ($dr == 0.0 && $cr == 0.0)) {
                     continue;
@@ -225,6 +227,8 @@ XML
                     'parent_group' => '',
                     'amount' => $dr != 0.0 ? abs($dr) : abs($cr),
                     'type' => $dr != 0.0 ? 'DR' : 'CR',
+                    'opening_amount' => $openDr != 0.0 ? abs($openDr) : abs($openCr),
+                    'opening_type' => $openDr != 0.0 ? 'DR' : ($openCr != 0.0 ? 'CR' : ''),
                 ];
             }
 
@@ -245,6 +249,8 @@ XML
 
         $dr = (float) ($node->DSPACCINFO->DSPCLDRAMT->DSPCLDRAMTA ?? 0);
         $cr = (float) ($node->DSPACCINFO->DSPCLCRAMT->DSPCLCRAMTA ?? 0);
+        $openDr = (float) ($node->DSPACCINFO->DSPOPDRAMT->DSPOPDRAMTA ?? 0);
+        $openCr = (float) ($node->DSPACCINFO->DSPOPCRAMT->DSPOPCRAMTA ?? 0);
 
         if ($name !== '' && ($dr != 0.0 || $cr != 0.0)) {
             $rows[] = [
@@ -252,6 +258,8 @@ XML
                 'parent_group' => '',
                 'amount' => $dr != 0.0 ? abs($dr) : abs($cr),
                 'type' => $dr != 0.0 ? 'DR' : 'CR',
+                'opening_amount' => $openDr != 0.0 ? abs($openDr) : abs($openCr),
+                'opening_type' => $openDr != 0.0 ? 'DR' : ($openCr != 0.0 ? 'CR' : ''),
             ];
         }
 
