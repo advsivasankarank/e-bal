@@ -214,7 +214,10 @@ function buildCompanyProfitAfterTax(array $classified, array $manualInputs = [],
         'other_expenses',
     ]);
 
-    return ($revenue + $otherIncome) - ($materialsConsumed + $expenses + $inventoryChange);
+    $pbt = ($revenue + $otherIncome) - ($materialsConsumed + $expenses + $inventoryChange);
+    $tax = manualAmount($usePrevious ? $previousManualInputs : $manualInputs, 'tax_provision', 0);
+
+    return $pbt - $tax;
 }
 
 function buildInventoryChangeSection(array $manualInputs, array $previousManualInputs, int $noteNo, string $title): array
