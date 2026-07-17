@@ -28,7 +28,18 @@ $fs = generateFinancialStatements(
 );
 
 if (($fs['entity_category'] ?? '') !== 'corporate') {
-    echo '<div class="error-box"><p>Directors Report is currently available only for Corporate entities.</p></div>';
+    require_once __DIR__ . '/layouts/header_v2.php';
+    ?>
+    <?= uiBreadcrumb([
+        ['label' => 'Reports', 'href' => BASE_URL . 'reports.php'],
+        ['label' => 'Directors Report'],
+    ]) ?>
+    <?= uiPageHero('Directors Report') ?>
+    <div class="card section-card">
+        <p>Directors' Report is currently available only for Corporate entities. This entity is not registered as a company under the Companies Act, 2013.</p>
+        <a class="btn" href="<?= BASE_URL ?>reports.php#balance-sheet">Back To Financial Statements</a>
+    </div>
+    <?php
     require_once __DIR__ . '/layouts/footer_v2.php';
     exit;
 }

@@ -12,6 +12,8 @@ $docs = [
         'ready' => $hasReportData,
         'formats' => ['xlsx'],
         'description' => 'Per-statement computation sheets',
+        'fix_url' => BASE_URL . 'data_console/tally_console.php',
+        'fix_label' => 'Go to Data Import',
     ],
     [
         'name' => 'Validation Report',
@@ -24,12 +26,16 @@ $docs = [
         'ready' => !empty($remarkData),
         'formats' => ['pdf', 'html'],
         'description' => 'Review remarks with severity and resolution status',
+        'fix_url' => BASE_URL . 'review/index.php',
+        'fix_label' => 'Go to Review Centre',
     ],
     [
         'name' => 'Sign-Off Report',
         'ready' => !empty($signoffData),
         'formats' => ['pdf', 'html'],
         'description' => 'Staff/Manager/Partner sign-off status',
+        'fix_url' => BASE_URL . 'review/index.php',
+        'fix_label' => 'Go to Review Centre',
     ],
 ];
 
@@ -45,6 +51,9 @@ $totalCount = count($docs);
     <div style="flex:1;">
         <span class="dw-doc-name"><?= htmlspecialchars($doc['name']) ?></span>
         <div style="font-size:0.75rem;color:var(--muted,#6b7280);"><?= htmlspecialchars($doc['description']) ?></div>
+        <?php if (!$doc['ready'] && !empty($doc['fix_url'])): ?>
+        <a href="<?= htmlspecialchars($doc['fix_url']) ?>" style="font-size:0.75rem;">&rarr; <?= htmlspecialchars($doc['fix_label'] ?? 'Fix this') ?></a>
+        <?php endif; ?>
     </div>
     <div class="dw-doc-formats">
         <?php foreach ($doc['formats'] as $fmt): ?>

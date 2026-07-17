@@ -16,7 +16,7 @@ if ($entityCategory === 'corporate') {
         ['name' => 'Statement of Profit & Loss', 'ready' => $hasReportData, 'formats' => ['pdf', 'docx', 'xlsx']],
         ['name' => 'Cash Flow Statement', 'ready' => $hasReportData && !empty($fs['summary']['cash_flow_total']), 'formats' => ['pdf', 'docx', 'xlsx']],
         ['name' => 'Notes to Accounts', 'ready' => $hasReportData, 'formats' => ['pdf', 'docx', 'xlsx']],
-        ['name' => 'Directors Report', 'ready' => ($workflow['directors_report_prepared'] ?? 0) == 1, 'formats' => ['pdf', 'docx']],
+        ['name' => 'Directors Report', 'ready' => ($workflow['directors_report_prepared'] ?? 0) == 1, 'formats' => ['pdf', 'docx'], 'fix_url' => BASE_URL . 'directors_report.php', 'fix_label' => 'Go to Directors Report'],
     ];
 } elseif ($entitySubcategory === 'llp') {
     $pkgName = 'LLP Annual Financial Statements';
@@ -53,13 +53,26 @@ $totalCount = count($docs);
 <div class="dw-pkg-title"><?= htmlspecialchars($pkgName) ?></div>
 
 <?php foreach ($docs as $doc): ?>
-<?php $docParam = $doc['name'] === 'Directors Report' ? 'directors_report' : 'financial_statements'; ?>
+<?php
+$docParam = $doc['name'] === 'Directors Report' ? 'directors_report' : 'financial_statements';
+$fixUrl = $doc['fix_url'] ?? (BASE_URL . 'reports.php#balance-sheet');
+$fixLabel = $doc['fix_label'] ?? 'Go to Financial Statements';
+?>
 <div class="dw-doc-item">
     <span class="dw-doc-icon <?= $doc['ready'] ? 'ready' : 'not-ready' ?>"><?= $doc['ready'] ? '&#10003;' : '&#10007;' ?></span>
-    <span class="dw-doc-name"><?= htmlspecialchars($doc['name']) ?></span>
+    <div style="flex:1;">
+        <span class="dw-doc-name"><?= htmlspecialchars($doc['name']) ?></span>
+        <?php if (!$doc['ready']): ?>
+        <div><a href="<?= htmlspecialchars($fixUrl) ?>" style="font-size:0.75rem;">&rarr; <?= htmlspecialchars($fixLabel) ?></a></div>
+        <?php endif; ?>
+    </div>
     <div class="dw-doc-formats">
         <?php foreach ($doc['formats'] as $fmt): ?>
-        <a href="<?= BASE_URL ?>report_download.php?doc=<?= $docParam ?>&format=<?= $fmt ?>" class="dw-format-btn <?= $doc['ready'] ? '' : 'disabled' ?>" title="Download <?= strtoupper($fmt) ?>"><?= strtoupper($fmt) ?></a>
+        <?php if ($doc['ready']): ?>
+        <a href="<?= BASE_URL ?>report_download.php?doc=<?= $docParam ?>&format=<?= $fmt ?>" class="dw-format-btn" title="Download <?= strtoupper($fmt) ?>"><?= strtoupper($fmt) ?></a>
+        <?php else: ?>
+        <span class="dw-format-btn disabled" title="Not ready" style="opacity:0.4;cursor:not-allowed;"><?= strtoupper($fmt) ?></span>
+        <?php endif; ?>
         <?php endforeach; ?>
     </div>
 </div>

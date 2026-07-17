@@ -126,6 +126,9 @@ include __DIR__ . '/../layouts/header_v2.php';
 
 <?php if (empty($companies)): ?>
     <?= uiAlert('No companies found. Create a company first.', 'error') ?>
+    <div style="margin:12px 0 20px;">
+        <?= uiButton('Create Entity', BASE_URL . 'company_dashboard/company_create.php', 'primary', '➕') ?>
+    </div>
 <?php endif; ?>
 
 <?php if (empty($financialYears)): ?>

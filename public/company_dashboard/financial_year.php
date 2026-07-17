@@ -58,7 +58,10 @@ include __DIR__ . '/../layouts/header_v2.php';
 ]) ?>
 
 <?php if (empty($financialYears)): ?>
-    <?= uiAlert('No financial years found. Please add financial years in the database first.', 'warning') ?>
+    <?= uiAlert('No financial years found for this company yet.', 'warning') ?>
+    <div style="margin:12px 0 20px;">
+        <?= uiButton('Create Financial Year', BASE_URL . 'entity_home.php?company_id=' . (int) ($_SESSION['company_id'] ?? 0), 'primary', '➕') ?>
+    </div>
 <?php endif; ?>
 
 <?php if (!empty($errors)): ?>

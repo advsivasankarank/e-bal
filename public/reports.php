@@ -1168,6 +1168,12 @@ require_once __DIR__ . '/layouts/header_v2.php';
     After reviewing the Balance Sheet, Profit &amp; Loss, and Notes to Accounts, continue to the Directors Report for the same company and financial year.<br><br>
     <a class="btn" href="<?= BASE_URL ?>directors_report.php">Open Directors Report</a>
 </div>
+<?php else: ?>
+<div class="card" style="margin-top:16px;">
+    <strong>Next Step</strong><br>
+    After reviewing the Balance Sheet and Profit &amp; Loss, continue to Deliverables to generate and download the final statements.<br><br>
+    <a class="btn" href="<?= BASE_URL ?>deliverables/index.php">Open Deliverables</a>
+</div>
 <?php endif; ?>
 
 <!-- ============================================================

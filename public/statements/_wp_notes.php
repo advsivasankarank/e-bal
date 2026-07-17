@@ -28,7 +28,7 @@ $wpGenTime = date('d M Y H:i:s');
 <?php if (empty($sections)): ?>
 <div class="fs-wp-section">
     <h4>No Note Data Available</h4>
-    <div class="fs-wp-derivation">Complete ledger mapping and trial balance import to generate note derivations.</div>
+    <div class="fs-wp-derivation">Complete ledger mapping and trial balance import to generate note derivations. <a href="<?= BASE_URL ?>data_console/mapping_workbench.php">Go to ReconHub &rarr;</a></div>
 </div>
 <?php else: ?>
 <?php foreach ($sections as $section):
