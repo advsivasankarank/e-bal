@@ -233,17 +233,35 @@ function buildOtherEquitySection(array $classified, array $manualInputs, array $
     $plLines = array_values(array_filter($reserveLines, static fn (array $line): bool => isProfitLossLedgerName((string) $line['label'])));
     $otherReserveLines = array_values(array_filter($reserveLines, static fn (array $line): bool => !isProfitLossLedgerName((string) $line['label'])));
 
-    $openingFromTally = sumLines($plLines, 'previous');
-    if ($openingFromTally == 0.0) {
-        $openingFromTally = sumLines($plLines, 'current');
+    /* Tally's own current balance for the P&L ledger is used as the
+       OPENING balance when no previous-FY link exists in e-BAL yet (a
+       company's first year imported into the app). This matches normal
+       Tally practice: many companies only pass the year-end P&L-to-reserves
+       transfer journal during audit finalisation, well after the FY ends --
+       so the trial balance exported mid-year (or even at year-end, before
+       that closing entry is posted) still shows LAST year's closing figure
+       on this ledger, i.e. it is still functioning as this year's opening.
+       Confirmed empirically: treating it as a closing figure and
+       back-deriving the opening (closing - this year's computed movement)
+       broke the Balance Sheet reconciliation for real client data; treating
+       it as the opening and adding this year's movement on top balances
+       correctly, because the asset side already reflects the cash/other
+       effects of this year's profit while the ledger itself does not yet. */
+    $plOpeningCurrent = sumLines($plLines, 'previous');
+    if ($plOpeningCurrent == 0.0) {
+        $plOpeningCurrent = sumLines($plLines, 'current');
     }
-    $previousOpening = manualAmount($previousManualInputs, 'note2_opening_profit_loss', 0);
+
+    $currentMovement = buildCompanyProfitAfterTax($classified, $manualInputs, $previousManualInputs, false);
     $previousMovement = buildCompanyProfitAfterTax($classified, $manualInputs, $previousManualInputs, true);
+
+    $previousOpening = manualAmount($previousManualInputs, 'note2_opening_profit_loss', 0);
     $previousClosing = manualAmount($previousManualInputs, 'note2_closing_profit_loss', $previousOpening + $previousMovement);
 
-    $currentOpening = manualAmount($manualInputs, 'note2_opening_profit_loss', $openingFromTally !== 0.0 ? $openingFromTally : $previousClosing);
-    $currentMovement = buildCompanyProfitAfterTax($classified, $manualInputs, $previousManualInputs, false);
+    $currentOpening = manualAmount($manualInputs, 'note2_opening_profit_loss', $plOpeningCurrent !== 0.0 ? $plOpeningCurrent : $previousClosing);
+    $currentOpeningManual = trim((string) ($manualInputs['note2_opening_profit_loss'] ?? ''));
     $currentClosing = $currentOpening + $currentMovement;
+
     $otherReserveCurrent = sumLines($otherReserveLines, 'current');
     $otherReservePrevious = sumLines($otherReserveLines, 'previous');
     $lines = $otherReserveLines;
@@ -274,7 +292,7 @@ function buildOtherEquitySection(array $classified, array $manualInputs, array $
     $hasCurrentYearReserveActivity = sumLines($plLines, 'current') != 0.0
         || $otherReserveCurrent != 0.0
         || $currentMovement != 0.0
-        || trim((string) ($manualInputs['note2_opening_profit_loss'] ?? '')) !== '';
+        || $currentOpeningManual !== '';
     $currentTotal = $hasCurrentYearReserveActivity ? ($otherReserveCurrent + $currentClosing) : $otherReserveCurrent;
 
     return [
