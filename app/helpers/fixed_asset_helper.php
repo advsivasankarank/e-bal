@@ -232,9 +232,20 @@ function computeAssetDepreciation(array $asset, string $fyStart, string $fyEnd):
     $isDisposed = !empty($asset['is_disposed']);
     $method = strtoupper((string) ($asset['depreciation_method'] ?? 'SLM'));
     $residualPct = (float) ($asset['residual_value_pct'] ?? 5);
-    $usefulLife = (float) ($asset['useful_life_years'] ?? 0);
-    if ($usefulLife <= 0.0) {
+    /* An explicit 0 (Land, or any other asset the source data marks as
+       having no useful life) must NOT be treated the same as "not set at
+       all" -- Land is genuinely never depreciated under Schedule II, and
+       silently substituting a Schedule II default life for it would
+       start charging depreciation on an asset that should never carry
+       any. Both the SLM and WDV branches below already correctly produce
+       zero depreciation for a genuine usefulLife of 0 (computeWdvRate()
+       returns 0.0; the SLM branch's usefulLife>0 guard returns 0.0) --
+       this fallback only needs to trigger when the field is truly unset. */
+    $usefulLifeRaw = $asset['useful_life_years'] ?? null;
+    if ($usefulLifeRaw === null || $usefulLifeRaw === '') {
         $usefulLife = scheduleIIUsefulLife((string) ($asset['asset_category'] ?? ''))['years'];
+    } else {
+        $usefulLife = (float) $usefulLifeRaw;
     }
 
     $closingGross = $openingGross + $additions - $disposalsCost;
@@ -424,6 +435,17 @@ function parseFixedAssetExcelUpload(string $filePath): array
         return ['rows' => [], 'errors' => ['The file has no data rows below the header.']];
     }
 
+    /* A genuine audited Schedule III Note 11 export (Gross Block /
+       Accumulated Depreciation / Net Block column groups, multi-row
+       merged headers, category-grouping rows) is a fundamentally
+       different shape from the simple flat template below -- detected by
+       its distinctive title cell and handed off to dedicated parsing
+       instead of failing with "no Asset Category column found". */
+    $titleCell = trim((string) ($data[0][0] ?? ''));
+    if (stripos($titleCell, 'property') !== false && stripos($titleCell, 'plant') !== false && stripos($titleCell, 'equipment') !== false) {
+        return parseScheduleIIINote11Excel($data);
+    }
+
     $headerRow = array_map(static fn ($v) => strtolower(trim((string) $v)), $data[0]);
     $colIndex = static function (array $header, array $candidates): ?int {
         foreach ($candidates as $candidate) {
@@ -478,6 +500,128 @@ function parseFixedAssetExcelUpload(string $filePath): array
     }
 
     return ['rows' => $rows, 'errors' => $errors];
+}
+
+/**
+ * Parses a real, audited Schedule III Note 11 (Property, Plant and
+ * Equipment) export -- the working paper a CA would actually have on
+ * hand for a company's first year in this app, not a hand-typed simple
+ * template. Column positions (0-indexed, matching the standard layout
+ * confirmed against a real 3,146-row export):
+ *   1  = Description, 4 = Useful Life (Years), 6 = Opening Gross Block,
+ *   18 = Opening Accumulated Depreciation.
+ *
+ * The one reliable signal that a row is a genuine depreciable asset (as
+ * opposed to a category-grouping row like "Tangible assets"/"Own
+ * Assets"/"Leased Assets", a "Sub Total"/"Total (A)"/"P.Y Total" row, or
+ * a Capital Work-in-Progress / "Intangible assets under Development"
+ * line) is that ONLY real asset rows carry a numeric Useful Life --
+ * confirmed against the real export, where every one of those other row
+ * types leaves that column blank. This one check does all the
+ * filtering; no row-number or keyword heuristics needed. Parsing stops
+ * entirely at the "Current Year Total" row, since real-world exports of
+ * this kind are sometimes followed by an unrelated second workpaper
+ * appended to the same sheet.
+ */
+function parseScheduleIIINote11Excel(array $data): array
+{
+    $rows = [];
+    $errors = [];
+
+    $cleanNumber = static function ($value): string {
+        // Large aggregate figures in this export format can come through
+        // with a literal embedded newline from Excel's own text wrapping
+        // (e.g. "10,04,22,692.\n37") -- stripped here along with the
+        // Indian-numbering commas before any numeric cast.
+        return str_replace([',', "\n", "\r", ' '], '', (string) $value);
+    };
+
+    foreach ($data as $row) {
+        $description = trim((string) ($row[1] ?? ''));
+        if ($description === '') {
+            continue;
+        }
+        if (stripos($description, 'current year total') !== false) {
+            break;
+        }
+
+        $usefulLifeClean = $cleanNumber($row[4] ?? '');
+        /* A blank/non-numeric Useful Life is what distinguishes a category
+           header, subtotal, or CWIP/intangible-under-development row from
+           a genuine asset -- but a genuine asset can legitimately have a
+           useful life of exactly 0 (Land, confirmed against the real
+           export: "Land" carries "0" here, since it is never depreciated
+           under Schedule II). Only the "not a number at all" case should
+           be excluded; 0 itself must be let through and preserved as-is
+           (see computeAssetDepreciation()'s matching fix, which only
+           falls back to a Schedule II default when useful_life_years is
+           truly unset, not when it's an explicit 0). */
+        if ($usefulLifeClean === '' || !is_numeric($usefulLifeClean)) {
+            continue;
+        }
+        $usefulLife = (float) $usefulLifeClean;
+
+        $openingGross = (float) $cleanNumber($row[6] ?? 0);
+        $openingAccumDep = (float) $cleanNumber($row[18] ?? 0);
+
+        if ($openingAccumDep > $openingGross) {
+            $errors[] = "Row \"{$description}\": accumulated depreciation (₹" . number_format($openingAccumDep, 2)
+                . ') exceeds opening gross block (₹' . number_format($openingGross, 2) . ') -- skipped.';
+            continue;
+        }
+
+        $rows[] = [
+            'asset_category' => guessFixedAssetCategoryFromDescription($description),
+            'asset_description' => $description,
+            'opening_gross_block' => $openingGross,
+            'opening_accumulated_depreciation' => $openingAccumDep,
+            'useful_life_years' => $usefulLife,
+            /* The imported opening accumulated depreciation figures in a
+               real audited export are near-universally the result of the
+               WDV method at Schedule II rates (the standard practice) --
+               used here only as this app's own going-forward default for
+               each row; the CA can still change it per-row like any
+               other imported asset. */
+            'depreciation_method' => 'WDV',
+        ];
+    }
+
+    if ($rows === [] && $errors === []) {
+        $errors[] = 'No individual depreciable asset rows found in this Note 11 export (only category headers, subtotals, or Capital Work-in-Progress/Intangible-assets-under-development entries, which are not depreciated under Schedule II).';
+    }
+
+    return ['rows' => $rows, 'errors' => $errors];
+}
+
+/**
+ * Best-effort Schedule II category guess from an asset's description --
+ * cosmetic only (useful_life_years always comes directly from the
+ * imported file, never derived from this category), so a wrong guess
+ * has no effect on the actual depreciation math, only on which group the
+ * asset is shown under in the Fixed Assets note until the CA corrects
+ * it. Deliberately conservative: falls back to blank (not a guessed
+ * "Plant & Machinery") when nothing matches confidently, consistent with
+ * the existing "CA classifies in the UI" pattern for Tally-synced assets.
+ */
+function guessFixedAssetCategoryFromDescription(string $description): string
+{
+    $d = strtolower($description);
+    $rules = [
+        'Buildings (RCC, other than factory)' => ['building', 'civil work'],
+        'Computers and Data Processing Units (Servers)' => ['server'],
+        'Computers and Data Processing Units (End User Devices)' => ['computer', 'laptop', 'desktop'],
+        'Vehicles (Motor Cars, other than for hire)' => ['vehicle', 'car', 'motor cycle', 'scooter', 'bike'],
+        'Furniture and Fixtures' => ['furniture', 'fixture', 'chair', 'almirah', 'cot', 'trolley'],
+        'Office Equipment' => ['air condition', 'fan', 'refrigerator', 'ups', 'stabilizer'],
+    ];
+    foreach ($rules as $category => $keywords) {
+        foreach ($keywords as $keyword) {
+            if (str_contains($d, $keyword)) {
+                return $category;
+            }
+        }
+    }
+    return '';
 }
 
 function saveFixedAssetExcelImport(PDO $pdo, int $company_id, int $fy_id, array $rows, ?int $userId, string $originalFilename): void

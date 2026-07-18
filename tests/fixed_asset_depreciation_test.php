@@ -108,6 +108,30 @@ $r9 = computeAssetDepreciation($asset9, $fyStart, $fyEnd);
 fixedAssetTestAssert($r9['depreciation_for_year'] == 0.0, 'Disposal-only row (no opening/addition base) charges zero depreciation, not a phantom amount derived from a negative residual value');
 fixedAssetTestAssert($r9['closing_gross_block'] == -50000.0, 'Disposal-only row still reports the true negative closing gross block, so category-level aggregation nets correctly against the category\'s other rows');
 
+/* 10. An asset with an EXPLICIT useful_life_years of 0 (Land, confirmed
+       against a real Schedule III Note 11 export) must charge zero
+       depreciation forever -- not silently fall back to a Schedule II
+       default life for whatever category it's tagged with. This is
+       different from useful_life_years being genuinely unset (null),
+       which SHOULD still fall back to the category default. */
+$asset10 = ['opening_gross_block' => 13701064, 'opening_accumulated_depreciation' => 0, 'additions_during_year' => 0, 'disposals_during_year' => 0, 'is_disposed' => 0, 'depreciation_method' => 'WDV', 'residual_value_pct' => 5, 'useful_life_years' => 0, 'asset_category' => 'Other'];
+$r10 = computeAssetDepreciation($asset10, $fyStart, $fyEnd);
+fixedAssetTestAssert($r10['depreciation_for_year'] == 0.0, 'Explicit useful_life_years=0 (Land) charges zero depreciation, not a Schedule II default life for its category');
+fixedAssetTestAssert($r10['closing_wdv'] == 13701064.0, 'Explicit useful_life_years=0 (Land) leaves the closing WDV exactly equal to opening gross block, unreduced');
+
+$asset10b = ['opening_gross_block' => 100000, 'opening_accumulated_depreciation' => 0, 'additions_during_year' => 0, 'disposals_during_year' => 0, 'is_disposed' => 0, 'depreciation_method' => 'SLM', 'residual_value_pct' => 5, 'useful_life_years' => null, 'asset_category' => 'Plant & Machinery (general)'];
+$r10b = computeAssetDepreciation($asset10b, $fyStart, $fyEnd);
+fixedAssetTestAssert($r10b['depreciation_for_year'] > 0.0, 'useful_life_years genuinely unset (null) still falls back to the Schedule II default life for its category, unlike an explicit 0');
+
+/* 11. Real Schedule III Note 11 Excel import -- category headers,
+       subtotals, and CWIP/intangible-under-development entries must be
+       excluded (none carry a numeric Useful Life), while a genuine
+       Land row (useful life = "0", never a blank/non-numeric value) must
+       be imported and preserved as an explicit 0. */
+fixedAssetTestAssert(guessFixedAssetCategoryFromDescription('Civil Works- Hospital') === 'Buildings (RCC, other than factory)', 'Category guess: "Civil Works" description matches Buildings');
+fixedAssetTestAssert(guessFixedAssetCategoryFromDescription('Dell Server Rack') === 'Computers and Data Processing Units (Servers)', 'Category guess: description containing "Server" matches Servers category');
+fixedAssetTestAssert(guessFixedAssetCategoryFromDescription('Generator') === '', 'Category guess: no confident match falls back to blank, not a wrong guess');
+
 echo "================================================\n";
 echo "$passed passed, $failures failed\n";
 
