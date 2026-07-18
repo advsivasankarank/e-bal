@@ -47,8 +47,18 @@ function fetchVouchersViaXml(string $fromDate, string $toDate, ?string $voucherT
         return fetchVouchersViaXmlSingleType($fromDate, $toDate, $voucherType);
     }
 
+    /* A Fixed Asset addition/disposal can only ever appear as one of these
+       types (see classifyFixedAssetVoucherType() in fixed_asset_helper.php
+       for why Payment/Receipt/Contra/Credit Note/Debit Note are kept, not
+       just Purchase/Sales/Journal). Stock Journal and Physical Stock are
+       inventory-item movements, not Fixed Asset ledger entries, and are
+       typically the highest-volume voucher types for a trading/
+       manufacturing company -- excluding them mirrors the same fix made
+       on the Smart Bridge's own client-side fetch (tally_bridge_exe/
+       ui_app.py), where fetching all ten types for a full year timed out
+       against real company data even at 90 seconds. */
     $allVouchers = [];
-    $voucherTypes = ['Payment', 'Receipt', 'Sales', 'Purchase', 'Journal', 'Contra', 'Credit Note', 'Debit Note', 'Stock Journal', 'Physical Stock'];
+    $voucherTypes = ['Payment', 'Receipt', 'Sales', 'Purchase', 'Journal', 'Contra', 'Credit Note', 'Debit Note'];
 
     foreach ($voucherTypes as $type) {
         $result = fetchVouchersViaXmlSingleType($fromDate, $toDate, $type);

@@ -653,15 +653,21 @@ def fetch_vouchers_via_odbc(from_date, to_date, last_altered=None):
         return None
 
 
-# Same list the server-side PHP fallback (app/helpers/voucher_xml.php)
-# already uses successfully -- a single unfiltered request for every
-# voucher type combined, for a full financial year, timed out even at 90s
-# against a real company's data (Tally never finished generating the
-# response at all). Splitting into these smaller per-type requests each
-# completes in the time TB/ledger already do.
+# A Fixed Asset addition/disposal can only ever appear as one of these
+# voucher types -- Purchase/Sales are the common case, Journal covers
+# capitalisation entries, and Payment/Receipt/Contra/Credit Note/Debit
+# Note are kept because a cash purchase without a GST bill, or an asset
+# return, legitimately shows up there too (classifyFixedAssetVoucherType()
+# in app/helpers/fixed_asset_helper.php treats these as reviewable
+# additions/disposals rather than excluding them). Stock Journal and
+# Physical Stock are structurally inventory-item movements, not ledger
+# entries against a Fixed Asset ledger, and are also typically the
+# highest-volume voucher types for a trading/manufacturing company --
+# dropping them removes real load without risking a missed FA
+# transaction.
 VOUCHER_TYPES_FOR_FULL_FETCH = [
     "Payment", "Receipt", "Sales", "Purchase", "Journal",
-    "Contra", "Credit Note", "Debit Note", "Stock Journal", "Physical Stock",
+    "Contra", "Credit Note", "Debit Note",
 ]
 
 
