@@ -1,0 +1,122 @@
+<?php
+/**
+ * e-BAL — Bridge-pushed voucher ingestion
+ *
+ * Mirrors bridge_ledger.php's auth/company-resolution pattern, but for
+ * vouchers: the Smart Bridge fetches vouchers directly from the local
+ * Tally (client-side, always reachable) via its own
+ * fetch_vouchers_via_xml()/fetch_vouchers_via_odbc() (tally_bridge_exe/
+ * ui_app.py), then POSTs the resulting JSON array here -- the server never
+ * tries to reach Tally itself for vouchers, the same way it never does for
+ * ledgers/TB. Storage is shared with the server-initiated sync path via
+ * storeFetchedVouchers() in app/helpers/voucher_sync.php.
+ */
+
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../app/helpers/runtime_helper.php';
+require_once __DIR__ . '/../app/helpers/voucher_sync.php';
+
+header('Content-Type: application/json; charset=utf-8');
+
+$allHeaders = function_exists('getallheaders') ? getallheaders() : [];
+$token = trim((string) (
+    $allHeaders['X-Bridge-Token'] ?? $allHeaders['x-bridge-token']
+    ?? $_SERVER['HTTP_X_BRIDGE_TOKEN'] ?? ''
+));
+$clientId = trim((string) ($_GET['client_id'] ?? $allHeaders['X-Client-Id'] ?? $_SERVER['HTTP_X_CLIENT_ID'] ?? ''));
+$companyId = (int) ($allHeaders['X-Company-Id'] ?? $_SERVER['HTTP_X_COMPANY_ID'] ?? 0);
+$fyId = (int) ($allHeaders['X-Fy-Id'] ?? $_SERVER['HTTP_X_FY_ID'] ?? 0);
+$rawBody = file_get_contents('php://input');
+
+$expected = defined('TALLY_BRIDGE_TOKEN') ? trim((string) TALLY_BRIDGE_TOKEN) : '';
+if ($expected === '' || !hash_equals($expected, $token)) {
+    http_response_code(401);
+    echo json_encode(['ok' => false, 'message' => 'Unauthorized']);
+    exit;
+}
+
+if ($companyId <= 0 || $fyId <= 0) {
+    try {
+        if (appAllowsRuntimeSchema()) {
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS bridge_clients (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    client_id VARCHAR(50) NOT NULL UNIQUE,
+                    company_id INT NOT NULL,
+                    fy_id INT NOT NULL,
+                    active TINYINT(1) NOT NULL DEFAULT 1,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+            ");
+        } else {
+            assertTableExists($pdo, 'bridge_clients');
+        }
+    } catch (Throwable $e) {
+        appLog('ERROR', 'Bridge voucher context table unavailable', ['message' => $e->getMessage()]);
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'message' => 'Bridge configuration unavailable']);
+        exit;
+    }
+    if ($clientId !== '') {
+        $stmt = $pdo->prepare("SELECT company_id, fy_id FROM bridge_clients WHERE client_id = ? AND active = 1 LIMIT 1");
+        $stmt->execute([$clientId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $companyId = (int) $row['company_id'];
+            $fyId = (int) $row['fy_id'];
+        }
+    }
+}
+
+if ($companyId <= 0 || $fyId <= 0) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'message' => 'company_id and fy_id are required']);
+    exit;
+}
+
+if ($clientId !== '' && $companyId > 0) {
+    try {
+        $stmt = $pdo->prepare("SELECT company_id FROM bridge_clients WHERE client_id = ? AND active = 1 LIMIT 1");
+        $stmt->execute([$clientId]);
+        $registered = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($registered && (int) $registered['company_id'] !== $companyId) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'message' => 'company_id does not match registered client']);
+            exit;
+        }
+    } catch (Throwable $e) {
+        // bridge_clients table may not exist yet; skip binding check
+    }
+}
+
+if (trim($rawBody) === '') {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'message' => 'Voucher payload is empty']);
+    exit;
+}
+
+$vouchers = json_decode($rawBody, true);
+if (!is_array($vouchers)) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'message' => 'Invalid JSON payload -- expected an array of vouchers']);
+    exit;
+}
+
+$result = storeFetchedVouchers($pdo, $companyId, $fyId, $vouchers, 'bridge');
+
+if (!$result['ok']) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'message' => $result['message']]);
+    exit;
+}
+
+updateVoucherSyncState($pdo, $companyId, $fyId, [
+    'last_synced_at' => date('Y-m-d H:i:s'),
+    'last_altered_synced' => $result['max_altered'],
+    'total_vouchers' => count($vouchers),
+    'synced_vouchers' => $result['synced'],
+    'error_message' => null,
+]);
+
+echo json_encode(['ok' => true, 'synced' => $result['synced'], 'client_id' => $clientId]);

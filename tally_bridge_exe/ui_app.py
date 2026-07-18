@@ -31,7 +31,7 @@ BRIDGE_VERSION = "2.0.0"
 TALLY_URL = "http://localhost:9000"
 LEDGER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_ledger.php"
 TB_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_tb.php"
-VOUCHER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/voucher_sync.php?action=sync"
+VOUCHER_UPLOAD_DEFAULT = "https://ebal.etaxadv.com/bridge_voucher.php"
 LISTEN_HOST_DEFAULT = "127.0.0.1"
 LISTEN_PORT_DEFAULT = 9123
 
@@ -1382,22 +1382,37 @@ class SmartBridgeUI:
         if voucher_sync_enabled:
             try:
                 self.state.set("bridge", "syncing-vouchers")
-                fy_start = "01-Apr-2024"
-                fy_end = "31-Mar-2025"
+                # NOTE: hardcoded to FY 2024-25 -- matches the pre-existing
+                # ledger/TB fetch above, which has the same limitation. A
+                # company on a different financial year needs this made
+                # configurable; tracked separately, not part of this fix.
                 from_date = "2024-04-01"
                 to_date = "2025-03-31"
-                params = {"client_id": active_config.get("client_id", ""), "action": "sync"}
+
+                vouchers, voucher_source = fetch_vouchers_from_tally(from_date, to_date)
+                logging.info("Vouchers fetched from Tally: count=%d source=%s", len(vouchers), voucher_source)
+
+                # Unlike ledger/TB (which upload raw Tally XML for the
+                # server to parse), vouchers are fetched and normalised
+                # HERE, client-side, and pushed as JSON -- the server has no
+                # direct route to Tally at all, so it can never do this
+                # fetch itself (this was the actual bug: the old code just
+                # asked the server to try, which always failed remotely).
                 token = str(active_config.get("token", "")).strip()
                 headers = {"Content-Type": "application/json", "User-Agent": "eBAL-Bridge/%s (Windows)" % BRIDGE_VERSION}
                 if token:
                     headers["X-Bridge-Token"] = token
-                payload = {"from_date": from_date, "to_date": to_date, "fy_start": fy_start, "fy_end": fy_end}
-                logging.info("Voucher sync: url=%s", voucher_url)
-                response = requests.post(voucher_url, params=params, json=payload, headers=headers, timeout=VOUCHER_UPLOAD_TIMEOUT)
+                params = {"client_id": active_config.get("client_id", "")}
+                logging.info("Voucher upload: url=%s count=%d", voucher_url, len(vouchers))
+                response = requests.post(
+                    voucher_url, params=params,
+                    data=json.dumps(vouchers), headers=headers,
+                    timeout=VOUCHER_UPLOAD_TIMEOUT,
+                )
                 if response.status_code >= 400:
-                    raise RuntimeError("Voucher sync HTTP %d" % response.status_code)
-                self.state.set("last_upload", "Vouchers: OK")
-                logging.info("Voucher sync OK: %s", response.text[:200])
+                    raise RuntimeError("Voucher upload HTTP %d: %s" % (response.status_code, response.text[:300]))
+                self.state.set("last_upload", "Vouchers: OK (%d)" % len(vouchers))
+                logging.info("Voucher upload OK: %s", response.text[:200])
             except Exception as exc:
                 self.state.set("last_upload", "Vouchers: Failed")
                 logging.error("Voucher sync failed: %s", exc)

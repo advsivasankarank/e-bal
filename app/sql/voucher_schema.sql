@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS vouchers (
     altered_date DATETIME DEFAULT NULL,
     created_date DATETIME DEFAULT NULL,
     raw_xml LONGTEXT DEFAULT NULL,
-    source ENUM('odbc','xml') NOT NULL DEFAULT 'xml',
+    source ENUM('odbc','xml','bridge') NOT NULL DEFAULT 'xml',
     synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_v_company_fy (company_id, fy_id),

@@ -127,6 +127,50 @@ function syncVouchersIncremental(PDO $pdo, int $companyId, int $fyId, string $fr
         return $result;
     }
 
+    $storeResult = storeFetchedVouchers($pdo, $companyId, $fyId, $vouchers, $sourceUsed, $lastAltered);
+    if (!$storeResult['ok']) {
+        return [
+            'ok' => false,
+            'message' => $storeResult['message'],
+            'source' => $sourceUsed,
+            'synced' => $storeResult['synced'],
+            'total' => count($vouchers),
+        ];
+    }
+
+    updateVoucherSyncState($pdo, $companyId, $fyId, [
+        'last_synced_at' => date('Y-m-d H:i:s'),
+        'last_altered_synced' => $storeResult['max_altered'],
+        'odbc_available' => $odbcOk ? 1 : 0,
+        'total_vouchers' => count($vouchers),
+        'synced_vouchers' => $storeResult['synced'],
+        'error_message' => null,
+    ]);
+
+    return [
+        'ok' => true,
+        'message' => "Synced {$storeResult['synced']} vouchers via {$sourceUsed}.",
+        'source' => $sourceUsed,
+        'synced' => $storeResult['synced'],
+        'total' => count($vouchers),
+        'odbc_available' => $odbcOk,
+    ];
+}
+
+/**
+ * Persists an already-fetched array of voucher dicts (the shape produced by
+ * fetchVouchersViaXml()/fetchVouchersViaOdbc(), and identically by the
+ * Smart Bridge's own fetch_vouchers_via_xml()/fetch_vouchers_via_odbc() in
+ * tally_bridge_exe/ui_app.py) into vouchers/voucher_entries. Shared by
+ * syncVouchersIncremental() (server-initiated fetch) and
+ * public/bridge_voucher.php (bridge-pushed vouchers already fetched
+ * client-side, where the server has no direct route to Tally at all) so
+ * both paths store data identically.
+ */
+function storeFetchedVouchers(PDO $pdo, int $companyId, int $fyId, array $vouchers, string $sourceUsed, ?string $lastAltered = null): array
+{
+    ensureVoucherTables($pdo);
+
     $maxAltered = $lastAltered;
     $synced = 0;
     $pdo->beginTransaction();
@@ -161,7 +205,10 @@ function syncVouchersIncremental(PDO $pdo, int $companyId, int $fyId, string $fr
         $stmtDelEntries = $pdo->prepare("DELETE FROM voucher_entries WHERE voucher_id = ?");
 
         foreach ($vouchers as $v) {
-            $vDate = $v['date'] ?? $fromDate;
+            if (empty($v['tally_guid'])) {
+                continue;
+            }
+            $vDate = $v['date'] ?? null;
             $effDate = $v['effective_date'] ?? null;
             $alterDate = $v['altered_date'] ?? null;
             $createDate = $v['created_date'] ?? null;
@@ -170,8 +217,8 @@ function syncVouchersIncremental(PDO $pdo, int $companyId, int $fyId, string $fr
                 $companyId,
                 $fyId,
                 $v['tally_guid'],
-                $v['voucher_type'],
-                $v['voucher_number'],
+                $v['voucher_type'] ?? '',
+                $v['voucher_number'] ?? '',
                 $vDate,
                 $effDate,
                 $v['narration'] ?? null,
@@ -228,37 +275,15 @@ function syncVouchersIncremental(PDO $pdo, int $companyId, int $fyId, string $fr
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        appLog('ERROR', 'Voucher sync store failed', [
+        appLog('ERROR', 'Voucher store failed', [
             'company_id' => $companyId,
             'fy_id' => $fyId,
             'message' => $e->getMessage(),
         ]);
-        return [
-            'ok' => false,
-            'message' => 'Database error: ' . $e->getMessage(),
-            'source' => $sourceUsed,
-            'synced' => $synced,
-            'total' => count($vouchers),
-        ];
+        return ['ok' => false, 'message' => 'Database error: ' . $e->getMessage(), 'synced' => $synced, 'max_altered' => $maxAltered];
     }
 
-    updateVoucherSyncState($pdo, $companyId, $fyId, [
-        'last_synced_at' => date('Y-m-d H:i:s'),
-        'last_altered_synced' => $maxAltered,
-        'odbc_available' => $odbcOk ? 1 : 0,
-        'total_vouchers' => count($vouchers),
-        'synced_vouchers' => $synced,
-        'error_message' => null,
-    ]);
-
-    return [
-        'ok' => true,
-        'message' => "Synced {$synced} vouchers via {$sourceUsed}.",
-        'source' => $sourceUsed,
-        'synced' => $synced,
-        'total' => count($vouchers),
-        'odbc_available' => $odbcOk,
-    ];
+    return ['ok' => true, 'message' => "Stored {$synced} vouchers.", 'synced' => $synced, 'max_altered' => $maxAltered];
 }
 
 function getVoucherSyncSummary(PDO $pdo, int $companyId, int $fyId): array
