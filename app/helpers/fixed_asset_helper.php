@@ -650,7 +650,27 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         $created++;
     }
 
-    return ['ok' => true, 'message' => "Synced {$created} voucher-based asset transaction(s) from Tally.", 'created' => $created, 'updated' => 0, 'excluded' => $excluded];
+    /* Diagnostics for the "0 synced" case -- this used to be a silent dead
+       end (just "Synced 0..."), which is indistinguishable from "everything
+       is fine, there just weren't any transactions this year" and from a
+       real problem (Tally returned nothing at all, or returned vouchers but
+       none matched a classified Fixed Asset ledger). Surfaced so the CA
+       doesn't have to guess which one they're looking at. */
+    $diagnostics = [
+        'voucher_source' => $voucherSyncResult['source'] ?? null,
+        'total_vouchers_from_tally' => (int) ($voucherSyncResult['total'] ?? 0),
+        'fixed_asset_ledger_count' => count($ledgerNames),
+        'matched_voucher_entries' => count($entries),
+    ];
+
+    return [
+        'ok' => true,
+        'message' => "Synced {$created} voucher-based asset transaction(s) from Tally.",
+        'created' => $created,
+        'updated' => 0,
+        'excluded' => $excluded,
+        'diagnostics' => $diagnostics,
+    ];
 }
 
 /**

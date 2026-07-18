@@ -33,6 +33,7 @@ $fyStart = (string) ($fyDatesRow['fy_start'] ?? '');
 $fyEnd = (string) ($fyDatesRow['fy_end'] ?? '');
 
 $infoMessage = '';
+$warningMessage = '';
 $errorMessages = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -82,14 +83,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $syncResult = syncFixedAssetVouchersFromTally($pdo, $company_id, $fy_id, $classified, $fyStart, $fyEnd);
             if (!$syncResult['ok']) {
                 $errorMessages[] = $syncResult['message'];
+            } elseif ($syncResult['created'] === 0) {
+                $diag = $syncResult['diagnostics'] ?? [];
+                $totalFromTally = (int) ($diag['total_vouchers_from_tally'] ?? 0);
+                $ledgerCount = (int) ($diag['fixed_asset_ledger_count'] ?? 0);
+                $matchedEntries = (int) ($diag['matched_voucher_entries'] ?? 0);
+                $source = (string) ($diag['voucher_source'] ?? 'unknown');
+
+                if ($totalFromTally === 0) {
+                    $warningMessage = "Tally returned 0 vouchers for {$fyStart} to {$fyEnd} (via {$source}) -- nothing was fetched at all, so this isn't specific to Fixed Assets. Check that Tally is open to the correct company and financial year, and that the Smart Bridge / connection is actually able to reach it (not just showing \"Connected\").";
+                } elseif ($matchedEntries === 0) {
+                    $warningMessage = "Tally returned {$totalFromTally} voucher(s) via {$source}, but none of them touched any of the {$ledgerCount} ledger(s) classified as Fixed Assets/CWIP within {$fyStart} to {$fyEnd}. Either there genuinely were no Fixed Asset purchases/disposals this year, or the ledger names in those vouchers don't exactly match the names classified in ReconHub (check for trailing spaces or renamed ledgers).";
+                } else {
+                    $warningMessage = "Tally returned {$totalFromTally} voucher(s) via {$source}, and {$matchedEntries} touched a Fixed Asset/CWIP ledger, but all of them were classified as depreciation/revaluation journals and excluded -- see the excluded list below if one was expected to be a genuine addition or disposal.";
+                }
             } else {
                 $infoMessage = $syncResult['message'] . ' Classify category and useful life below.';
-                if ($syncResult['excluded'] !== []) {
-                    $excludedNames = array_map(
-                        static fn (array $e): string => $e['ledger_name'] . ' (' . $e['voucher_type'] . ' #' . $e['voucher_number'] . ', ' . $e['date'] . ')',
-                        $syncResult['excluded']
-                    );
-                    $infoMessage .= ' ' . count($syncResult['excluded']) . ' voucher(s) touching a Fixed Asset ledger were excluded as likely depreciation/revaluation journals, not genuine additions or disposals -- review manually if needed: ' . implode('; ', $excludedNames);
+            }
+            if (!empty($syncResult['ok']) && ($syncResult['excluded'] ?? []) !== []) {
+                $excludedNames = array_map(
+                    static fn (array $e): string => $e['ledger_name'] . ' (' . $e['voucher_type'] . ' #' . $e['voucher_number'] . ', ' . $e['date'] . ')',
+                    $syncResult['excluded']
+                );
+                $excludedNote = count($syncResult['excluded']) . ' voucher(s) touching a Fixed Asset ledger were excluded as likely depreciation/revaluation journals, not genuine additions or disposals -- review manually if needed: ' . implode('; ', $excludedNames);
+                if ($warningMessage !== '') {
+                    $warningMessage .= ' ' . $excludedNote;
+                } else {
+                    $infoMessage .= ' ' . $excludedNote;
                 }
             }
         }
@@ -147,6 +167,12 @@ require_once __DIR__ . '/layouts/header_v2.php';
 
 <?php if ($infoMessage !== ''): ?>
     <div class="card section-card"><?= htmlspecialchars($infoMessage) ?></div>
+<?php endif; ?>
+<?php if ($warningMessage !== ''): ?>
+    <div class="card section-card" style="background:#fffbeb;border:1px solid #fcd34d;">
+        <strong style="color:#92400e;">⚠ Sync from Tally found nothing to add</strong>
+        <p style="font-size:0.85rem;color:#475569;margin:6px 0 0;"><?= htmlspecialchars($warningMessage) ?></p>
+    </div>
 <?php endif; ?>
 <?php foreach ($errorMessages as $err): ?>
     <div class="card section-card" style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;"><?= htmlspecialchars($err) ?></div>
