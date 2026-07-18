@@ -407,12 +407,63 @@ function computeDepreciationSchedule(PDO $pdo, int $company_id, int $fy_id, stri
  * mandatory -- the rest default sensibly (SLM, Schedule II life for the
  * category) so a bare "category + amount" sheet is still usable.
  */
+/**
+ * Registry of recognised prior-year fixed-asset Excel formats -- every
+ * CA/client hands over a differently-shaped export, and this app needs to
+ * fit as many of those as reasonably possible without hand-holding for
+ * each new company. Each entry is tried in order against the raw sheet
+ * data; the first whose 'detect' callback returns true owns the parse.
+ * Order matters: more structurally distinctive formats (a real audited
+ * Note 11 export, unmistakable from its title cell) must be tried before
+ * generic ones (a plain header-row template) that could otherwise
+ * false-match a differently-labelled sheet.
+ *
+ * To support a new client's export shape: add an entry here with a
+ * `detect` callback that's specific enough not to misfire on other
+ * formats, and a `parse` callback returning ['rows' => [...], 'errors' =>
+ * [...]] in the same shape produced by every other format. Nothing else
+ * in the upload pipeline needs to change.
+ */
+function getFixedAssetExcelFormats(): array
+{
+    return [
+        [
+            'name' => 'audited_note11',
+            'label' => 'Audited Schedule III Note 11 (Property, Plant and Equipment) export',
+            /* A genuine audited Note 11 export (Gross Block / Accumulated
+               Depreciation / Net Block column groups, multi-row merged
+               headers, category-grouping rows) is a fundamentally
+               different shape from a simple flat template -- reliably
+               identified by its distinctive title cell. */
+            'detect' => static function (array $data): bool {
+                $titleCell = trim((string) ($data[0][0] ?? ''));
+                return stripos($titleCell, 'property') !== false
+                    && stripos($titleCell, 'plant') !== false
+                    && stripos($titleCell, 'equipment') !== false;
+            },
+            'parse' => 'parseScheduleIIINote11Excel',
+        ],
+        [
+            'name' => 'flat_template',
+            'label' => 'Flat spreadsheet with an "Asset Category" column header',
+            /* Deliberately generic: any sheet whose header row (row 1)
+               contains a recognisable "Asset Category" column, in any
+               column position. This is the catch-all for a CA's own
+               hand-built template, so it's tried last -- a more specific
+               format above should claim a file before this one gets the
+               chance to (mis)interpret it. */
+            'detect' => static function (array $data): bool {
+                $headerRow = array_map(static fn ($v) => strtolower(trim((string) $v)), $data[0] ?? []);
+                return in_array('asset category', $headerRow, true) || in_array('category', $headerRow, true);
+            },
+            'parse' => 'parseFixedAssetFlatTemplateExcel',
+        ],
+    ];
+}
+
 function parseFixedAssetExcelUpload(string $filePath): array
 {
     require_once __DIR__ . '/../../vendor/autoload.php';
-
-    $rows = [];
-    $errors = [];
 
     try {
         /* setReadDataOnly() skips loading cell styles/formatting/merged-cell
@@ -435,16 +486,35 @@ function parseFixedAssetExcelUpload(string $filePath): array
         return ['rows' => [], 'errors' => ['The file has no data rows below the header.']];
     }
 
-    /* A genuine audited Schedule III Note 11 export (Gross Block /
-       Accumulated Depreciation / Net Block column groups, multi-row
-       merged headers, category-grouping rows) is a fundamentally
-       different shape from the simple flat template below -- detected by
-       its distinctive title cell and handed off to dedicated parsing
-       instead of failing with "no Asset Category column found". */
-    $titleCell = trim((string) ($data[0][0] ?? ''));
-    if (stripos($titleCell, 'property') !== false && stripos($titleCell, 'plant') !== false && stripos($titleCell, 'equipment') !== false) {
-        return parseScheduleIIINote11Excel($data);
+    foreach (getFixedAssetExcelFormats() as $format) {
+        if (($format['detect'])($data)) {
+            $result = ($format['parse'])($data);
+            $result['format'] = $format['name'];
+            return $result;
+        }
     }
+
+    $knownFormats = implode('; ', array_map(static fn ($f) => $f['label'], getFixedAssetExcelFormats()));
+    return [
+        'rows' => [],
+        'errors' => [
+            "This file's format wasn't recognised. Currently supported: {$knownFormats}. "
+            . 'If this is a genuine prior-year depreciation schedule in a different layout, forward it to support so this format can be added.',
+        ],
+    ];
+}
+
+/**
+ * A simple, hand-built flat template: one header row, one asset per data
+ * row, columns identified by header text rather than fixed position (so
+ * column order doesn't matter). This is the fallback format for a CA who
+ * doesn't have a real Tally/audited export handy and is happy to fill in
+ * a plain spreadsheet instead.
+ */
+function parseFixedAssetFlatTemplateExcel(array $data): array
+{
+    $rows = [];
+    $errors = [];
 
     $headerRow = array_map(static fn ($v) => strtolower(trim((string) $v)), $data[0]);
     $colIndex = static function (array $header, array $candidates): ?int {
