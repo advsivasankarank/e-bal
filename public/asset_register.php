@@ -315,16 +315,18 @@ require_once __DIR__ . '/layouts/header_v2.php';
     <a class="btn" href="<?= BASE_URL ?>reports.php#notes-to-accounts">Back to Financial Statements</a>
 </div>
 
-<?php if ($assets !== []): ?>
 <div class="card section-card" style="margin-top:16px;background:#fef2f2;border:1px solid #fecaca;">
     <h3 style="margin-top:0;color:#991b1b;">Reset Register</h3>
     <p style="font-size:0.85rem;color:#475569;">Removes every row in this register -- Excel-imported, Tally-synced, and manually entered alike -- so you can start over from scratch. This does not undo depreciation figures already saved into the Financial Statements; re-save from a rebuilt register afterwards.</p>
+    <?php if ($assets === []): ?>
+        <button class="btn-outline" type="button" disabled style="color:#991b1b;border-color:#fecaca;opacity:0.5;cursor:not-allowed;">Reset Register (Nothing to Reset)</button>
+    <?php else: ?>
     <form method="post" onsubmit="return confirm('This will permanently remove all <?= count($assets) ?> row(s) currently in this register (Excel, Tally, and manual). This cannot be undone. Continue?');">
         <?= csrfInput() ?>
         <input type="hidden" name="asset_action" value="reset_register">
         <button class="btn-outline" type="submit" style="color:#991b1b;border-color:#fecaca;">Reset Register (Delete All <?= count($assets) ?> Row<?= count($assets) === 1 ? '' : 's' ?>)</button>
     </form>
+    <?php endif; ?>
 </div>
-<?php endif; ?>
 
 <?php require_once __DIR__ . '/layouts/footer_v2.php'; ?>
