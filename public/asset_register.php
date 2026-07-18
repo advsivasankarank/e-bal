@@ -113,6 +113,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'clear_legacy_tally') {
         $cleared = clearLegacyLedgerSyncedFixedAssets($pdo, $company_id, $fy_id);
         $infoMessage = "Removed {$cleared} row(s) created by the old ledger-balance sync. Use \"Sync from Tally\" above to rebuild the register from actual vouchers.";
+    } elseif ($action === 'reset_register') {
+        $cleared = resetFixedAssetRegister($pdo, $company_id, $fy_id);
+        $infoMessage = "Register reset -- removed all {$cleared} row(s) (Excel, Tally, and manual). Start over with the Excel upload or Tally sync above.";
     }
 }
 
@@ -311,5 +314,17 @@ require_once __DIR__ . '/layouts/header_v2.php';
     Once the register is classified, return to Financial Statements to see the Fixed Assets note and Depreciation figure reflect this schedule.<br><br>
     <a class="btn" href="<?= BASE_URL ?>reports.php#notes-to-accounts">Back to Financial Statements</a>
 </div>
+
+<?php if ($assets !== []): ?>
+<div class="card section-card" style="margin-top:16px;background:#fef2f2;border:1px solid #fecaca;">
+    <h3 style="margin-top:0;color:#991b1b;">Reset Register</h3>
+    <p style="font-size:0.85rem;color:#475569;">Removes every row in this register -- Excel-imported, Tally-synced, and manually entered alike -- so you can start over from scratch. This does not undo depreciation figures already saved into the Financial Statements; re-save from a rebuilt register afterwards.</p>
+    <form method="post" onsubmit="return confirm('This will permanently remove all <?= count($assets) ?> row(s) currently in this register (Excel, Tally, and manual). This cannot be undone. Continue?');">
+        <?= csrfInput() ?>
+        <input type="hidden" name="asset_action" value="reset_register">
+        <button class="btn-outline" type="submit" style="color:#991b1b;border-color:#fecaca;">Reset Register (Delete All <?= count($assets) ?> Row<?= count($assets) === 1 ? '' : 's' ?>)</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/layouts/footer_v2.php'; ?>

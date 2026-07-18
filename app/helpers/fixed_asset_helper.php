@@ -677,6 +677,21 @@ function clearLegacyLedgerSyncedFixedAssets(PDO $pdo, int $company_id, int $fy_i
     return $stmt->rowCount();
 }
 
+/**
+ * Wipes every row in the register for this company/FY -- Excel-imported,
+ * voucher-synced, and manually-entered alike -- for when the CA wants to
+ * start completely over (wrong file uploaded, register got into a bad
+ * state, etc.) rather than pick through rows individually. Unlike
+ * clearLegacyLedgerSyncedFixedAssets(), this is intentionally
+ * indiscriminate; the calling page must confirm with the user first.
+ */
+function resetFixedAssetRegister(PDO $pdo, int $company_id, int $fy_id): int
+{
+    $stmt = $pdo->prepare("DELETE FROM fixed_assets WHERE company_id = ? AND fy_id = ?");
+    $stmt->execute([$company_id, $fy_id]);
+    return $stmt->rowCount();
+}
+
 function updateFixedAssetRow(PDO $pdo, int $company_id, int $fy_id, int $assetId, array $fields): void
 {
     $allowed = ['asset_category', 'asset_description', 'useful_life_years', 'residual_value_pct', 'depreciation_method', 'is_disposed', 'disposal_date', 'addition_date'];
