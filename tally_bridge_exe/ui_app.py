@@ -69,7 +69,7 @@ LEDGER_XML = """<ENVELOPE>
 </ENVELOPE>
 """
 
-TB_XML = """<ENVELOPE>
+TB_XML_TEMPLATE = """<ENVELOPE>
   <HEADER>
     <TALLYREQUEST>Export Data</TALLYREQUEST>
   </HEADER>
@@ -78,6 +78,8 @@ TB_XML = """<ENVELOPE>
       <REQUESTDESC>
         <REPORTNAME>Trial Balance</REPORTNAME>
         <STATICVARIABLES>
+          <SVFROMDATE>{from_date}</SVFROMDATE>
+          <SVTODATE>{to_date}</SVTODATE>
           <ISLEDGERWISE>Yes</ISLEDGERWISE>
           <SVEXPORTFORMAT>XML</SVEXPORTFORMAT>
         </STATICVARIABLES>
@@ -86,6 +88,16 @@ TB_XML = """<ENVELOPE>
   </BODY>
 </ENVELOPE>
 """
+
+
+def build_tb_xml(from_date_display, to_date_display):
+    # Unlike LEDGER_XML (a full Collection fetch, period-independent), the
+    # Trial Balance REPORTNAME export respects whatever period is currently
+    # active in Tally's own UI when no SVFROMDATE/SVTODATE is given -- the
+    # original hardcoded TB_XML omitted both entirely, so it silently
+    # returned whichever period Tally happened to have open (often near-
+    # empty) instead of the company's actual financial year.
+    return TB_XML_TEMPLATE.format(from_date=from_date_display, to_date=to_date_display)
 
 INVALID_XML_RE = re.compile(r"[^\x09\x0A\x0D\x20-\x7F]+")
 
@@ -1325,6 +1337,15 @@ class SmartBridgeUI:
         tb_url = active_config.get("tb_upload_url") or TB_UPLOAD_DEFAULT
         voucher_url = active_config.get("voucher_upload_url") or VOUCHER_UPLOAD_DEFAULT
 
+        # NOTE: hardcoded to FY 2024-25 for all three fetches (TB, and
+        # further down, vouchers). A company on a different financial year
+        # needs this made configurable -- tracked separately, not part of
+        # this fix.
+        fy_from_date = "2024-04-01"
+        fy_to_date = "2025-03-31"
+        fy_from_display = "01-Apr-2024"
+        fy_to_display = "31-Mar-2025"
+
         self.state.update({
             "bridge": "running",
             "last_sync": datetime.now().strftime("%d-%b-%Y %H:%M:%S"),
@@ -1359,7 +1380,7 @@ class SmartBridgeUI:
             return
 
         try:
-            tb_xml = fetch_from_tally(TB_XML)
+            tb_xml = fetch_from_tally(build_tb_xml(fy_from_display, fy_to_display))
             logging.info("TB fetched from Tally")
         except Exception as exc:
             self.state.set("last_upload", "Failed (Tally TB)")
@@ -1382,14 +1403,7 @@ class SmartBridgeUI:
         if voucher_sync_enabled:
             try:
                 self.state.set("bridge", "syncing-vouchers")
-                # NOTE: hardcoded to FY 2024-25 -- matches the pre-existing
-                # ledger/TB fetch above, which has the same limitation. A
-                # company on a different financial year needs this made
-                # configurable; tracked separately, not part of this fix.
-                from_date = "2024-04-01"
-                to_date = "2025-03-31"
-
-                vouchers, voucher_source = fetch_vouchers_from_tally(from_date, to_date)
+                vouchers, voucher_source = fetch_vouchers_from_tally(fy_from_date, fy_to_date)
                 logging.info("Vouchers fetched from Tally: count=%d source=%s", len(vouchers), voucher_source)
 
                 # Unlike ledger/TB (which upload raw Tally XML for the
