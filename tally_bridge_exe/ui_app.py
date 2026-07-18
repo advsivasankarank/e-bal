@@ -653,7 +653,28 @@ def fetch_vouchers_via_odbc(from_date, to_date, last_altered=None):
         return None
 
 
+# Same list the server-side PHP fallback (app/helpers/voucher_xml.php)
+# already uses successfully -- a single unfiltered request for every
+# voucher type combined, for a full financial year, timed out even at 90s
+# against a real company's data (Tally never finished generating the
+# response at all). Splitting into these smaller per-type requests each
+# completes in the time TB/ledger already do.
+VOUCHER_TYPES_FOR_FULL_FETCH = [
+    "Payment", "Receipt", "Sales", "Purchase", "Journal",
+    "Contra", "Credit Note", "Debit Note", "Stock Journal", "Physical Stock",
+]
+
+
 def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
+    if voucher_type is None:
+        all_vouchers = {}
+        for vtype in VOUCHER_TYPES_FOR_FULL_FETCH:
+            result = fetch_vouchers_via_xml(from_date, to_date, vtype)
+            if result:
+                for v in result:
+                    all_vouchers[v["tally_guid"]] = v
+        return list(all_vouchers.values())
+
     from_date_display = (
         datetime.strptime(from_date[:10], "%Y-%m-%d").strftime("%d-%b-%Y")
         if from_date
