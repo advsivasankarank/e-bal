@@ -9,7 +9,7 @@ if (!isset($isCorporate)) return;
 ?>
 <div class="panel-header">
     <h3>Manual Adjustments</h3>
-    <span class="toggle" id="fsTogglePanel"><?= !empty($manualNoteDataIncomplete) ? '&#9664; Hide' : '&#9654; Show' ?></span>
+    <span class="toggle" id="fsTogglePanel"><?= !empty($manualPanelForceOpen) ? '&#9664; Hide' : '&#9654; Show' ?></span>
 </div>
 <div class="panel-body">
     <?php if ($isCorporate): ?>

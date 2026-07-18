@@ -55,6 +55,7 @@ $hasNote2OpeningConfirmed = $savedNote2Opening !== '' && (float) $savedNote2Open
 $showNote2OpeningConfirmPrompt = !$hasNote2OpeningConfirmed && $plOpeningCandidate !== null;
 
 $manualNoteDataIncomplete = !$hasCurrentShareCapitalDetail || !$hasClosingStockDetail;
+$manualPanelForceOpen = $manualNoteDataIncomplete || !empty($_GET['open_manual']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['report_action'] ?? '') === 'carry_forward_share_capital') {
     requireCsrfToken();
@@ -371,7 +372,7 @@ echo renderWorkflowNavigation($navData);
 <?php endif; ?>
 
 <!-- Three-Panel Workspace -->
-<div class="fs-workspace<?= $manualNoteDataIncomplete ? ' input-open' : '' ?>" id="fsWorkspace">
+<div class="fs-workspace<?= $manualPanelForceOpen ? ' input-open' : '' ?>" id="fsWorkspace">
     <!-- LEFT: Sections -->
     <div class="fs-section-sidebar">
         <h3 id="fsSectionTitle">Sections</h3>

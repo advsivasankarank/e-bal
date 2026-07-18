@@ -31,7 +31,7 @@ $tiles = [
         'icon' => '📝',
         'label' => 'Manual Entry',
         'desc' => 'Manual adjustments and figures not sourced from Tally (opening balances, provisions, disclosures).',
-        'href' => BASE_URL . 'statements/financials.php',
+        'href' => BASE_URL . 'statements/financials.php?open_manual=1',
         'detail' => 'Opens the Manual Adjustments drawer on the Financial Statements page',
     ],
     [
