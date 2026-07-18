@@ -38,6 +38,12 @@ LISTEN_PORT_DEFAULT = 9123
 TALLY_POLL_INTERVAL = 30
 TALLY_CONNECT_TIMEOUT = 3
 TALLY_READ_TIMEOUT = 8
+# A full financial year of vouchers, unfiltered by type in a single
+# request, is a much heavier Tally export than ledgers/TB (which already
+# took 6+ seconds for this company's size) -- the default 8s
+# TALLY_READ_TIMEOUT was cutting this off before Tally finished generating
+# the response at all, not a real connectivity failure.
+TALLY_VOUCHER_READ_TIMEOUT = 90
 HTTP_REQUEST_TIMEOUT = 10
 UPLOAD_TIMEOUT = 10
 VOUCHER_UPLOAD_TIMEOUT = 120
@@ -666,7 +672,7 @@ def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
     xml_request = VOUCHER_XML_TEMPLATE.format(
         from_date=from_date_display, to_date=to_date_display, type_filter=type_filter
     )
-    response = fetch_from_tally(xml_request)
+    response = fetch_from_tally(xml_request, timeout=TALLY_VOUCHER_READ_TIMEOUT)
 
     try:
         root = ET.fromstring(response)
