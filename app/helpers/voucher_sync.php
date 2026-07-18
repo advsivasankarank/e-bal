@@ -138,17 +138,16 @@ function syncVouchersIncremental(PDO $pdo, int $companyId, int $fyId, string $fr
                  narration, party_ledger_name, is_optional, is_cancelled, master_id,
                  altered_date, created_date, source)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            AS new
             ON DUPLICATE KEY UPDATE
-                voucher_number = COALESCE(NULLIF(new.voucher_number, ''), voucher_number),
-                date = new.date,
-                effective_date = new.effective_date,
-                narration = new.narration,
-                party_ledger_name = new.party_ledger_name,
-                is_optional = new.is_optional,
-                is_cancelled = new.is_cancelled,
-                altered_date = new.altered_date,
-                source = new.source,
+                voucher_number = COALESCE(NULLIF(VALUES(voucher_number), ''), voucher_number),
+                date = VALUES(date),
+                effective_date = VALUES(effective_date),
+                narration = VALUES(narration),
+                party_ledger_name = VALUES(party_ledger_name),
+                is_optional = VALUES(is_optional),
+                is_cancelled = VALUES(is_cancelled),
+                altered_date = VALUES(altered_date),
+                source = VALUES(source),
                 updated_at = NOW()
         ");
 

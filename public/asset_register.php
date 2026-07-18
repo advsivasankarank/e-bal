@@ -14,6 +14,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/engines/fs_engine.php';
 require_once __DIR__ . '/../app/helpers/fixed_asset_helper.php';
 require_once __DIR__ . '/../app/helpers/figure_helper.php';
+require_once __DIR__ . '/../app/helpers/report_validation_helper.php';
 
 requireFullContext();
 
@@ -56,14 +57,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($parsed['rows'] !== []) {
                     saveFixedAssetExcelImport($pdo, $company_id, $fy_id, $parsed['rows'], $userId, $filename);
                     $infoMessage = count($parsed['rows']) . ' asset row(s) imported from "' . htmlspecialchars($filename) . '".';
+
+                    /* Compare the just-uploaded opening balances against
+                       Tally's own classified PPE/CWIP closing balance right
+                       away, rather than waiting for the CA to separately
+                       visit Review Centre -- this is exactly the gap that
+                       produced the real ~54 lakh reconciliation surprise
+                       found earlier, and it's cheap to check immediately. */
+                    $classifiedForReconciliation = getClassifiedData($pdo, $company_id, $fy_id);
+                    foreach (detectFixedAssetRegisterIssues($pdo, $company_id, $fy_id, $classifiedForReconciliation) as $warning) {
+                        if ($warning['check'] === 'fixed_asset_excel_reconciliation') {
+                            $errorMessages[] = $warning['message'];
+                        }
+                    }
                 }
                 $errorMessages = array_merge($errorMessages, $parsed['errors']);
             }
         }
     } elseif ($action === 'sync_tally') {
         $classified = getClassifiedData($pdo, $company_id, $fy_id);
-        $syncResult = syncFixedAssetsFromTallyClassification($pdo, $company_id, $fy_id, $classified);
-        $infoMessage = $syncResult['created'] . ' asset(s) synced from Tally\'s classified Fixed Assets/CWIP ledgers. Classify category and useful life below.';
+        if ($fyStart === '' || $fyEnd === '') {
+            $errorMessages[] = 'Financial year start/end dates are not set for this company -- cannot determine which vouchers fall in this year.';
+        } else {
+            $syncResult = syncFixedAssetVouchersFromTally($pdo, $company_id, $fy_id, $classified, $fyStart, $fyEnd);
+            if (!$syncResult['ok']) {
+                $errorMessages[] = $syncResult['message'];
+            } else {
+                $infoMessage = $syncResult['message'] . ' Classify category and useful life below.';
+                if ($syncResult['excluded'] !== []) {
+                    $excludedNames = array_map(
+                        static fn (array $e): string => $e['ledger_name'] . ' (' . $e['voucher_type'] . ' #' . $e['voucher_number'] . ', ' . $e['date'] . ')',
+                        $syncResult['excluded']
+                    );
+                    $infoMessage .= ' ' . count($syncResult['excluded']) . ' voucher(s) touching a Fixed Asset ledger were excluded as likely depreciation/revaluation journals, not genuine additions or disposals -- review manually if needed: ' . implode('; ', $excludedNames);
+                }
+            }
+        }
     } elseif ($action === 'save_classification') {
         $ids = $_POST['asset_id'] ?? [];
         foreach ($ids as $index => $assetId) {
@@ -118,7 +147,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
 
 <div class="card section-card">
     <h3 style="margin-top:0;">1. Upload Prior-Year Depreciation Schedule (Optional)</h3>
-    <p style="font-size:0.85rem;color:var(--muted);">Excel (.xlsx) with columns: Asset Category, Description, Opening Gross Block, Opening Accumulated Depreciation, Useful Life (Years) [optional], Method [optional, SLM/WDV]. These become this year's opening balances.</p>
+    <p style="font-size:0.85rem;color:var(--muted);">Excel (.xlsx) with columns: Asset Category, Description, Opening Gross Block, Opening Accumulated Depreciation, Useful Life (Years) [optional], Method [optional, SLM/WDV]. These become this year's opening balances -- the only source for opening balances; Tally sync below never overrides them. The upload is immediately compared against Tally's own classified PPE/CWIP closing balance for last year, and any mismatch is flagged below.</p>
     <form method="post" enctype="multipart/form-data">
         <?= csrfInput() ?>
         <input type="hidden" name="asset_action" value="upload_excel">
@@ -129,7 +158,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
 
 <div class="card section-card">
     <h3 style="margin-top:0;">2. Sync Additions/Disposals from Tally</h3>
-    <p style="font-size:0.85rem;color:var(--muted);">Pulls this year's classified Property, Plant &amp; Equipment and Capital Work-in-Progress ledgers (already mapped via ReconHub) that aren't yet in the register, using each ledger's balance movement as this year's addition or disposal.</p>
+    <p style="font-size:0.85rem;color:var(--muted);">Not a Trial Balance fetch -- pulls this year's actual Tally <strong>vouchers</strong> (Purchase, Journal, Payment, Sales, Receipt) that debit or credit a Property, Plant &amp; Equipment or Capital Work-in-Progress ledger (already classified via ReconHub), and creates one register row per voucher using that voucher's own Tally date as the addition/disposal date -- for accurate day-wise pro-rata under Schedule II, instead of one row per ledger with a single approximated date. Opening balances are never touched here; they only ever come from the Excel upload above. Re-running this is safe -- it updates existing rows from the same voucher rather than duplicating them.</p>
     <form method="post">
         <?= csrfInput() ?>
         <input type="hidden" name="asset_action" value="sync_tally">
@@ -166,7 +195,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
             <tbody>
             <?php foreach ($assets as $i => $asset): ?>
             <tr>
-                <td>
+                <td<?= !empty($asset['voucher_narration']) ? ' title="' . htmlspecialchars((string) $asset['voucher_narration']) . '"' : '' ?>>
                     <input type="hidden" name="asset_id[]" value="<?= (int) $asset['id'] ?>">
                     <?= htmlspecialchars((string) $asset['asset_description']) ?>
                 </td>

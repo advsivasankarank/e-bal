@@ -85,6 +85,29 @@ fixedAssetTestAssert($r6['closing_wdv'] > 0 && $r6['closing_wdv'] < 100000, 'Par
 fixedAssetTestAssert(scheduleIIUsefulLife('Plant & Machinery (general)')['years'] == 15.0, 'Schedule II useful life for Plant & Machinery (general) is 15 years');
 fixedAssetTestAssert(scheduleIIUsefulLife('Intangible Assets')['is_prescribed'] === false, 'Intangible Assets are flagged as not Schedule-II-prescribed (governed by AS 26 instead)');
 
+/* 8. Voucher-type classification for the voucher-level Tally sync -- decides
+      whether a voucher touching a Fixed Asset ledger counts as a genuine
+      addition/disposal or gets excluded as a depreciation/revaluation
+      journal. */
+fixedAssetTestAssert(classifyFixedAssetVoucherType('Purchase') === 'purchase', 'Voucher type "Purchase" classifies as purchase');
+fixedAssetTestAssert(classifyFixedAssetVoucherType('Purchase (GST)') === 'purchase', 'Voucher type containing "Purchase" classifies as purchase regardless of suffix');
+fixedAssetTestAssert(classifyFixedAssetVoucherType('Sales') === 'sale', 'Voucher type "Sales" classifies as sale');
+fixedAssetTestAssert(classifyFixedAssetVoucherType('Depreciation Journal') === 'depreciation_journal', 'Voucher type "Depreciation Journal" is excluded as a depreciation journal, not a purchase/disposal');
+fixedAssetTestAssert(classifyFixedAssetVoucherType('Payment') === 'other', 'Voucher type "Payment" (cash purchase without a bill) classifies as other -- still eligible as an addition via its Dr/Cr direction');
+fixedAssetTestAssert(classifyFixedAssetVoucherType('Journal') === 'other', 'Voucher type "Journal" classifies as other, not auto-excluded');
+
+/* 9. A voucher-synced disposal-only row (no opening balance or addition of
+      its own on THIS row -- the asset being disposed was added in a prior
+      year or via a different voucher row) must not derive a phantom
+      depreciation charge from the negative closingGross this produces
+      internally -- caught while designing the voucher sync: the un-guarded
+      SLM formula turned a negative closingGross into a negative residual
+      value, which then produced a spurious positive depreciable amount. */
+$asset9 = ['opening_gross_block' => 0, 'opening_accumulated_depreciation' => 0, 'additions_during_year' => 0, 'disposals_during_year' => 50000, 'disposal_date' => '2024-09-30', 'is_disposed' => 1, 'depreciation_method' => 'SLM', 'residual_value_pct' => 5, 'useful_life_years' => 10];
+$r9 = computeAssetDepreciation($asset9, $fyStart, $fyEnd);
+fixedAssetTestAssert($r9['depreciation_for_year'] == 0.0, 'Disposal-only row (no opening/addition base) charges zero depreciation, not a phantom amount derived from a negative residual value');
+fixedAssetTestAssert($r9['closing_gross_block'] == -50000.0, 'Disposal-only row still reports the true negative closing gross block, so category-level aggregation nets correctly against the category\'s other rows');
+
 echo "================================================\n";
 echo "$passed passed, $failures failed\n";
 
