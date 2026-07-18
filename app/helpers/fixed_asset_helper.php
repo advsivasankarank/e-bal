@@ -404,7 +404,16 @@ function parseFixedAssetExcelUpload(string $filePath): array
     $errors = [];
 
     try {
-        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
+        /* setReadDataOnly() skips loading cell styles/formatting/merged-cell
+           metadata entirely -- for a real-world audited Schedule III export
+           (heavy multi-row merged headers, formatting throughout), this is
+           the difference between comfortably fitting in a constrained
+           shared-hosting PHP memory_limit and hitting it. Confirmed against
+           a real 3,146-row Note 11 export that pushed close to a typical
+           web-facing memory_limit even before this change. */
+        $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($filePath);
+        $reader->setReadDataOnly(true);
+        $spreadsheet = $reader->load($filePath);
         $sheet = $spreadsheet->getActiveSheet();
         $data = $sheet->toArray(null, true, true, false);
     } catch (Throwable $e) {
