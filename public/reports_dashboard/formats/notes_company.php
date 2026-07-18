@@ -407,19 +407,26 @@ $ebalAddress = $company_meta['registered_address'] ?? '';
 <?php
 require_once __DIR__ . '/../../../app/reports/accounting_policies.php';
 $depreciationInfo = null;
+$deferredTaxInfo = null;
 foreach (($notes['sections'] ?? []) as $section) {
     if (($section['custom_type'] ?? '') === 'depreciation_schedule') {
         $depreciationInfo = [
             'methods_used' => $section['schedule']['methods_used'] ?? [],
             'has_excel_import' => $section['schedule']['has_excel_import'] ?? false,
         ];
-        break;
+    }
+    if (($section['custom_type'] ?? '') === 'deferred_tax' && !empty($section['computed'])) {
+        $deferredTaxInfo = [
+            'has_data' => true,
+            'tax_rate_pct' => $section['tax_rate_pct'] ?? 0.0,
+            'unrecognised_loss_dta' => $section['unrecognised_loss_dta'] ?? 0.0,
+        ];
     }
 }
 ?>
 <h3 class="note-heading">Significant Accounting Policies</h3>
 <ol class="note-policy-list">
-<?php foreach (getAccountingPolicies('corporate', $depreciationInfo) as $policy): ?>
+<?php foreach (getAccountingPolicies('corporate', $depreciationInfo, $deferredTaxInfo) as $policy): ?>
 <li><?= htmlspecialchars($policy) ?></li>
 <?php endforeach; ?>
 </ol>

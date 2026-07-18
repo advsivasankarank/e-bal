@@ -12,7 +12,7 @@
  * Null (or omitted) falls back to the original generic wording, used when
  * no Asset Register has been populated for this company/FY yet.
  */
-function getAccountingPolicies(string $entity, ?array $depreciationInfo = null): array
+function getAccountingPolicies(string $entity, ?array $depreciationInfo = null, ?array $deferredTaxInfo = null): array
 {
     switch ($entity) {
         case 'corporate':
@@ -29,7 +29,7 @@ function getAccountingPolicies(string $entity, ?array $depreciationInfo = null):
                 'Foreign Currency Transactions (AS 11): Transactions in foreign currency are recorded at the exchange rate prevailing on the date of the transaction. Monetary assets and liabilities denominated in foreign currency are restated at the year-end exchange rate, and the resulting exchange differences are recognised in the Statement of Profit and Loss.',
                 'Employee Benefits (AS 15): Short-term employee benefits are recognised as an expense in the period in which the related service is rendered. Contributions to defined contribution plans (e.g. Provident Fund) are charged to the Statement of Profit and Loss. Defined benefit obligations (e.g. gratuity), where applicable, are determined based on actuarial valuation.',
                 'Borrowing Costs (AS 16): Borrowing costs directly attributable to the acquisition or construction of a qualifying asset are capitalised as part of the cost of that asset. All other borrowing costs are recognised as an expense in the period in which they are incurred.',
-                'Taxes on Income (AS 22): Tax expense comprises current tax and deferred tax. Current tax is measured based on taxable income for the year, computed in accordance with the provisions of the Income-tax Act, 1961. Deferred tax is recognised on timing differences between accounting income and taxable income, subject to the consideration of prudence; the deferred tax asset/liability balances carried in these financial statements are as recorded in the Company\'s books and have not been independently recomputed by this system -- refer Note on Deferred Tax for this disclosure.',
+                buildDeferredTaxPolicyStatement($deferredTaxInfo),
                 'Provisions, Contingent Liabilities and Contingent Assets (AS 29): A provision is recognised when the Company has a present obligation as a result of a past event, it is probable that an outflow of resources will be required to settle the obligation, and a reliable estimate can be made of the amount of the obligation. Contingent liabilities are disclosed by way of notes; contingent assets are neither recognised nor disclosed in the financial statements.',
                 'Cash and Cash Equivalents: Cash and cash equivalents comprise cash on hand, demand deposits with banks, and other short-term, highly liquid investments with an original maturity of three months or less that are readily convertible into known amounts of cash.',
                 'Cash Flow Statement: A separate Statement of Cash Flows has not been presented with these financial statements. Where the Company does not qualify for the small company / One Person Company exemption under the proviso to Section 2(40) of the Companies Act, 2013, a Cash Flow Statement (prepared under AS 3) should be appended separately -- this determination depends on the Company\'s paid-up capital, turnover and borrowings for the year and should be confirmed before finalisation.',
@@ -77,6 +77,24 @@ function buildDepreciationPolicyStatement(?array $depreciationInfo): string
 
     return 'Depreciation: Depreciation on property, plant and equipment is provided on the basis of useful lives prescribed under Schedule II of the Companies Act, 2013, using the '
         . $methodText . ', with pro-rata depreciation for assets acquired or disposed during the year.' . $openingSource;
+}
+
+function buildDeferredTaxPolicyStatement(?array $deferredTaxInfo): string
+{
+    if ($deferredTaxInfo === null || empty($deferredTaxInfo['has_data'])) {
+        /* No Deferred Tax Calculator computation exists for this company/FY
+           yet -- generic wording only, since the deferred tax balance is
+           carried as recorded in the Company's books and has not been
+           independently recomputed by this system. */
+        return 'Taxes on Income (AS 22): Tax expense comprises current tax and deferred tax. Current tax is measured based on taxable income for the year, computed in accordance with the provisions of the Income-tax Act, 1961. Deferred tax is recognised on timing differences between accounting income and taxable income, subject to the consideration of prudence; the deferred tax asset/liability balances carried in these financial statements are as recorded in the Company\'s books and have not been independently recomputed by this system -- refer Note on Deferred Tax for this disclosure.';
+    }
+
+    $rateText = number_format((float) $deferredTaxInfo['tax_rate_pct'], 2) . '%';
+    $unrecognisedText = !empty($deferredTaxInfo['unrecognised_loss_dta']) && $deferredTaxInfo['unrecognised_loss_dta'] > 0
+        ? ' A Deferred Tax Asset on carried-forward losses / unabsorbed depreciation has not been recognised, pending virtual certainty of future taxable income as required under AS 22.'
+        : '';
+
+    return 'Taxes on Income (AS 22): Tax expense comprises current tax and deferred tax. Current tax is measured based on taxable income for the year, computed in accordance with the provisions of the Income-tax Act, 1961. Deferred tax is recognised on timing differences between accounting income as per the books and taxable income as per the Income-tax Act, 1961, computed using the tax rate of ' . $rateText . ' in force as at the balance sheet date, subject to the consideration of prudence -- refer Note on Deferred Tax for the category-wise breakdown.' . $unrecognisedText;
 }
 
 function renderAccountingPolicies(array $policies): void

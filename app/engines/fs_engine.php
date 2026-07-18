@@ -586,8 +586,72 @@ function buildCostOfMaterialsConsumedSection(array $classified, array $inventory
     ];
 }
 
-function buildDeferredTaxSection(array $classified, int $noteNo, string $title): array
+function buildDeferredTaxSection(array $classified, int $noteNo, string $title, ?array $computedDeferredTax = null): array
 {
+    /* When the Deferred Tax Calculator (app/helpers/deferred_tax_helper.php)
+       has been used for this company/FY, its independently-computed AS-22
+       timing-difference figure replaces the flat TB ledger pass-through
+       below entirely -- both the total AND the line-item breakdown, so the
+       note actually shows the depreciation timing difference and manual
+       items that produced the number, not a mysterious ledger balance. */
+    if ($computedDeferredTax !== null && $computedDeferredTax['has_data']) {
+        /* Sign convention must match the pass-through path below: a DTL
+           ledger contributes POSITIVELY (adds to total_liabilities in
+           buildCompanySummaryFromNotes), a DTA contributes NEGATIVELY
+           (reduces it, since a net DTA position is presented as a negative
+           deferred tax liability in this app's simplified single-line BS
+           presentation). computeNetDeferredTax()'s own net_amount uses the
+           opposite, more intuitive "DTA positive" convention for its own
+           display purposes, so it must be negated here, not passed through
+           directly -- confirmed against real data during development: an
+           unnegated net_amount silently flipped a genuine DTL into a
+           liability-reducing figure. */
+        $lines = [];
+        $currentTotal = 0.0;
+        foreach ($computedDeferredTax['depreciation']['rows'] as $row) {
+            $signed = $row['classification'] === 'DTL' ? $row['amount'] : -$row['amount'];
+            $lines[] = [
+                'label' => 'Depreciation timing difference -- ' . $row['category'] . ' (' . $row['classification'] . ')',
+                'current' => $signed,
+                'previous' => 0.0,
+            ];
+            $currentTotal += $signed;
+        }
+        foreach ($computedDeferredTax['other_items'] as $item) {
+            if (!$item['recognised']) {
+                continue;
+            }
+            $signed = $item['classification'] === 'DTL' ? $item['amount'] : -$item['amount'];
+            $lines[] = [
+                'label' => (string) $item['description'] . ' (' . $item['classification'] . ')',
+                'current' => $signed,
+                'previous' => 0.0,
+            ];
+            $currentTotal += $signed;
+        }
+        if ($lines === []) {
+            $lines[] = ['label' => 'No deferred tax balances', 'current' => 0.0, 'previous' => 0.0];
+        }
+
+        $disclosureParts = ['Deferred tax is computed under AS 22 (timing-difference method) at ' . number_format($computedDeferredTax['tax_rate_pct'], 2) . '% -- see the Deferred Tax Calculator for the full asset-category breakdown.'];
+        if ($computedDeferredTax['unrecognised_loss_dta'] > 0) {
+            $disclosureParts[] = 'A Deferred Tax Asset of ₹' . number_format($computedDeferredTax['unrecognised_loss_dta'], 2) . ' on carried-forward losses has NOT been recognised, pending virtual certainty of future taxable income as required under AS 22.';
+        }
+
+        return [
+            'title' => $title,
+            'note_no' => $noteNo,
+            'custom_type' => 'deferred_tax',
+            'lines' => $lines,
+            'current_total' => $currentTotal,
+            'previous_total' => 0.0,
+            'disclosure' => implode(' ', $disclosureParts),
+            'computed' => true,
+            'tax_rate_pct' => $computedDeferredTax['tax_rate_pct'],
+            'unrecognised_loss_dta' => $computedDeferredTax['unrecognised_loss_dta'],
+        ];
+    }
+
     $lines = [];
     $currentTotal = 0.0;
     $previousTotal = 0.0;
@@ -693,7 +757,7 @@ function manualAmount(array $manualInputs, string $key, float $fallback = 0.0): 
     return (float) $value;
 }
 
-function buildCompanyNotesPayload(array $classified, array $manualInputs = [], array $previousManualInputs = [], array $shareholders = [], array $shareCapitalClasses = [], array $previousShareCapitalClasses = [], ?array $depreciationSchedule = null): array
+function buildCompanyNotesPayload(array $classified, array $manualInputs = [], array $previousManualInputs = [], array $shareholders = [], array $shareCapitalClasses = [], array $previousShareCapitalClasses = [], ?array $depreciationSchedule = null, ?array $computedDeferredTax = null): array
 {
     $currentPaidUp = manualAmount($manualInputs, 'share_capital_paidup', classifiedAmount($classified, 'share_capital'));
     $previousPaidUp = manualAmount($previousManualInputs, 'share_capital_paidup', classifiedPreviousAmount($classified, 'share_capital'));
@@ -844,7 +908,7 @@ function buildCompanyNotesPayload(array $classified, array $manualInputs = [], a
         }
 
         if ($masterCode === 'DT') {
-            $section = buildDeferredTaxSection($classified, (int) $noteNo, $title);
+            $section = buildDeferredTaxSection($classified, (int) $noteNo, $title, $computedDeferredTax);
             $section['master_code'] = $masterCode;
             $sections[] = $section;
             continue;
@@ -1734,7 +1798,27 @@ function generateFinancialStatements(PDO $pdo, int $company_id, int $fy_id, stri
                 }
             }
 
-            $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs, $shareholders, $shareCapitalClasses, $previousShareCapitalClasses, $depreciationSchedule);
+            /* Deferred Tax Calculator (AS-22 timing differences) -- same
+               "only override once the CA has actually used it" reasoning as
+               the Depreciation Schedule above. Needs the same book schedule
+               plus a parallel Income-tax WDV schedule and any manually
+               entered timing differences, so it's only computed once the
+               Asset Register or the Deferred Tax Calculator's own manual
+               items table has something in it. */
+            require_once __DIR__ . '/../helpers/deferred_tax_helper.php';
+            $computedDeferredTax = null;
+            if ($fyDatesRow !== false && !empty($fyDatesRow['fy_start']) && !empty($fyDatesRow['fy_end'])) {
+                $hasDtItems = getDeferredTaxItems($pdo, $company_id, $fy_id) !== [];
+                if (($depreciationSchedule !== null && $depreciationSchedule['has_data']) || $hasDtItems) {
+                    $taxRatePct = (float) manualAmount($manualInputs, 'deferred_tax_rate_pct', 25.17);
+                    $candidateDeferredTax = computeNetDeferredTax($pdo, $company_id, $fy_id, (string) $fyDatesRow['fy_start'], (string) $fyDatesRow['fy_end'], $taxRatePct);
+                    if ($candidateDeferredTax['has_data']) {
+                        $computedDeferredTax = $candidateDeferredTax;
+                    }
+                }
+            }
+
+            $notes = buildCompanyNotesPayload($classified, $manualInputs, $previousManualInputs, $shareholders, $shareCapitalClasses, $previousShareCapitalClasses, $depreciationSchedule, $computedDeferredTax);
             $data = buildCompanySummaryFromNotes($classified, $notes, $fyDisplay);
             foreach ($notes['sections'] as $sectionIndex => $sectionRow) {
                 if (($sectionRow['master_code'] ?? '') === 'EPS') {
