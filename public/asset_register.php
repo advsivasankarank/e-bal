@@ -34,6 +34,7 @@ $fyEnd = (string) ($fyDatesRow['fy_end'] ?? '');
 
 $infoMessage = '';
 $warningMessage = '';
+$rawResponseSample = '';
 $errorMessages = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -92,6 +93,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($totalFromTally === 0) {
                     $warningMessage = "Tally returned 0 vouchers for {$fyStart} to {$fyEnd} (via {$source}) -- nothing was fetched at all, so this isn't specific to Fixed Assets. Check that Tally is open to the correct company and financial year, and that the Smart Bridge / connection is actually able to reach it (not just showing \"Connected\").";
+                    $rawResponseSample = (string) ($diag['raw_response_sample'] ?? '');
+                    if ($rawResponseSample !== '') {
+                        $warningMessage .= ' The raw response Tally sent back is shown below -- if it contains an error or rejection message instead of vouchers, that tells us exactly what to fix.';
+                    }
                 } elseif ($matchedEntries === 0) {
                     $warningMessage = "Tally returned {$totalFromTally} voucher(s) via {$source}, but none of them touched any of the {$ledgerCount} ledger(s) classified as Fixed Assets/CWIP within {$fyStart} to {$fyEnd}. Either there genuinely were no Fixed Asset purchases/disposals this year, or the ledger names in those vouchers don't exactly match the names classified in ReconHub (check for trailing spaces or renamed ledgers).";
                 } else {
@@ -172,6 +177,12 @@ require_once __DIR__ . '/layouts/header_v2.php';
     <div class="card section-card" style="background:#fffbeb;border:1px solid #fcd34d;">
         <strong style="color:#92400e;">⚠ Sync from Tally found nothing to add</strong>
         <p style="font-size:0.85rem;color:#475569;margin:6px 0 0;"><?= htmlspecialchars($warningMessage) ?></p>
+        <?php if ($rawResponseSample !== ''): ?>
+        <details style="margin-top:10px;">
+            <summary style="cursor:pointer;font-size:0.82rem;color:#92400e;">Show raw Tally response</summary>
+            <pre style="background:#fff;border:1px solid #fde68a;border-radius:6px;padding:10px;margin-top:6px;font-size:0.75rem;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;"><?= htmlspecialchars($rawResponseSample) ?></pre>
+        </details>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 <?php foreach ($errorMessages as $err): ?>

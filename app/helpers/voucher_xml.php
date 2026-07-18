@@ -65,6 +65,30 @@ function fetchVouchersViaXml(string $fromDate, string $toDate, ?string $voucherT
     return !empty($allVouchers) ? array_values($allVouchers) : [];
 }
 
+/**
+ * Fetches ONE voucher type's raw, unparsed Tally response -- purely for
+ * diagnostics when a sync legitimately returns zero vouchers. A response
+ * with no <VOUCHER> nodes is indistinguishable, at the parsed-array level,
+ * between "Tally genuinely has none of this type in range" and "Tally
+ * returned a LINEERROR / rejection we're silently swallowing as zero
+ * results" -- this surfaces the raw bytes so a human can tell which.
+ */
+function fetchRawTallyVoucherResponseSample(string $fromDate, string $toDate): ?string
+{
+    require_once __DIR__ . '/../../xml_engine/tally_connector.php';
+
+    $fromDisplay = date('d M Y', strtotime($fromDate)) ?: $fromDate;
+    $toDisplay = date('d M Y', strtotime($toDate)) ?: $toDate;
+    $xml = buildVoucherCollectionXml($fromDisplay, $toDisplay, 'Purchase');
+    $response = fetchFromTally($xml);
+
+    if ($response === false) {
+        return null;
+    }
+
+    return (string) $response;
+}
+
 function fetchVouchersViaXmlSingleType(string $fromDate, string $toDate, string $voucherType): ?array
 {
     $fromDisplay = date('d M Y', strtotime($fromDate)) ?: $fromDate;

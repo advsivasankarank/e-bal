@@ -661,7 +661,20 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         'total_vouchers_from_tally' => (int) ($voucherSyncResult['total'] ?? 0),
         'fixed_asset_ledger_count' => count($ledgerNames),
         'matched_voucher_entries' => count($entries),
+        'raw_response_sample' => null,
     ];
+
+    /* When Tally reported zero vouchers, fetch one raw (unparsed) sample
+       response so a human can tell whether Tally genuinely returned an
+       empty voucher list or an error/rejection that was silently treated
+       as "zero results" -- both look identical once parsed down to a
+       vouchers array, but look completely different in the raw XML. */
+    if ($diagnostics['total_vouchers_from_tally'] === 0 && ($voucherSyncResult['source'] ?? '') === 'xml') {
+        $rawSample = fetchRawTallyVoucherResponseSample($fyStart, $fyEnd);
+        if ($rawSample !== null) {
+            $diagnostics['raw_response_sample'] = mb_substr(trim($rawSample), 0, 1000);
+        }
+    }
 
     return [
         'ok' => true,
