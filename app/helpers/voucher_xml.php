@@ -20,13 +20,13 @@ function buildVoucherCollectionXml(string $fromDate, string $toDate, string $vou
             <STATICVARIABLES>
                 <SVFROMDATE>{$fromDate}</SVFROMDATE>
                 <SVTODATE>{$toDate}</SVTODATE>
-                <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+                <SVEXPORTFORMAT>\$\$SysName:XML</SVEXPORTFORMAT>
             </STATICVARIABLES>
             <TDL>
                 <TDLMESSAGE>
                     <COLLECTION NAME="VoucherCollection">
                         <TYPE>Voucher</TYPE>
-                        <CHILDOF>$$VchVouchers</CHILDOF>
+                        <CHILDOF>\$\$VchVouchers</CHILDOF>
                         <FETCH>GUID, VoucherTypeName, VoucherNumber, Date, EffectiveDate, Narration, PartyLedgerName, IsOptional, IsCancelled, AlterDate, EnteredDate, LedgerEntries</FETCH>
                         {$typeFilter}
                     </COLLECTION>

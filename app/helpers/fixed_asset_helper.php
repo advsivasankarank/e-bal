@@ -653,6 +653,30 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
     return ['ok' => true, 'message' => "Synced {$created} voucher-based asset transaction(s) from Tally.", 'created' => $created, 'updated' => 0, 'excluded' => $excluded];
 }
 
+/**
+ * Rows created by the old ledger-balance-movement "Sync from Tally"
+ * (source = 'tally', now removed in favour of syncFixedAssetVouchersFromTally()
+ * above) carry a zero opening balance, no addition date, and a single
+ * approximated per-ledger figure instead of per-voucher transactions --
+ * they'll never self-correct since nothing writes that source value
+ * anymore. Lets the CA clear them out in one action so the register can be
+ * rebuilt cleanly from the voucher sync, instead of deleting hundreds of
+ * rows one at a time.
+ */
+function countLegacyLedgerSyncedFixedAssets(PDO $pdo, int $company_id, int $fy_id): int
+{
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM fixed_assets WHERE company_id = ? AND fy_id = ? AND source = 'tally'");
+    $stmt->execute([$company_id, $fy_id]);
+    return (int) $stmt->fetchColumn();
+}
+
+function clearLegacyLedgerSyncedFixedAssets(PDO $pdo, int $company_id, int $fy_id): int
+{
+    $stmt = $pdo->prepare("DELETE FROM fixed_assets WHERE company_id = ? AND fy_id = ? AND source = 'tally'");
+    $stmt->execute([$company_id, $fy_id]);
+    return $stmt->rowCount();
+}
+
 function updateFixedAssetRow(PDO $pdo, int $company_id, int $fy_id, int $assetId, array $fields): void
 {
     $allowed = ['asset_category', 'asset_description', 'useful_life_years', 'residual_value_pct', 'depreciation_method', 'is_disposed', 'disposal_date', 'addition_date'];

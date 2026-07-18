@@ -110,6 +110,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete_asset') {
         deleteFixedAssetRow($pdo, $company_id, $fy_id, (int) ($_POST['asset_id'] ?? 0));
         $infoMessage = 'Asset removed from the register.';
+    } elseif ($action === 'clear_legacy_tally') {
+        $cleared = clearLegacyLedgerSyncedFixedAssets($pdo, $company_id, $fy_id);
+        $infoMessage = "Removed {$cleared} row(s) created by the old ledger-balance sync. Use \"Sync from Tally\" above to rebuild the register from actual vouchers.";
     }
 }
 
@@ -118,6 +121,7 @@ $schedule = ($fyStart !== '' && $fyEnd !== '')
     ? computeDepreciationSchedule($pdo, $company_id, $fy_id, $fyStart, $fyEnd)
     : ['by_category' => [], 'totals' => [], 'asset_count' => 0, 'has_data' => false];
 $categoryList = fixedAssetCategoryList();
+$legacyCount = countLegacyLedgerSyncedFixedAssets($pdo, $company_id, $fy_id);
 
 require_once __DIR__ . '/layouts/header_v2.php';
 ?>
@@ -144,6 +148,18 @@ require_once __DIR__ . '/layouts/header_v2.php';
 <?php foreach ($errorMessages as $err): ?>
     <div class="card section-card" style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;"><?= htmlspecialchars($err) ?></div>
 <?php endforeach; ?>
+
+<?php if ($legacyCount > 0): ?>
+<div class="card section-card" style="background:#fffbeb;border:1px solid #fcd34d;">
+    <strong style="color:#92400e;">⚠ <?= $legacyCount ?> row(s) in this register were created by the old "Sync from Tally"</strong>
+    <p style="font-size:0.85rem;color:#475569;margin:6px 0 10px;">That method approximated each ledger's addition/disposal from its Trial Balance movement for the year (zero opening balance, no addition date) -- it's been replaced by a real voucher-level sync above. These old rows won't self-correct; clear them and re-run "Sync from Tally" to rebuild the register from actual purchase/sale vouchers with accurate dates.</p>
+    <form method="post" onsubmit="return confirm('Remove all <?= $legacyCount ?> row(s) created by the old ledger-based sync? This does not affect Excel-imported or manually-entered rows.');">
+        <?= csrfInput() ?>
+        <input type="hidden" name="asset_action" value="clear_legacy_tally">
+        <button class="btn-primary" type="submit">Clear <?= $legacyCount ?> Old Row(s)</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <div class="card section-card">
     <h3 style="margin-top:0;">1. Upload Prior-Year Depreciation Schedule (Optional)</h3>
