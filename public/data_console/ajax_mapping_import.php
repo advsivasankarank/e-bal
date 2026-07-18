@@ -70,16 +70,17 @@ if ($_FILES['file']['size'] > $maxSize) {
 
 $uploadedFile = $_FILES['file']['tmp_name'];
 
-// Validate file type using server-side MIME detection
-$finfo = new finfo(FILEINFO_MIME_TYPE);
-$detectedType = $finfo->file($uploadedFile);
-$allowedTypes = [
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel',
-];
+// Validate file type by extension + zip signature (not fileinfo -- that
+// extension isn't guaranteed to be compiled into every PHP build; confirmed
+// missing in production, causing a fatal "Class finfo not found").
 $filename = $_FILES['file']['name'] ?? '';
 $extension = strtolower(substr($filename, strrpos($filename, '.') + 1));
-if (!in_array($detectedType, $allowedTypes, true) && $extension !== 'xlsx') {
+$fileHandle = fopen($uploadedFile, 'rb');
+$signature = $fileHandle !== false ? fread($fileHandle, 4) : '';
+if ($fileHandle !== false) {
+    fclose($fileHandle);
+}
+if ($extension !== 'xlsx' || $signature !== "PK\x03\x04") {
     echo json_encode(['success' => false, 'error' => 'Only XLSX files are allowed.']);
     exit;
 }

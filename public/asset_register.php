@@ -47,12 +47,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($_FILES['prior_year_excel']['size'] > 10 * 1024 * 1024) {
             $errorMessages[] = 'File too large. Maximum size is 10 MB.';
         } else {
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $detectedType = $finfo->file($_FILES['prior_year_excel']['tmp_name']);
             $filename = (string) ($_FILES['prior_year_excel']['name'] ?? '');
             $extension = strtolower(substr($filename, strrpos($filename, '.') ?: 0));
-            $allowedTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
-            if (!in_array($detectedType, $allowedTypes, true) && $extension !== '.xlsx') {
+            /* .xlsx files are zip archives -- check for the local-file-header
+               signature ("PK\x03\x04") instead of the fileinfo extension,
+               which isn't guaranteed to be compiled into every PHP build
+               (confirmed missing in production: "Class finfo not found"). */
+            $fileHandle = fopen($_FILES['prior_year_excel']['tmp_name'], 'rb');
+            $signature = $fileHandle !== false ? fread($fileHandle, 4) : '';
+            if ($fileHandle !== false) {
+                fclose($fileHandle);
+            }
+            if ($extension !== '.xlsx' || $signature !== "PK\x03\x04") {
                 $errorMessages[] = 'Only .xlsx files are accepted.';
             } else {
                 $parsed = parseFixedAssetExcelUpload($_FILES['prior_year_excel']['tmp_name']);
