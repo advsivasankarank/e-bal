@@ -1,11 +1,33 @@
 @echo off
 setlocal
 
+rem Always run relative to this script's own folder, regardless of how it
+rem was launched (double-click, a shortcut with no "Start in", or a task
+rem runner) -- otherwise "requirements.txt" and other relative paths below
+rem fail to resolve if the shell's working directory was something else
+rem (e.g. C:\WINDOWS\System32) when this was invoked.
+cd /d "%~dp0"
+
 echo === eBAL Smart Bridge Build ===
+echo Working directory: %cd%
 echo.
 
 echo [1/4] Creating virtual environment...
-python -m venv .venv
+where py >nul 2>nul
+if %errorlevel%==0 (
+    py -m venv .venv
+) else (
+    python -m venv .venv
+)
+if not exist ".venv\Scripts\activate.bat" (
+    echo.
+    echo ERROR: Virtual environment was not created. Is Python installed and
+    echo on PATH? If "python" opens the Microsoft Store, install Python from
+    echo https://python.org and make sure "Add python.exe to PATH" is checked,
+    echo or ensure the "py" launcher is available.
+    pause
+    exit /b 1
+)
 call .venv\Scripts\activate
 
 echo [2/4] Installing dependencies...
