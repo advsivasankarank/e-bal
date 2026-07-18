@@ -126,18 +126,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'save_classification') {
         $ids = $_POST['asset_id'] ?? [];
-        foreach ($ids as $index => $assetId) {
-            updateFixedAssetRow($pdo, $company_id, $fy_id, (int) $assetId, [
-                'asset_category' => trim((string) ($_POST['asset_category'][$index] ?? '')),
-                'useful_life_years' => trim((string) ($_POST['useful_life_years'][$index] ?? '')) !== '' ? (float) $_POST['useful_life_years'][$index] : null,
-                'residual_value_pct' => trim((string) ($_POST['residual_value_pct'][$index] ?? '')) !== '' ? (float) $_POST['residual_value_pct'][$index] : 5.0,
-                'depreciation_method' => strtoupper((string) ($_POST['depreciation_method'][$index] ?? 'SLM')) === 'WDV' ? 'WDV' : 'SLM',
-                'is_disposed' => !empty($_POST['is_disposed'][$index]) ? 1 : 0,
-                'disposal_date' => trim((string) ($_POST['disposal_date'][$index] ?? '')) !== '' ? $_POST['disposal_date'][$index] : null,
-                'addition_date' => trim((string) ($_POST['addition_date'][$index] ?? '')) !== '' ? $_POST['addition_date'][$index] : null,
-            ]);
+        $expectedRowCount = (int) ($_POST['expected_row_count'] ?? 0);
+        /* PHP silently truncates $_POST past max_input_vars (default 1000)
+           instead of erroring -- with ~7 fields per register row, a large
+           register (this app now imports 800+ rows from a single detailed
+           Note 11 Excel export) can exceed that on a server that hasn't
+           raised the limit. Refuse to save a truncated submission rather
+           than silently wiping out classification for every row past the
+           cut-off point with no visible failure. */
+        if ($expectedRowCount > 0 && count($ids) < $expectedRowCount) {
+            $errorMessages[] = "Only " . count($ids) . " of {$expectedRowCount} asset rows were received by the server (likely a hosting limit on form field count) -- nothing was saved to avoid corrupting the register. Please contact support to raise max_input_vars, or classify assets in smaller batches.";
+        } else {
+            foreach ($ids as $index => $assetId) {
+                updateFixedAssetRow($pdo, $company_id, $fy_id, (int) $assetId, [
+                    'asset_category' => trim((string) ($_POST['asset_category'][$index] ?? '')),
+                    'useful_life_years' => trim((string) ($_POST['useful_life_years'][$index] ?? '')) !== '' ? (float) $_POST['useful_life_years'][$index] : null,
+                    'residual_value_pct' => trim((string) ($_POST['residual_value_pct'][$index] ?? '')) !== '' ? (float) $_POST['residual_value_pct'][$index] : 5.0,
+                    'depreciation_method' => strtoupper((string) ($_POST['depreciation_method'][$index] ?? 'SLM')) === 'WDV' ? 'WDV' : 'SLM',
+                    'is_disposed' => !empty($_POST['is_disposed'][$index]) ? 1 : 0,
+                    'disposal_date' => trim((string) ($_POST['disposal_date'][$index] ?? '')) !== '' ? $_POST['disposal_date'][$index] : null,
+                    'addition_date' => trim((string) ($_POST['addition_date'][$index] ?? '')) !== '' ? $_POST['addition_date'][$index] : null,
+                ]);
+            }
+            $infoMessage = 'Asset classification saved.';
         }
-        $infoMessage = 'Asset classification saved.';
     } elseif ($action === 'delete_asset') {
         deleteFixedAssetRow($pdo, $company_id, $fy_id, (int) ($_POST['asset_id'] ?? 0));
         $infoMessage = 'Asset removed from the register.';
@@ -236,6 +248,7 @@ require_once __DIR__ . '/layouts/header_v2.php';
     <form method="post">
         <?= csrfInput() ?>
         <input type="hidden" name="asset_action" value="save_classification">
+        <input type="hidden" name="expected_row_count" value="<?= count($assets) ?>">
         <div style="overflow-x:auto;">
         <table class="note-table" border="1" width="100%" cellpadding="5" style="font-size:0.82rem;">
             <thead>

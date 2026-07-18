@@ -522,10 +522,26 @@ function parseFixedAssetExcelUpload(string $filePath): array
  * entirely at the "Current Year Total" row, since real-world exports of
  * this kind are sometimes followed by an unrelated second workpaper
  * appended to the same sheet.
+ *
+ * Below that "Current Year Total" row, this same kind of export commonly
+ * carries a SECOND workpaper -- "Statement showing assets wise
+ * calculation of depreciation..." -- one block per named asset-type,
+ * itemising the individual physical units that make it up (purchase
+ * date, original cost, WDV as at the prior year-end). This is the only
+ * place a real purchase/put-to-use date exists in the file, so it's used
+ * to enrich the opening-balance rows above with per-unit dates -- but the
+ * audited top-of-sheet totals (already reconciled to the signed prior-
+ * year financials) remain authoritative for the money figures: each
+ * asset-type's individual units are scaled so their sum ties exactly to
+ * that asset-type's own audited opening gross/accumulated-depreciation,
+ * never the other way round (confirmed against the real export that this
+ * detail workpaper is a live working file, not a frozen audited
+ * snapshot -- its per-item totals drift from the summary by a few
+ * percent in places).
  */
 function parseScheduleIIINote11Excel(array $data): array
 {
-    $rows = [];
+    $topRows = [];
     $errors = [];
 
     $cleanNumber = static function ($value): string {
@@ -570,7 +586,7 @@ function parseScheduleIIINote11Excel(array $data): array
             continue;
         }
 
-        $rows[] = [
+        $topRows[normalizeFixedAssetName($description)] = [
             'asset_category' => guessFixedAssetCategoryFromDescription($description),
             'asset_description' => $description,
             'opening_gross_block' => $openingGross,
@@ -586,11 +602,297 @@ function parseScheduleIIINote11Excel(array $data): array
         ];
     }
 
-    if ($rows === [] && $errors === []) {
+    if ($topRows === [] && $errors === []) {
         $errors[] = 'No individual depreciable asset rows found in this Note 11 export (only category headers, subtotals, or Capital Work-in-Progress/Intangible-assets-under-development entries, which are not depreciated under Schedule II).';
     }
 
+    $detailBlocks = parseFixedAssetDetailBlocks($data);
+    $rows = expandFixedAssetRowsWithDetail($topRows, $detailBlocks, $errors);
+
     return ['rows' => $rows, 'errors' => $errors];
+}
+
+function normalizeFixedAssetName(string $name): string
+{
+    return trim((string) preg_replace('/\s+/', ' ', $name));
+}
+
+/**
+ * Parses the "Statement showing assets wise calculation of depreciation"
+ * workpaper that commonly follows the Note 11 summary on the same sheet
+ * -- one repeating block per named asset-type, each itemising its
+ * individual physical units. Column positions inside a block vary (a
+ * "Written off from retained earning" column is sometimes inserted,
+ * shifting everything after "Original cost" left by one), so columns are
+ * located per-block by matching the "Particulars" header row's own text
+ * rather than assumed at fixed offsets -- confirmed necessary against
+ * the real export, where a naive fixed-offset read silently pulled the
+ * wrong figures for some blocks. Metadata rows (asset name / useful
+ * life / group) also occasionally wrap across an extra row for long
+ * names, or land in a single crammed cell instead of separate columns --
+ * handled by concatenating all metadata-row text and extracting with a
+ * regex instead of reading fixed cells.
+ *
+ * Returns [normalizedName => ['group' => string, 'units' => [['cost' =>
+ * float, 'wdv' => float, 'purchase_date' => ?string], ...]]].
+ */
+function parseFixedAssetDetailBlocks(array $data): array
+{
+    $blocks = [];
+    $highestIdx = count($data) - 1;
+
+    $cleanNumber = static function ($value): ?float {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $clean = str_replace([',', "\n", "\r", ' '], '', (string) $value);
+        return is_numeric($clean) ? (float) $clean : null;
+    };
+    $findCol = static function (array $headerRow, array $needles): ?int {
+        foreach ($headerRow as $c => $v) {
+            $text = strtolower(str_replace("\n", ' ', (string) $v));
+            foreach ($needles as $needle) {
+                if (stripos($text, $needle) !== false) {
+                    return $c;
+                }
+            }
+        }
+        return null;
+    };
+
+    $i = 0;
+    while ($i <= $highestIdx) {
+        $marker = trim((string) ($data[$i][0] ?? ''));
+        if (stripos($marker, 'Statement showing assets wise calculation') === false) {
+            $i++;
+            continue;
+        }
+
+        $particularsIdx = null;
+        for ($scan = $i + 1; $scan <= $i + 8 && $scan <= $highestIdx; $scan++) {
+            if (strcasecmp(trim((string) ($data[$scan][0] ?? '')), 'Particulars') === 0) {
+                $particularsIdx = $scan;
+                break;
+            }
+        }
+        if ($particularsIdx === null) {
+            $i++;
+            continue;
+        }
+
+        $metaText = '';
+        for ($mr = $i + 1; $mr < $particularsIdx; $mr++) {
+            foreach (($data[$mr] ?? []) as $v) {
+                if ($v !== null && $v !== '') {
+                    $metaText .= ' ' . (string) $v;
+                }
+            }
+        }
+        $assetName = '';
+        $groupOfAsset = '';
+        if (preg_match('/Name of Asset\s+(.+?)\s+Useful Life \(In Years\)\s+([\d.]+)/is', $metaText, $m)) {
+            $assetName = normalizeFixedAssetName($m[1]);
+        }
+        if (preg_match('/Group of asset\s+(.+?)\s+Shift Type/is', $metaText, $m2)) {
+            $groupOfAsset = normalizeFixedAssetName($m2[1]);
+        }
+
+        $particularsRow = $data[$particularsIdx] ?? [];
+        $origCostCol = $findCol($particularsRow, ['original cost']);
+        $openingWdvCol = $findCol($particularsRow, ['opening wdv']);
+        $purchaseDateCol = $findCol($particularsRow, ['date of purchase']);
+
+        $dr = $particularsIdx + 2; // skip the numbered index row
+        while ($dr <= $highestIdx) {
+            $col0 = trim((string) ($data[$dr][0] ?? ''));
+            if ($col0 === '') {
+                $dr++;
+                continue;
+            }
+            if (strcasecmp($col0, 'Total') === 0) {
+                break;
+            }
+            if ($assetName !== '' && $origCostCol !== null && $openingWdvCol !== null) {
+                $cost = $cleanNumber($data[$dr][$origCostCol] ?? null) ?? 0.0;
+                $wdv = $cleanNumber($data[$dr][$openingWdvCol] ?? null) ?? 0.0;
+                $purchaseSerial = $purchaseDateCol !== null ? $cleanNumber($data[$dr][$purchaseDateCol] ?? null) : null;
+                $purchaseDate = null;
+                if ($purchaseSerial !== null && $purchaseSerial > 0) {
+                    try {
+                        $purchaseDate = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($purchaseSerial)->format('Y-m-d');
+                    } catch (Throwable $e) {
+                        $purchaseDate = null;
+                    }
+                }
+                $key = $assetName;
+                if (!isset($blocks[$key])) {
+                    $blocks[$key] = ['group' => $groupOfAsset, 'units' => []];
+                }
+                $blocks[$key]['units'][] = ['cost' => $cost, 'wdv' => $wdv, 'purchase_date' => $purchaseDate];
+            }
+            $dr++;
+        }
+        $i = $dr + 1;
+    }
+
+    return $blocks;
+}
+
+/**
+ * Best-effort mapping from the detail workpaper's free-text "Group of
+ * asset" to this app's Schedule II category list -- falls back to the
+ * existing description-based guess (finer-grained, e.g. distinguishing
+ * RCC vs non-RCC Buildings or Servers vs End User computers) before
+ * falling back to a group-level default. Cosmetic only, like
+ * guessFixedAssetCategoryFromDescription() -- useful_life_years always
+ * comes from the audited summary, never derived from this mapping.
+ */
+function mapFixedAssetGroupToCategory(string $group, string $assetName): string
+{
+    $byDescription = guessFixedAssetCategoryFromDescription($assetName);
+    if ($byDescription !== '') {
+        return $byDescription;
+    }
+
+    $g = strtolower($group);
+    $map = [
+        'plant and machinery' => 'Plant & Machinery (general)',
+        'electrical installations and equipment' => 'Plant & Machinery (general)',
+        'laboratory equipment' => 'Plant & Machinery (general)',
+        'office equipment' => 'Office Equipment',
+        'computers and data processing units' => 'Computers and Data Processing Units (End User Devices)',
+        'furniture and fittings' => 'Furniture and Fixtures',
+        'motor vehicles' => 'Vehicles (Motor Cars, other than for hire)',
+        'buildings' => 'Buildings (RCC, other than factory)',
+        'land' => '',
+    ];
+
+    return $map[$g] ?? '';
+}
+
+/**
+ * Expands each audited Note 11 summary row into one register row per
+ * individual physical unit found for it in the detail workpaper (real
+ * purchase dates), scaling each unit's cost/WDV so the group's sum ties
+ * exactly to that row's own audited opening_gross_block/
+ * opening_accumulated_depreciation -- see parseScheduleIIINote11Excel()'s
+ * docblock for why the detail workpaper's own totals aren't used
+ * directly. Asset-type names present in the summary but with no matching
+ * detail units keep today's single-aggregate-row behaviour unchanged
+ * (e.g. Land, or any name the detail workpaper doesn't itemise). Detail
+ * blocks with no matching summary row at all are units the audited
+ * opening balance doesn't include (most likely purchased after the
+ * opening date) -- surfaced as a warning rather than silently imported,
+ * since injecting an unaudited figure into the opening balance would be
+ * a real accounting error, not a convenience.
+ */
+function expandFixedAssetRowsWithDetail(array $topRows, array $detailBlocks, array &$errors): array
+{
+    $rows = [];
+
+    foreach ($topRows as $normalizedName => $topRow) {
+        $detail = $detailBlocks[$normalizedName] ?? null;
+        $units = $detail['units'] ?? [];
+
+        if ($units === []) {
+            $rows[] = $topRow;
+            continue;
+        }
+
+        $detailSumCost = array_sum(array_column($units, 'cost'));
+        $detailSumAccumDep = array_sum(array_map(static fn ($u) => max(0.0, $u['cost'] - $u['wdv']), $units));
+
+        $costRatio = $detailSumCost > 0.01 ? ($topRow['opening_gross_block'] / $detailSumCost) : 0.0;
+        $depRatio = $detailSumAccumDep > 0.01 ? ($topRow['opening_accumulated_depreciation'] / $detailSumAccumDep) : null;
+
+        $category = mapFixedAssetGroupToCategory((string) ($detail['group'] ?? ''), $topRow['asset_description']);
+        $multiUnit = count($units) > 1;
+
+        $runningGross = 0.0;
+        $runningAccumDep = 0.0;
+        $unitRows = [];
+        foreach ($units as $idx => $unit) {
+            $scaledGross = round($unit['cost'] * $costRatio, 2);
+            if ($depRatio !== null) {
+                $scaledAccumDep = round(max(0.0, $unit['cost'] - $unit['wdv']) * $depRatio, 2);
+            } else {
+                $scaledAccumDep = $topRow['opening_gross_block'] > 0.01
+                    ? round($scaledGross * ($topRow['opening_accumulated_depreciation'] / $topRow['opening_gross_block']), 2)
+                    : 0.0;
+            }
+            $scaledAccumDep = max(0.0, min($scaledAccumDep, $scaledGross));
+            $runningGross += $scaledGross;
+            $runningAccumDep += $scaledAccumDep;
+
+            $description = $multiUnit
+                ? $topRow['asset_description'] . ($unit['purchase_date'] !== null ? ' (purchased ' . $unit['purchase_date'] . ')' : ' (unit ' . ($idx + 1) . ')')
+                : $topRow['asset_description'];
+
+            $unitRows[] = [
+                'asset_category' => $category !== '' ? $category : $topRow['asset_category'],
+                'asset_description' => $description,
+                'opening_gross_block' => $scaledGross,
+                'opening_accumulated_depreciation' => $scaledAccumDep,
+                'useful_life_years' => $topRow['useful_life_years'],
+                'depreciation_method' => $topRow['depreciation_method'],
+                'addition_date' => $unit['purchase_date'],
+            ];
+        }
+
+        // Rounding from per-unit scaling can leave a few paise of drift --
+        // corrected on the largest unit in the group (never the last one
+        // positionally, which can be a tiny-value row that a few paise of
+        // correction would push negative) so the group ties exactly to the
+        // audited row it was expanded from.
+        if ($unitRows !== []) {
+            $anchorIdx = 0;
+            $anchorGross = $unitRows[0]['opening_gross_block'];
+            foreach ($unitRows as $idx => $unitRow) {
+                if ($unitRow['opening_gross_block'] > $anchorGross) {
+                    $anchorGross = $unitRow['opening_gross_block'];
+                    $anchorIdx = $idx;
+                }
+            }
+            $unitRows[$anchorIdx]['opening_gross_block'] = round($unitRows[$anchorIdx]['opening_gross_block'] + ($topRow['opening_gross_block'] - $runningGross), 2);
+            $unitRows[$anchorIdx]['opening_accumulated_depreciation'] = round($unitRows[$anchorIdx]['opening_accumulated_depreciation'] + ($topRow['opening_accumulated_depreciation'] - $runningAccumDep), 2);
+        }
+
+        /* Defensive final clamp: in a group made up entirely of very small
+           units (a generic sundry-items bucket with many low-value lines),
+           the anchor correction above can still nudge that group's largest
+           unit a paisa or two below zero. Never let a row go negative or
+           carry more accumulated depreciation than its own gross block --
+           worth a few paise of imprecision in that rare case, which is
+           immaterial to a rupee-rounded financial statement. */
+        foreach ($unitRows as &$unitRow) {
+            $unitRow['opening_gross_block'] = max(0.0, $unitRow['opening_gross_block']);
+            $unitRow['opening_accumulated_depreciation'] = max(0.0, min($unitRow['opening_accumulated_depreciation'], $unitRow['opening_gross_block']));
+        }
+        unset($unitRow);
+
+        array_push($rows, ...$unitRows);
+    }
+
+    $orphanNames = array_diff_key($detailBlocks, $topRows);
+    if ($orphanNames !== []) {
+        $orphanTotal = 0.0;
+        $sample = [];
+        foreach ($orphanNames as $name => $detail) {
+            $cost = array_sum(array_column($detail['units'], 'cost'));
+            $orphanTotal += $cost;
+            if (count($sample) < 10) {
+                $sample[] = $name . ' (₹' . number_format($cost, 2) . ')';
+            }
+        }
+        if ($orphanTotal > 0.01) {
+            $errors[] = count($orphanNames) . ' asset(s) totalling ₹' . number_format($orphanTotal, 2)
+                . ' appear in the individual-asset detail workpaper but not in the audited Note 11 opening balance summary '
+                . '(likely purchased after the opening date) -- NOT imported; review and add manually if needed: '
+                . implode(', ', $sample) . (count($orphanNames) > 10 ? ', ...' : '');
+        }
+    }
+
+    return $rows;
 }
 
 /**
@@ -630,8 +932,8 @@ function saveFixedAssetExcelImport(PDO $pdo, int $company_id, int $fy_id, array 
 
     $insert = $pdo->prepare("
         INSERT INTO fixed_assets
-            (company_id, fy_id, asset_category, asset_description, source, opening_gross_block, opening_accumulated_depreciation, useful_life_years, depreciation_method)
-        VALUES (?, ?, ?, ?, 'excel_import', ?, ?, ?, ?)
+            (company_id, fy_id, asset_category, asset_description, source, opening_gross_block, opening_accumulated_depreciation, useful_life_years, depreciation_method, addition_date)
+        VALUES (?, ?, ?, ?, 'excel_import', ?, ?, ?, ?, ?)
     ");
     foreach ($rows as $row) {
         $insert->execute([
@@ -643,6 +945,7 @@ function saveFixedAssetExcelImport(PDO $pdo, int $company_id, int $fy_id, array 
             $row['opening_accumulated_depreciation'],
             $row['useful_life_years'],
             $row['depreciation_method'],
+            $row['addition_date'] ?? null,
         ]);
     }
 

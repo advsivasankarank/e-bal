@@ -132,6 +132,61 @@ fixedAssetTestAssert(guessFixedAssetCategoryFromDescription('Civil Works- Hospit
 fixedAssetTestAssert(guessFixedAssetCategoryFromDescription('Dell Server Rack') === 'Computers and Data Processing Units (Servers)', 'Category guess: description containing "Server" matches Servers category');
 fixedAssetTestAssert(guessFixedAssetCategoryFromDescription('Generator') === '', 'Category guess: no confident match falls back to blank, not a wrong guess');
 
+/* 12. Individual-asset detail workpaper enrichment -- each named asset-type
+       row from the audited Note 11 summary is expanded into one register
+       row per physical unit found in the "Statement showing assets wise
+       calculation" detail blocks, carrying a real purchase date, but the
+       group's amounts are always rescaled to tie exactly back to that
+       row's own audited totals (never the detail workpaper's own totals,
+       which can drift from the audited summary -- confirmed against a
+       real export where a live working file had since diverged slightly
+       from the frozen, signed Note 11 figures). */
+$topRows12 = [
+    'generator' => [
+        'asset_category' => 'Plant & Machinery (general)',
+        'asset_description' => 'Generator',
+        'opening_gross_block' => 100000.0,
+        'opening_accumulated_depreciation' => 40000.0,
+        'useful_life_years' => 15.0,
+        'depreciation_method' => 'WDV',
+    ],
+    'land' => [
+        'asset_category' => '',
+        'asset_description' => 'Land',
+        'opening_gross_block' => 500000.0,
+        'opening_accumulated_depreciation' => 0.0,
+        'useful_life_years' => 0.0,
+        'depreciation_method' => 'WDV',
+    ],
+];
+$detailBlocks12 = [
+    'generator' => [
+        'group' => 'Plant and Machinery',
+        'units' => [
+            ['cost' => 60000.0, 'wdv' => 30000.0, 'purchase_date' => '2022-01-09'],
+            ['cost' => 40000.0, 'wdv' => 20000.0, 'purchase_date' => '2023-04-25'],
+        ],
+    ],
+    'unlisted new asset' => [
+        'group' => 'Office equipment',
+        'units' => [['cost' => 15000.0, 'wdv' => 15000.0, 'purchase_date' => '2024-06-01']],
+    ],
+];
+$errors12 = [];
+$expanded12 = expandFixedAssetRowsWithDetail($topRows12, $detailBlocks12, $errors12);
+fixedAssetTestAssert(count($expanded12) === 3, 'Detail expansion: 2 Generator units + 1 passthrough Land row = 3 register rows');
+$generatorRows = array_values(array_filter($expanded12, static fn ($r) => str_starts_with($r['asset_description'], 'Generator')));
+fixedAssetTestAssert(count($generatorRows) === 2, 'Detail expansion: Generator expands into one row per physical unit');
+$genGrossSum = array_sum(array_column($generatorRows, 'opening_gross_block'));
+$genAccumDepSum = array_sum(array_column($generatorRows, 'opening_accumulated_depreciation'));
+fixedAssetTestAssert(approx($genGrossSum, 100000.0, 0.05), 'Detail expansion: Generator unit rows sum back to the audited opening gross block exactly');
+fixedAssetTestAssert(approx($genAccumDepSum, 40000.0, 0.05), 'Detail expansion: Generator unit rows sum back to the audited opening accumulated depreciation exactly');
+fixedAssetTestAssert(in_array('2022-01-09', array_column($generatorRows, 'addition_date'), true), 'Detail expansion: real purchase date from the detail block is preserved as addition_date');
+$landRow = $expanded12[array_search('Land', array_column($expanded12, 'asset_description'), true)] ?? null;
+fixedAssetTestAssert($landRow !== null && $landRow['opening_gross_block'] == 500000.0 && ($landRow['addition_date'] ?? null) === null, 'Detail expansion: Land has no matching detail block, so it passes through unchanged with no addition_date');
+fixedAssetTestAssert(count($errors12) === 1 && str_contains($errors12[0], '15,000.00'), 'Detail expansion: a detail-only asset with no audited summary row is excluded and surfaced as a warning, not silently imported');
+fixedAssetTestAssert(!in_array('unlisted new asset', array_column($expanded12, 'asset_description'), true), 'Detail expansion: the excluded detail-only asset never makes it into the returned register rows');
+
 echo "================================================\n";
 echo "$passed passed, $failures failed\n";
 
