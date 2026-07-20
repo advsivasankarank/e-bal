@@ -859,13 +859,48 @@ function mapFixedAssetGroupToCategory(string $group, string $assetName): string
 function expandFixedAssetRowsWithDetail(array $topRows, array $detailBlocks, array &$errors): array
 {
     $rows = [];
+    $unmatchedNames = [];
+
+    /* A CA's own source file isn't always internally consistent between its
+       two sheets -- confirmed against a real export where one asset's name
+       carried a stray missing space in the detail workpaper ("...Diamond.T
+       RDG511" vs "...Diamond.TRDG511") but was otherwise identical. Only a
+       whitespace-only difference is safe to auto-resolve here; anything
+       else (e.g. "Water Heater" vs "Stainless Steel Water Heater") is a
+       genuine wording difference that could just as easily be two distinct
+       assets, so it's left unmatched and surfaced as a note instead of
+       guessed at. */
+    $collapsedDetailIndex = [];
+    $ambiguousCollapsed = [];
+    foreach (array_keys($detailBlocks) as $detailName) {
+        $collapsed = preg_replace('/\s+/', '', $detailName);
+        if (isset($collapsedDetailIndex[$collapsed]) && $collapsedDetailIndex[$collapsed] !== $detailName) {
+            $ambiguousCollapsed[$collapsed] = true;
+        }
+        $collapsedDetailIndex[$collapsed] = $detailName;
+    }
+
+    $consumedDetailKeys = [];
 
     foreach ($topRows as $normalizedName => $topRow) {
-        $detail = $detailBlocks[$normalizedName] ?? null;
+        $detailKey = isset($detailBlocks[$normalizedName]) ? $normalizedName : null;
+        if ($detailKey === null) {
+            $collapsed = preg_replace('/\s+/', '', $normalizedName);
+            if (isset($collapsedDetailIndex[$collapsed]) && empty($ambiguousCollapsed[$collapsed])) {
+                $detailKey = $collapsedDetailIndex[$collapsed];
+            }
+        }
+        $detail = $detailKey !== null ? $detailBlocks[$detailKey] : null;
+        if ($detailKey !== null) {
+            $consumedDetailKeys[$detailKey] = true;
+        }
         $units = $detail['units'] ?? [];
 
         if ($units === []) {
             $rows[] = $topRow;
+            if ($detailBlocks !== []) {
+                $unmatchedNames[] = $topRow['asset_description'];
+            }
             continue;
         }
 
@@ -943,7 +978,7 @@ function expandFixedAssetRowsWithDetail(array $topRows, array $detailBlocks, arr
         array_push($rows, ...$unitRows);
     }
 
-    $orphanNames = array_diff_key($detailBlocks, $topRows);
+    $orphanNames = array_diff_key($detailBlocks, $consumedDetailKeys);
     if ($orphanNames !== []) {
         $orphanTotal = 0.0;
         $sample = [];
@@ -960,6 +995,13 @@ function expandFixedAssetRowsWithDetail(array $topRows, array $detailBlocks, arr
                 . '(likely purchased after the opening date) -- NOT imported; review and add manually if needed: '
                 . implode(', ', $sample) . (count($orphanNames) > 10 ? ', ...' : '');
         }
+    }
+
+    if ($unmatchedNames !== []) {
+        $errors[] = count($unmatchedNames) . ' asset(s) could not be linked to a purchase date because their name in the '
+            . 'individual-asset detail workpaper doesn\'t match their name in the Note 11 summary closely enough to safely '
+            . 'pair automatically -- the audited opening balance figure is unaffected, only the purchase date is missing: '
+            . implode(', ', array_slice($unmatchedNames, 0, 10)) . (count($unmatchedNames) > 10 ? ', ...' : '');
     }
 
     return $rows;

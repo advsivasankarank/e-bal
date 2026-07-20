@@ -184,8 +184,33 @@ fixedAssetTestAssert(approx($genAccumDepSum, 40000.0, 0.05), 'Detail expansion: 
 fixedAssetTestAssert(in_array('2022-01-09', array_column($generatorRows, 'addition_date'), true), 'Detail expansion: real purchase date from the detail block is preserved as addition_date');
 $landRow = $expanded12[array_search('Land', array_column($expanded12, 'asset_description'), true)] ?? null;
 fixedAssetTestAssert($landRow !== null && $landRow['opening_gross_block'] == 500000.0 && ($landRow['addition_date'] ?? null) === null, 'Detail expansion: Land has no matching detail block, so it passes through unchanged with no addition_date');
-fixedAssetTestAssert(count($errors12) === 1 && str_contains($errors12[0], '15,000.00'), 'Detail expansion: a detail-only asset with no audited summary row is excluded and surfaced as a warning, not silently imported');
+$orphanError = current(array_filter($errors12, static fn ($e) => str_contains($e, '15,000.00')));
+fixedAssetTestAssert($orphanError !== false, 'Detail expansion: a detail-only asset with no audited summary row is excluded and surfaced as a warning, not silently imported');
 fixedAssetTestAssert(!in_array('unlisted new asset', array_column($expanded12, 'asset_description'), true), 'Detail expansion: the excluded detail-only asset never makes it into the returned register rows');
+$unmatchedError = current(array_filter($errors12, static fn ($e) => str_contains($e, 'could not be linked to a purchase date')));
+fixedAssetTestAssert($unmatchedError !== false && str_contains($unmatchedError, 'Land'), 'Detail expansion: a summary row with no detail match at all (not just a name mismatch) is separately noted as missing a purchase date');
+
+/* 13. A whitespace-only difference between an asset's name in the summary
+       and in the detail workpaper (confirmed against a real export: one
+       asset's name was missing a single space in the detail sheet) is
+       safely auto-resolved -- unlike a genuine wording difference, which
+       must not be guessed at since it could be two distinct assets. */
+$topRows13 = ['tourniquet auto electronic-diamond.t rdg511' => [
+    'asset_category' => 'Plant & Machinery (general)',
+    'asset_description' => 'Tourniquet Auto Electronic-Diamond.T RDG511',
+    'opening_gross_block' => 32960.0,
+    'opening_accumulated_depreciation' => 10000.0,
+    'useful_life_years' => 13.0,
+    'depreciation_method' => 'WDV',
+]];
+$detailBlocks13 = ['tourniquet auto electronic-diamond.trdg511' => [
+    'group' => 'Plant and Machinery',
+    'units' => [['cost' => 32960.0, 'wdv' => 22960.0, 'purchase_date' => '2019-07-15']],
+]];
+$errors13 = [];
+$expanded13 = expandFixedAssetRowsWithDetail($topRows13, $detailBlocks13, $errors13);
+fixedAssetTestAssert(count($expanded13) === 1 && ($expanded13[0]['addition_date'] ?? null) === '2019-07-15', 'Whitespace-only name mismatch between the summary and detail sheets is auto-resolved, purchase date attached');
+fixedAssetTestAssert($errors13 === [], 'Whitespace-only name mismatch produces no spurious orphan or unmatched-name warning once resolved');
 
 echo "================================================\n";
 echo "$passed passed, $failures failed\n";
