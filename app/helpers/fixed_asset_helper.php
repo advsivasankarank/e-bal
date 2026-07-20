@@ -732,14 +732,26 @@ function parseFixedAssetDetailBlocks(array $data): array
 
     $i = 0;
     while ($i <= $highestIdx) {
-        $marker = trim((string) ($data[$i][0] ?? ''));
-        if (stripos($marker, 'Statement showing assets wise calculation') === false) {
+        /* Block start is keyed off "Name of Asset" (present in every block,
+           either as its own cell or as a prefix inside a crammed/merged
+           cell), not the "Statement showing assets wise calculation..."
+           title above it -- confirmed against a real export where that
+           title only appears once per printed "page" of the original
+           report, not before every individual block. Two blocks can
+           follow each other directly (block A's "Total" row immediately
+           followed by block B's "Name of Asset" row with no title
+           in between), and keying off the title alone silently skipped
+           every block that started this way -- a real, previously
+           undetected data-loss bug, not a naming inconsistency in the
+           source file. */
+        $col0 = trim((string) ($data[$i][0] ?? ''));
+        if (stripos($col0, 'Name of Asset') !== 0) {
             $i++;
             continue;
         }
 
         $particularsIdx = null;
-        for ($scan = $i + 1; $scan <= $i + 8 && $scan <= $highestIdx; $scan++) {
+        for ($scan = $i; $scan <= $i + 8 && $scan <= $highestIdx; $scan++) {
             if (strcasecmp(trim((string) ($data[$scan][0] ?? '')), 'Particulars') === 0) {
                 $particularsIdx = $scan;
                 break;
@@ -751,7 +763,7 @@ function parseFixedAssetDetailBlocks(array $data): array
         }
 
         $metaText = '';
-        for ($mr = $i + 1; $mr < $particularsIdx; $mr++) {
+        for ($mr = $i; $mr < $particularsIdx; $mr++) {
             foreach (($data[$mr] ?? []) as $v) {
                 if ($v !== null && $v !== '') {
                     $metaText .= ' ' . (string) $v;
