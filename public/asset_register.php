@@ -125,27 +125,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($action === 'save_classification') {
-        $ids = $_POST['asset_id'] ?? [];
-        $expectedRowCount = (int) ($_POST['expected_row_count'] ?? 0);
-        /* PHP silently truncates $_POST past max_input_vars (default 1000)
-           instead of erroring -- with ~7 fields per register row, a large
-           register (this app now imports 800+ rows from a single detailed
-           Note 11 Excel export) can exceed that on a server that hasn't
-           raised the limit. Refuse to save a truncated submission rather
-           than silently wiping out classification for every row past the
-           cut-off point with no visible failure. */
-        if ($expectedRowCount > 0 && count($ids) < $expectedRowCount) {
-            $errorMessages[] = "Only " . count($ids) . " of {$expectedRowCount} asset rows were received by the server (likely a hosting limit on form field count) -- nothing was saved to avoid corrupting the register. Please contact support to raise max_input_vars, or classify assets in smaller batches.";
+        /* Submitted as a single JSON payload (built client-side, see the
+           form's onsubmit handler below) rather than per-row array fields
+           (asset_category[], useful_life_years[], ...) -- with ~7 fields
+           per register row and this app now importing 800+ rows from a
+           single detailed Note 11 Excel export, per-row array fields blow
+           past PHP's max_input_vars (default 1000, and not reliably
+           raisable from application code -- confirmed in production that
+           even a .user.ini override didn't take effect, most likely
+           because the hosting SAPI doesn't honour it). A single JSON field
+           sidesteps the limit entirely regardless of server configuration. */
+        $payload = json_decode((string) ($_POST['classification_payload'] ?? '[]'), true);
+        if (!is_array($payload)) {
+            $errorMessages[] = 'Could not read the submitted classification data -- nothing was saved. Please try again.';
         } else {
-            foreach ($ids as $index => $assetId) {
-                updateFixedAssetRow($pdo, $company_id, $fy_id, (int) $assetId, [
-                    'asset_category' => trim((string) ($_POST['asset_category'][$index] ?? '')),
-                    'useful_life_years' => trim((string) ($_POST['useful_life_years'][$index] ?? '')) !== '' ? (float) $_POST['useful_life_years'][$index] : null,
-                    'residual_value_pct' => trim((string) ($_POST['residual_value_pct'][$index] ?? '')) !== '' ? (float) $_POST['residual_value_pct'][$index] : 5.0,
-                    'depreciation_method' => strtoupper((string) ($_POST['depreciation_method'][$index] ?? 'SLM')) === 'WDV' ? 'WDV' : 'SLM',
-                    'is_disposed' => !empty($_POST['is_disposed'][$index]) ? 1 : 0,
-                    'disposal_date' => trim((string) ($_POST['disposal_date'][$index] ?? '')) !== '' ? $_POST['disposal_date'][$index] : null,
-                    'addition_date' => trim((string) ($_POST['addition_date'][$index] ?? '')) !== '' ? $_POST['addition_date'][$index] : null,
+            foreach ($payload as $entry) {
+                $assetId = (int) ($entry['asset_id'] ?? 0);
+                if ($assetId <= 0) {
+                    continue;
+                }
+                updateFixedAssetRow($pdo, $company_id, $fy_id, $assetId, [
+                    'asset_category' => trim((string) ($entry['asset_category'] ?? '')),
+                    'useful_life_years' => trim((string) ($entry['useful_life_years'] ?? '')) !== '' ? (float) $entry['useful_life_years'] : null,
+                    'residual_value_pct' => trim((string) ($entry['residual_value_pct'] ?? '')) !== '' ? (float) $entry['residual_value_pct'] : 5.0,
+                    'depreciation_method' => strtoupper((string) ($entry['depreciation_method'] ?? 'SLM')) === 'WDV' ? 'WDV' : 'SLM',
+                    'is_disposed' => !empty($entry['is_disposed']) ? 1 : 0,
+                    'disposal_date' => trim((string) ($entry['disposal_date'] ?? '')) !== '' ? $entry['disposal_date'] : null,
+                    'addition_date' => trim((string) ($entry['addition_date'] ?? '')) !== '' ? $entry['addition_date'] : null,
                 ]);
             }
             $infoMessage = 'Asset classification saved.';
@@ -245,10 +251,10 @@ require_once __DIR__ . '/layouts/header_v2.php';
     <?php if ($assets === []): ?>
         <p style="font-size:0.85rem;color:var(--muted);">No assets in the register yet -- upload a prior-year schedule or sync from Tally above.</p>
     <?php else: ?>
-    <form method="post">
+    <form method="post" id="classifyForm" onsubmit="return buildClassificationPayload();">
         <?= csrfInput() ?>
         <input type="hidden" name="asset_action" value="save_classification">
-        <input type="hidden" name="expected_row_count" value="<?= count($assets) ?>">
+        <input type="hidden" name="classification_payload" id="classificationPayload">
         <div style="overflow-x:auto;">
         <table class="note-table" border="1" width="100%" cellpadding="5" style="font-size:0.82rem;">
             <thead>
@@ -268,34 +274,33 @@ require_once __DIR__ . '/layouts/header_v2.php';
             </tr>
             </thead>
             <tbody>
-            <?php foreach ($assets as $i => $asset): ?>
-            <tr>
+            <?php foreach ($assets as $asset): ?>
+            <tr class="asset-row" data-asset-id="<?= (int) $asset['id'] ?>">
                 <td<?= !empty($asset['voucher_narration']) ? ' title="' . htmlspecialchars((string) $asset['voucher_narration']) . '"' : '' ?>>
-                    <input type="hidden" name="asset_id[]" value="<?= (int) $asset['id'] ?>">
                     <?= htmlspecialchars((string) $asset['asset_description']) ?>
                 </td>
                 <td><?= htmlspecialchars((string) $asset['source']) ?></td>
                 <td class="figure"><?= format_inr((float) $asset['opening_gross_block']) ?></td>
                 <td class="figure"><?= format_inr((float) $asset['additions_during_year']) ?></td>
                 <td>
-                    <select name="asset_category[]">
+                    <select class="f-category">
                         <option value="">-- Select --</option>
                         <?php foreach ($categoryList as $cat): ?>
                         <option value="<?= htmlspecialchars($cat) ?>" <?= $asset['asset_category'] === $cat ? 'selected' : '' ?>><?= htmlspecialchars($cat) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </td>
-                <td><input type="number" step="0.5" name="useful_life_years[]" value="<?= htmlspecialchars((string) ($asset['useful_life_years'] ?? '')) ?>" placeholder="<?= htmlspecialchars((string) scheduleIIUsefulLife((string) $asset['asset_category'])['years']) ?>" style="width:70px;"></td>
-                <td><input type="number" step="0.01" name="residual_value_pct[]" value="<?= htmlspecialchars((string) $asset['residual_value_pct']) ?>" style="width:60px;"></td>
+                <td><input type="number" step="0.5" class="f-life" value="<?= htmlspecialchars((string) ($asset['useful_life_years'] ?? '')) ?>" placeholder="<?= htmlspecialchars((string) scheduleIIUsefulLife((string) $asset['asset_category'])['years']) ?>" style="width:70px;"></td>
+                <td><input type="number" step="0.01" class="f-residual" value="<?= htmlspecialchars((string) $asset['residual_value_pct']) ?>" style="width:60px;"></td>
                 <td>
-                    <select name="depreciation_method[]">
+                    <select class="f-method">
                         <option value="SLM" <?= $asset['depreciation_method'] === 'SLM' ? 'selected' : '' ?>>SLM</option>
                         <option value="WDV" <?= $asset['depreciation_method'] === 'WDV' ? 'selected' : '' ?>>WDV</option>
                     </select>
                 </td>
-                <td><input type="date" name="addition_date[]" value="<?= htmlspecialchars((string) ($asset['addition_date'] ?? '')) ?>"></td>
-                <td style="text-align:center;"><input type="checkbox" name="is_disposed[<?= $i ?>]" value="1" <?= !empty($asset['is_disposed']) ? 'checked' : '' ?>></td>
-                <td><input type="date" name="disposal_date[]" value="<?= htmlspecialchars((string) ($asset['disposal_date'] ?? '')) ?>"></td>
+                <td><input type="date" class="f-addition-date" value="<?= htmlspecialchars((string) ($asset['addition_date'] ?? '')) ?>"></td>
+                <td style="text-align:center;"><input type="checkbox" class="f-disposed" <?= !empty($asset['is_disposed']) ? 'checked' : '' ?>></td>
+                <td><input type="date" class="f-disposal-date" value="<?= htmlspecialchars((string) ($asset['disposal_date'] ?? '')) ?>"></td>
                 <td>
                     <button type="button" class="btn-outline btn-sm" onclick="document.getElementById('delAsset<?= (int) $asset['id'] ?>').submit();">&times;</button>
                 </td>
@@ -306,6 +311,26 @@ require_once __DIR__ . '/layouts/header_v2.php';
         </div>
         <button class="btn-primary" type="submit" style="margin-top:12px;">Save Classification</button>
     </form>
+    <script>
+    function buildClassificationPayload() {
+        var rows = document.querySelectorAll('#classifyForm .asset-row');
+        var payload = [];
+        rows.forEach(function (row) {
+            payload.push({
+                asset_id: row.getAttribute('data-asset-id'),
+                asset_category: row.querySelector('.f-category').value,
+                useful_life_years: row.querySelector('.f-life').value,
+                residual_value_pct: row.querySelector('.f-residual').value,
+                depreciation_method: row.querySelector('.f-method').value,
+                addition_date: row.querySelector('.f-addition-date').value,
+                is_disposed: row.querySelector('.f-disposed').checked ? 1 : 0,
+                disposal_date: row.querySelector('.f-disposal-date').value,
+            });
+        });
+        document.getElementById('classificationPayload').value = JSON.stringify(payload);
+        return true;
+    }
+    </script>
     <?php foreach ($assets as $asset): ?>
     <form method="post" id="delAsset<?= (int) $asset['id'] ?>" style="display:none;">
         <?= csrfInput() ?>
