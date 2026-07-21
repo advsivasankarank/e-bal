@@ -39,13 +39,13 @@ TALLY_POLL_INTERVAL = 30
 TALLY_CONNECT_TIMEOUT = 3
 TALLY_READ_TIMEOUT = 8
 # Confirmed in production logs: TB fetch for this company's size
-# consistently takes 5.7-6.0s even when everything is healthy -- close
-# enough to the shared 8s TALLY_READ_TIMEOUT default that it tips over
-# on ordinary variance (not the deep Application Hang seen on the
-# voucher fetch; just genuinely slower than the default budget allows).
-# Ledger fetch stays on the 8s default since it's reliably sub-second to
-# ~2s.
-TALLY_TB_READ_TIMEOUT = 30
+# consistently takes 5.7-6.0s when Tally is responsive, but has also
+# taken 29.1s and then timed out entirely at 30.0s in back-to-back
+# attempts -- a 30s budget still sits right on the edge, not real
+# headroom, so raised again rather than fine-tuned to the observed
+# minimum. Ledger fetch stays on the 8s default since it's reliably
+# sub-second to ~2s.
+TALLY_TB_READ_TIMEOUT = 60
 # A full financial year of vouchers, unfiltered by type in a single
 # request, is a much heavier Tally export than ledgers/TB (which already
 # took 6+ seconds for this company's size) -- the default 8s
