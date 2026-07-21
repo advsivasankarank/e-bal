@@ -167,6 +167,26 @@ def _drop_if_invalid_xml_charref(match):
         return text
     return ""
 
+# Confirmed against a real Tally response (once the character-reference
+# issue above was fixed and parsing got further): "unbound prefix" --
+# Tally's own XML export can include tag names containing a colon (e.g.
+# "SOMETHING:TAGNAME") without ever declaring that prefix via an
+# "xmlns:something=" attribute anywhere in the document, which every
+# standard XML parser (including Python's) treats as a namespace
+# prefix reference and rejects if unbound. A documented Tally export
+# quirk, not something controllable from the request side. Matches only
+# an identifier:identifier pair immediately following "<" or "</" (a
+# tag name's actual position) and followed by whitespace, "/", or ">" --
+# deliberately not a bare "word:word" scan, so it can't misfire on a
+# colon appearing elsewhere (e.g. inside an attribute value like a URL)
+# or on a legitimate "xmlns:foo=" attribute declaration, which occurs
+# after whitespace mid-tag, not immediately after "<"/"</".
+UNBOUND_TAG_PREFIX_RE = re.compile(r"(</?)([A-Za-z_][\w.\-]*):([A-Za-z_][\w.\-]*)(?=[\s/>])")
+
+
+def _strip_unbound_tag_prefix(match):
+    return f"{match.group(1)}{match.group(2)}_{match.group(3)}"
+
 COMPANY_XML = """<ENVELOPE>
  <HEADER>
   <VERSION>1</VERSION>
@@ -466,6 +486,7 @@ def allowed_browser_origins():
 def sanitize_xml(raw_xml):
     cleaned = INVALID_XML_RE.sub("", raw_xml)
     cleaned = INVALID_XML_CHARREF_RE.sub(_drop_if_invalid_xml_charref, cleaned)
+    cleaned = UNBOUND_TAG_PREFIX_RE.sub(_strip_unbound_tag_prefix, cleaned)
     return cleaned
 
 
