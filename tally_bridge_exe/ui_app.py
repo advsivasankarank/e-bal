@@ -14,6 +14,7 @@ import traceback
 import urllib.parse
 import webbrowser
 import xml.etree.ElementTree as ET
+import xml.sax.saxutils as saxutils
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from logging.handlers import RotatingFileHandler
@@ -80,6 +81,67 @@ LEDGER_XML = """<ENVELOPE>
  </BODY>
 </ENVELOPE>
 """
+
+# Every ledger under the "Fixed Assets" group, INCLUDING nested sub-groups
+# (e.g. "Fixed Assets > Vehicles") -- <CHILDOF> + <BELONGSTO>Yes</BELONGSTO>
+# is Tally's standard, well-documented collection attribute pair for
+# "this group or any of its descendants", used throughout Tally's own
+# integration examples. Confirmed with the CA that this company's Fixed
+# Asset ledgers ARE nested under sub-groups, not all directly under
+# "Fixed Assets" -- a single-level match would have silently missed some.
+FA_LEDGERS_XML = """<ENVELOPE>
+ <HEADER>
+  <VERSION>1</VERSION>
+  <TALLYREQUEST>Export</TALLYREQUEST>
+  <TYPE>Collection</TYPE>
+  <ID>FAGroupLedgers</ID>
+ </HEADER>
+ <BODY>
+  <DESC>
+   <STATICVARIABLES>
+    <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+   </STATICVARIABLES>
+   <TDL>
+    <TDLMESSAGE>
+     <COLLECTION NAME="FAGroupLedgers">
+      <TYPE>Ledger</TYPE>
+      <CHILDOF>Fixed Assets</CHILDOF>
+      <BELONGSTO>Yes</BELONGSTO>
+      <FETCH>Name</FETCH>
+     </COLLECTION>
+    </TDLMESSAGE>
+   </TDL>
+  </DESC>
+ </BODY>
+</ENVELOPE>
+"""
+
+
+def fetch_fa_group_ledger_names():
+    """Ledger names under Fixed Assets or any of its sub-groups, straight
+    from Tally's own group hierarchy -- used to scope the voucher fetch
+    below to just those ledgers instead of every voucher type for the
+    full year. Returns None (not an empty list) on any failure, so the
+    caller can distinguish "Tally has no Fixed Assets group" (empty list,
+    genuinely nothing to scope to) from "couldn't ask Tally at all"
+    (None, should fall back to the unscoped fetch rather than concluding
+    there are zero Fixed Asset ledgers).
+    """
+    try:
+        response = fetch_from_tally(FA_LEDGERS_XML, timeout=TALLY_READ_TIMEOUT)
+        root = ET.fromstring(response)
+    except Exception as exc:
+        logging.warning("Fixed Asset ledger group fetch failed: %s", exc)
+        return None
+
+    names = []
+    for node in root.iter():
+        if node.tag.upper() == "LEDGER":
+            name = (node.findtext("NAME") or node.attrib.get("NAME", "")).strip()
+            if name:
+                names.append(name)
+    return names
+
 
 TB_XML_TEMPLATE = """<ENVELOPE>
   <HEADER>
@@ -789,7 +851,175 @@ def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
     return vouchers if vouchers else []
 
 
+# Filters the Voucher collection itself, inside Tally, down to vouchers
+# with at least one ledger entry against one of the given Fixed Asset
+# ledgers -- instead of fetching all 8 voucher types for the full year
+# and filtering client-side afterward. $$FilterAny walks a voucher's
+# AllLedgerEntries sub-collection and evaluates the given condition
+# against each entry, matching LedgerName case-sensitively against the
+# pipe-separated list built from fetch_fa_group_ledger_names().
+#
+# EXPERIMENTAL: this nested-collection filter is the one part of this
+# whole change that could not be verified against a live Tally instance
+# before shipping -- if the syntax is wrong, Tally will either refuse to
+# parse the request (a clean, loud failure caught below) or the filter
+# could evaluate to unexpectedly few/zero matches. fetch_vouchers_from_tally()
+# always cross-checks the result against the known-good per-type fetch
+# before trusting it, and falls back automatically on any doubt.
+FA_VOUCHER_XML_TEMPLATE = """<ENVELOPE>
+    <HEADER>
+        <VERSION>1</VERSION>
+        <TALLYREQUEST>Export</TALLYREQUEST>
+        <TYPE>Collection</TYPE>
+        <ID>FAVouchers</ID>
+    </HEADER>
+    <BODY>
+        <DESC>
+            <STATICVARIABLES>
+                <SVFROMDATE>{from_date}</SVFROMDATE>
+                <SVTODATE>{to_date}</SVTODATE>
+                <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+            </STATICVARIABLES>
+            <TDL>
+                <TDLMESSAGE>
+                    <COLLECTION NAME="FAVouchers">
+                        <TYPE>Voucher</TYPE>
+                        <CHILDOF>$$VchVouchers</CHILDOF>
+                        <FETCH>GUID, VoucherTypeName, VoucherNumber, Date, EffectiveDate, Narration, PartyLedgerName, IsOptional, IsCancelled, AlterDate, EnteredDate, LedgerEntries</FETCH>
+                        <FILTER>FAHasMatchingEntry</FILTER>
+                    </COLLECTION>
+                    <SYSTEM TYPE="Formulae" NAME="FAHasMatchingEntry">$$FilterAny:AllLedgerEntries:$$StringFind:$LedgerName:"{ledger_pipe_list}"</SYSTEM>
+                </TDLMESSAGE>
+            </TDL>
+        </DESC>
+    </BODY>
+</ENVELOPE>"""
+
+
+def fetch_fa_vouchers_via_group_filter(from_date, to_date, ledger_names):
+    """Best-effort fast path: asks Tally to filter the voucher collection
+    itself to the given ledgers, instead of the bridge fetching every
+    voucher type for the full year and filtering client-side. Returns
+    None (not an empty list) on any failure -- including a suspiciously
+    empty result, treated as inconclusive rather than "genuinely zero" --
+    so the caller always has a clear signal to fall back on rather than
+    silently trusting an unverified result.
+    """
+    if not ledger_names:
+        return None
+
+    from_date_display = (
+        datetime.strptime(from_date[:10], "%Y-%m-%d").strftime("%d-%b-%Y")
+        if from_date
+        else "01-Apr-2024"
+    )
+    to_date_display = (
+        datetime.strptime(to_date[:10], "%Y-%m-%d").strftime("%d-%b-%Y")
+        if to_date
+        else "31-Mar-2025"
+    )
+    # Ledger names commonly contain XML-significant characters (e.g. the
+    # real, common "Plant & Machinery") -- unescaped, these would produce
+    # an XML payload Tally itself can't parse, which (safely) falls
+    # through to the per-type fallback below via the empty/error path,
+    # but escaping avoids hitting that fallback for every company with an
+    # ampersand in a ledger name, which is the common case, not the edge
+    # case.
+    ledger_pipe_list = "|".join(saxutils.escape(name) for name in ledger_names)
+
+    xml_request = FA_VOUCHER_XML_TEMPLATE.format(
+        from_date=from_date_display, to_date=to_date_display, ledger_pipe_list=ledger_pipe_list
+    )
+    try:
+        response = fetch_from_tally(xml_request, timeout=TALLY_VOUCHER_READ_TIMEOUT)
+        root = ET.fromstring(response)
+    except Exception as exc:
+        logging.warning("Fixed Asset group-filtered voucher fetch failed: %s", exc)
+        return None
+
+    vouchers = []
+    for voucher_node in root.iter():
+        tag = voucher_node.tag.upper()
+        if not tag.endswith("VOUCHER") or tag.endswith("VOUCHERTYPE") or tag.endswith("VOUCHERLIST"):
+            continue
+        guid = voucher_node.attrib.get("GUID", "") or ""
+        if not guid:
+            continue
+
+        entries = []
+        for entry in voucher_node.iter():
+            if not entry.tag.upper().endswith("LEDGERENTRY"):
+                continue
+            lname = (entry.findtext("LEDGERNAME") or "").strip()
+            if not lname:
+                continue
+            amt = float(entry.findtext("AMOUNT", "0") or 0)
+            entries.append({
+                "ledger_name": lname,
+                "parent_group": (entry.findtext("PARENT") or "").strip(),
+                "amount": abs(amt),
+                "dr_cr": "DR" if amt >= 0 else "CR",
+            })
+
+        alter_raw = (voucher_node.findtext("ALTERDATE") or voucher_node.findtext("ALTEREDDATE") or "").strip()
+        altered_date = None
+        if alter_raw:
+            try:
+                altered_date = datetime.strptime(alter_raw[:11], "%d %b %Y").strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                altered_date = alter_raw[:19]
+
+        vouchers.append({
+            "tally_guid": guid,
+            "voucher_type": (voucher_node.findtext("VOUCHERTYPENAME") or "").strip(),
+            "voucher_number": (voucher_node.findtext("VOUCHERNUMBER") or "").strip(),
+            "date": (voucher_node.findtext("DATE") or "")[:10],
+            "narration": (voucher_node.findtext("NARRATION") or "").strip(),
+            "party_ledger_name": (voucher_node.findtext("PARTYLEDGERNAME") or "").strip(),
+            "is_optional": int(voucher_node.findtext("ISOPTIONAL", "0") or 0),
+            "is_cancelled": int(voucher_node.findtext("ISCANCELLED", "0") or 0),
+            "altered_date": altered_date,
+            "source": "xml",
+            "entries": entries,
+        })
+
+    if not vouchers:
+        # An empty result here is genuinely ambiguous: it could mean this
+        # company had zero Fixed Asset transactions in the period, or it
+        # could mean the experimental $$FilterAny formula above silently
+        # matched nothing due to a syntax/logic issue this couldn't be
+        # tested against live Tally for. There is no way to tell those
+        # apart from the response alone, so it's treated as inconclusive
+        # rather than trusted -- the caller falls back to the per-type
+        # fetch, which has no such ambiguity.
+        logging.info("Fixed Asset group-filtered fetch returned 0 vouchers -- treating as inconclusive")
+        return None
+
+    return vouchers
+
+
 def fetch_vouchers_from_tally(from_date, to_date, last_altered=None, voucher_type=None):
+    if voucher_type is None:
+        # Fast path: ask Tally which ledgers actually sit under Fixed
+        # Assets (including nested sub-groups), then ask it to filter the
+        # voucher collection down to just those -- instead of fetching
+        # every voucher type for the full year. Both steps are wrapped so
+        # any failure (network, unexpected TDL syntax rejection, or a
+        # suspiciously empty result) falls straight through to the
+        # already-proven per-type fetch below rather than risking an
+        # incomplete Fixed Asset register with no visible sign anything
+        # was skipped.
+        ledger_names = fetch_fa_group_ledger_names()
+        if ledger_names:
+            fa_vouchers = fetch_fa_vouchers_via_group_filter(from_date, to_date, ledger_names)
+            if fa_vouchers is not None:
+                logging.info(
+                    "Fetched %d voucher(s) via Fixed Asset group filter (%d ledger(s) matched)",
+                    len(fa_vouchers), len(ledger_names),
+                )
+                return fa_vouchers, "xml-fa-filtered"
+            logging.warning("Fixed Asset group-filtered fetch was inconclusive -- falling back to per-type fetch")
+
     vouchers = fetch_vouchers_via_odbc(from_date, to_date, last_altered)
     if vouchers is not None:
         logging.info("Fetched %d vouchers via ODBC", len(vouchers))
