@@ -137,6 +137,35 @@ def build_tb_xml(from_date_display, to_date_display):
     return TB_XML_TEMPLATE.format(from_date=from_date_display, to_date=to_date_display)
 
 INVALID_XML_RE = re.compile(r"[^\x09\x0A\x0D\x20-\x7F]+")
+# Catches raw invalid bytes/codepoints in the response text. It does NOT
+# catch the same problem in ESCAPED form -- a literal numeric character
+# reference like "&#5;" is, character-by-character, ordinary ASCII
+# ("&", "#", "5", ";"), so INVALID_XML_RE above leaves it untouched, but
+# Python's XML parser still rejects it once expanded, since character 5
+# (ENQ) isn't a valid XML 1.0 character. Confirmed against a real Tally
+# response: "reference to invalid character number" at a fixed line/
+# column across every date-chunked request (same underlying data,
+# consistently reached), most likely a stray control character in one
+# voucher's narration that Tally's own XML writer escaped this way.
+INVALID_XML_CHARREF_RE = re.compile(r"&#x?[0-9A-Fa-f]+;")
+
+
+def _drop_if_invalid_xml_charref(match):
+    text = match.group(0)
+    try:
+        codepoint = int(text[3:-1], 16) if text[2] in "xX" else int(text[2:-1])
+    except ValueError:
+        return text
+    # XML 1.0 valid character ranges (https://www.w3.org/TR/xml/#charsets):
+    # #x9, #xA, #xD, #x20-#xD7FF, #xE000-#xFFFD, #x10000-#x10FFFF.
+    if (
+        codepoint in (0x9, 0xA, 0xD)
+        or 0x20 <= codepoint <= 0xD7FF
+        or 0xE000 <= codepoint <= 0xFFFD
+        or 0x10000 <= codepoint <= 0x10FFFF
+    ):
+        return text
+    return ""
 
 COMPANY_XML = """<ENVELOPE>
  <HEADER>
@@ -435,7 +464,9 @@ def allowed_browser_origins():
 
 
 def sanitize_xml(raw_xml):
-    return INVALID_XML_RE.sub("", raw_xml)
+    cleaned = INVALID_XML_RE.sub("", raw_xml)
+    cleaned = INVALID_XML_CHARREF_RE.sub(_drop_if_invalid_xml_charref, cleaned)
+    return cleaned
 
 
 def iter_date_chunks(from_date, to_date, chunk_days):
