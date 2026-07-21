@@ -1,12 +1,29 @@
 ;; ============================================================
-;; eBAL Smart Bridge -- Fixed Asset TDL Add-On
+;; eBAL Smart Bridge -- Fixed Asset TDL Add-On (v3)
 ;; ============================================================
 ;;
-;; Purpose: exposes two report IDs the bridge can call directly, so
-;; Tally does the Fixed Asset filtering itself instead of the bridge
-;; fetching every voucher type for the full year and filtering
-;; client-side. Both collections are re-usable across financial years
-;; and companies -- nothing here is hardcoded to one company.
+;; v3 uses $$IsLedOfGrp, TallyPrime's own built-in ledger-group-
+;; membership check -- confirmed working live against this company's
+;; real data (a populated "Fixed Assets Voucher Listing" report,
+;; correctly matching ledgers across several different Fixed Asset
+;; sub-groups from a single "Fixed Assets" string, confirming it
+;; handles nested sub-groups natively). This replaces both earlier
+;; attempts:
+;;   v1: $$FilterAny:AllLedgerEntries:... -- rejected outright by
+;;       Tally ("Cannot understand. Bad formula!"). Not valid TDL.
+;;   v2: Walk + ".." parent-navigation -- untested guess, superseded
+;;       before it was tried, now that a confirmed-working function
+;;       exists.
+;;
+;; IsFixedAssetsVoucher checks the first TWO ledger entries (index 1
+;; and 2), not just entry 1 as originally tested -- a Fixed Asset
+;; purchase/disposal voucher typically has exactly two legs (Dr/Cr),
+;; and the Fixed Asset ledger can legitimately be on either side
+;; depending on how it was entered; checking only entry 1 would
+;; silently miss vouchers where it's entry 2. Vouchers with more than
+;; two ledger entries (split allocations across several ledgers)
+;; aren't covered by this and would need additional index checks if
+;; that turns out to matter for real data from this company.
 ;;
 ;; INSTALL:
 ;;   TallyPrime > F1 (Help) > TDL & Add-On > F4 (Manage Local TDLs)
@@ -14,80 +31,67 @@
 ;;   > add this file's full path under "List of TDL files"
 ;;   > Save (Ctrl+A), then restart Tally.
 ;;
-;; VERIFY IT LOADED CORRECTLY:
-;;   Re-open F1 > TDL & Add-On -- if there's a syntax error anywhere
-;;   below, Tally will show it right there on that screen, naming the
-;;   exact problem, instead of the bridge having to infer it indirectly
-;;   from a failed/empty HTTP response. That is the whole point of
-;;   installing this as a real file rather than embedding it in every
-;;   request: fast, direct compiler feedback while testing.
-;;
-;; REVISION HISTORY:
-;;   v1 used $$FilterAny:AllLedgerEntries:... on the Voucher collection
-;;   to ask "does any entry match" as a single yes/no formula -- tested
-;;   live and rejected outright ("Cannot understand. Bad formula!"), so
-;;   $$FilterAny is not valid TDL used that way. v2 (below) avoids that
-;;   construct entirely: instead of filtering VOUCHERS by a property of
-;;   their nested entries, it WALKs INTO the entries directly and
-;;   filters AT the entry level (a single, non-nested condition per
-;;   entry -- $$StringFind:$LedgerName:... alone, no aggregate/any-match
-;;   function needed), which is the standard way Tally's own built-in
-;;   reports (Sales Register, Purchase Register, etc.) are built in
-;;   TDL. This produces one row per MATCHING ENTRY rather than one row
-;;   per voucher (a voucher with 2 Fixed Asset entries appears twice) --
-;;   the bridge already deduplicates by voucher GUID when parsing, so
-;;   this doesn't need to be handled here.
-;;
-;; STILL NEEDS LIVE VERIFICATION:
-;;   The ".." parent-navigation prefix on FAVoucherEntries' Fetch list
-;;   (used to pull voucher-level fields like Date/VoucherTypeName from
-;;   the entry's enclosing Voucher, since Walk changes the collection's
-;;   "current object" to each LedgerEntry) is the one part of this
-;;   version untested against live Tally. If Tally rejects a field with
-;;   "..", it needs a different navigation syntax -- report the exact
-;;   error the same way as last time.
-;;
-;; ------------------------------------------------------------------
-;; FAGroupLedgers -- every ledger under "Fixed Assets" or any of its
-;; nested sub-groups (e.g. "Fixed Assets > Vehicles"). <CHILDOF> +
-;; <BELONGSTO>Yes</BELONGSTO> (here: "Child Of" + "Belongs To : Yes")
-;; is Tally's standard, well-documented attribute pair for exactly
-;; this "this group or any descendant" membership test. Unchanged from
-;; v1 -- this part was never in question.
-;; ------------------------------------------------------------------
-[Collection: FAGroupLedgers]
-    Type            : Ledger
-    Child Of        : "Fixed Assets"
-    Belongs To      : Yes
-    Fetch           : Name
+;; The on-screen "Fixed Assets Vouchers" menu item (Gateway of Tally)
+;; is kept from the version already tested live -- lets the CA browse
+;; this same list directly inside Tally, independent of the bridge/
+;; e-BAL sync, as a standing cross-check.
+
+[#Menu: Gateway of Tally]
+Add: Item : Before : @@locQuit : Fixed Assets Vouchers : Display : FixedAssetsVoucherReport
+
+[Report: FixedAssetsVoucherReport]
+Title : "Fixed Assets Voucher Listing"
+Form  : FixedAssetsVoucherForm
+
+[Form: FixedAssetsVoucherForm]
+Part : FixedAssetsVoucherPart
+
+[Part: FixedAssetsVoucherPart]
+Lines : FixedAssetsVoucherLine
+Repeat : FixedAssetsVoucherLine : FixedAssetsVoucherColl
+Scroll : Vertical
+
+[Line: FixedAssetsVoucherLine]
+Fields : FAVDate, FAVLedger, FAVAmount, FAVVoucherType
+
+[Field: FAVDate]
+Use     : Date Field
+Set as  : $Date
+
+[Field: FAVLedger]
+Use     : Name Field
+Set as  : $LedgerName
+
+[Field: FAVAmount]
+Use     : Amount Field
+Set as  : $Amount
+
+[Field: FAVVoucherType]
+Use     : Name Field
+Set as  : $VoucherTypeName
 
 ;; ------------------------------------------------------------------
-;; FAVoucherEntries -- one row per ledger entry (within whatever
-;; SVFROMDATE/SVTODATE the caller sets) whose ledger name appears in
-;; ##SVFALEDGERLIST, a pipe-separated list the bridge supplies at
-;; request time (built from FAGroupLedgers above, or from e-BAL's own
-;; ReconHub classification -- either way, supplied dynamically, not
-;; hardcoded here). Each row carries both the entry's own fields
-;; (LedgerName, Amount, Parent group) and its enclosing voucher's
-;; fields (via ".."), since Walk makes each LedgerEntry the collection's
-;; current object, not the Voucher.
+;; FixedAssetsVoucherColl -- the on-screen report's data source.
 ;; ------------------------------------------------------------------
-[Collection: FAVoucherEntries]
-    Type            : Voucher
-    Child Of        : $$VchVouchers
-    Walk            : AllLedgerEntries
-    Fetch           : ..Guid, ..VoucherTypeName, ..VoucherNumber, ..Date, ..EffectiveDate, ..Narration, ..PartyLedgerName, ..IsOptional, ..IsCancelled, ..AlterDate, ..EnteredDate, LedgerName, Amount, Parent
-    Filter          : FAEntryMatches
+[Collection: FixedAssetsVoucherColl]
+Type    : Voucher
+Filters : IsFixedAssetsVoucher
 
-[System: Formulae]
-    FAEntryMatches : $$StringFind:$LedgerName:##SVFALedgerList
+[System: Formula]
+IsFixedAssetsVoucher : $$IsLedOfGrp:$LedgerEntries[1].LedgerName:"Fixed Assets" OR $$IsLedOfGrp:$LedgerEntries[2].LedgerName:"Fixed Assets"
 
 ;; ------------------------------------------------------------------
-;; SVFALedgerList -- a static variable (not a hardcoded value) that
-;; the bridge sets per-request via STATICVARIABLES, e.g.:
-;;   <SVFALEDGERLIST>Plant &amp; Machinery|Vehicles - Ambulance|...</SVFALEDGERLIST>
-;; Declared here with an empty default so the report doesn't error out
-;; if called without it (matches nothing, rather than crashing).
+;; FAVouchers -- the export-oriented collection the bridge calls via
+;; HTTP (TALLYREQUEST=Export, TYPE=Collection, ID=FAVouchers). Same
+;; IsFixedAssetsVoucher filter as the on-screen report above, but
+;; fetches the full field set the bridge's parser expects (GUID,
+;; VoucherTypeName, VoucherNumber, Date, EffectiveDate, Narration,
+;; PartyLedgerName, IsOptional, IsCancelled, AlterDate, EnteredDate,
+;; and the nested LedgerEntries list itself) instead of the single
+;; flattened row the on-screen display uses.
 ;; ------------------------------------------------------------------
-[System: Variable]
-    SVFALedgerList : String : ""
+[Collection: FAVouchers]
+Type     : Voucher
+Child Of : $$VchVouchers
+Fetch    : Guid, VoucherTypeName, VoucherNumber, Date, EffectiveDate, Narration, PartyLedgerName, IsOptional, IsCancelled, AlterDate, EnteredDate, LedgerEntries
+Filters  : IsFixedAssetsVoucher
