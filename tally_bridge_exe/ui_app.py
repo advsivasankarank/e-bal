@@ -38,6 +38,14 @@ LISTEN_PORT_DEFAULT = 9123
 TALLY_POLL_INTERVAL = 30
 TALLY_CONNECT_TIMEOUT = 3
 TALLY_READ_TIMEOUT = 8
+# Confirmed in production logs: TB fetch for this company's size
+# consistently takes 5.7-6.0s even when everything is healthy -- close
+# enough to the shared 8s TALLY_READ_TIMEOUT default that it tips over
+# on ordinary variance (not the deep Application Hang seen on the
+# voucher fetch; just genuinely slower than the default budget allows).
+# Ledger fetch stays on the 8s default since it's reliably sub-second to
+# ~2s.
+TALLY_TB_READ_TIMEOUT = 30
 # A full financial year of vouchers, unfiltered by type in a single
 # request, is a much heavier Tally export than ledgers/TB (which already
 # took 6+ seconds for this company's size) -- the default 8s
@@ -1662,7 +1670,7 @@ class SmartBridgeUI:
             return
 
         try:
-            tb_xml = fetch_from_tally(build_tb_xml(fy_from_display, fy_to_display))
+            tb_xml = fetch_from_tally(build_tb_xml(fy_from_display, fy_to_display), timeout=TALLY_TB_READ_TIMEOUT)
             logging.info("TB fetched from Tally")
         except Exception as exc:
             self.state.set("last_upload", "Failed (Tally TB)")
