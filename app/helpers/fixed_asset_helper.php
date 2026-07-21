@@ -1151,10 +1151,38 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         return ['ok' => false, 'message' => 'No ledgers are classified as Property, Plant & Equipment or Capital Work-in-Progress yet -- classify them in ReconHub first.', 'created' => 0, 'updated' => 0, 'excluded' => []];
     }
 
-    $voucherSyncResult = syncVouchersIncremental($pdo, $company_id, $fy_id, $fyStart, $fyEnd);
-    if (!$voucherSyncResult['ok']) {
-        return ['ok' => false, 'message' => 'Voucher sync from Tally failed: ' . $voucherSyncResult['message'], 'created' => 0, 'updated' => 0, 'excluded' => []];
+    /* Deliberately does NOT call syncVouchersIncremental() -- that function
+       tries an ODBC connection, then a direct XML request FROM THIS SERVER
+       to Tally, both of which only work when the web server and Tally sit
+       on the same local network. On a real hosted deployment, Tally runs
+       on the CA's own machine behind their router/firewall, which this
+       server can never reach directly (confirmed in production: every such
+       attempt reports "0 vouchers ... via xml"). The only connection that
+       actually works is the Smart Bridge desktop app PUSHING data it
+       fetched locally to bridge_voucher.php, which lands in the same
+       vouchers/voucher_entries tables -- so this just reads whatever the
+       bridge has already pushed for the period, instead of attempting a
+       doomed live pull of its own. */
+    ensureVoucherTables($pdo);
+    $voucherCountStmt = $pdo->prepare('SELECT COUNT(*), MAX(source), MAX(created_at) FROM vouchers WHERE company_id = ? AND fy_id = ? AND date BETWEEN ? AND ?');
+    $voucherCountStmt->execute([$company_id, $fy_id, $fyStart, $fyEnd]);
+    [$totalVouchersForPeriod, $lastVoucherSource, $lastVoucherPushedAt] = $voucherCountStmt->fetch(PDO::FETCH_NUM);
+    $totalVouchersForPeriod = (int) $totalVouchersForPeriod;
+
+    if ($totalVouchersForPeriod === 0) {
+        return [
+            'ok' => false,
+            'message' => "No vouchers have been synced from Tally for {$fyStart} to {$fyEnd} yet -- open the eBAL Smart Bridge app on the machine running Tally and click Sync there first (this page can only read what the bridge has already pushed; it can't reach Tally directly).",
+            'created' => 0,
+            'updated' => 0,
+            'excluded' => [],
+        ];
     }
+
+    $voucherSyncResult = [
+        'source' => $lastVoucherSource ?: 'bridge',
+        'total' => $totalVouchersForPeriod,
+    ];
 
     /* Carry the asset category forward from any prior row on the same
        ledger (an earlier voucher this year, or a category the CA already
@@ -1230,31 +1258,19 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         $created++;
     }
 
-    /* Diagnostics for the "0 synced" case -- this used to be a silent dead
-       end (just "Synced 0..."), which is indistinguishable from "everything
-       is fine, there just weren't any transactions this year" and from a
-       real problem (Tally returned nothing at all, or returned vouchers but
-       none matched a classified Fixed Asset ledger). Surfaced so the CA
-       doesn't have to guess which one they're looking at. */
+    /* Diagnostics for the "0 matched" case -- the bridge has pushed
+       vouchers for this period (guaranteed at this point, or the early
+       return above would have fired), but none of them touched a
+       classified Fixed Asset ledger. Surfaced so the CA doesn't have to
+       guess whether that's genuinely true or a ledger-name mismatch. */
     $diagnostics = [
         'voucher_source' => $voucherSyncResult['source'] ?? null,
         'total_vouchers_from_tally' => (int) ($voucherSyncResult['total'] ?? 0),
         'fixed_asset_ledger_count' => count($ledgerNames),
         'matched_voucher_entries' => count($entries),
+        'last_voucher_pushed_at' => $lastVoucherPushedAt,
         'raw_response_sample' => null,
     ];
-
-    /* When Tally reported zero vouchers, fetch one raw (unparsed) sample
-       response so a human can tell whether Tally genuinely returned an
-       empty voucher list or an error/rejection that was silently treated
-       as "zero results" -- both look identical once parsed down to a
-       vouchers array, but look completely different in the raw XML. */
-    if ($diagnostics['total_vouchers_from_tally'] === 0 && ($voucherSyncResult['source'] ?? '') === 'xml') {
-        $rawSample = fetchRawTallyVoucherResponseSample($fyStart, $fyEnd);
-        if ($rawSample !== null) {
-            $diagnostics['raw_response_sample'] = mb_substr(trim($rawSample), 0, 1000);
-        }
-    }
 
     return [
         'ok' => true,
