@@ -941,47 +941,37 @@ def fetch_fa_vouchers_via_group_filter(from_date, to_date):
     the bridge fetching every voucher type for the full year and
     filtering client-side. No ledger name list needs to be supplied --
     Tally resolves group membership from its own group hierarchy
-    directly. The date range is split into VOUCHER_FETCH_CHUNK_DAYS-
-    sized windows for the same reason as the per-type fetch -- a full
-    year in one request can hang Tally outright at high voucher volume,
-    not just respond slowly. Returns None (not an empty list) if every
-    chunk failed outright, or if every chunk succeeded but the total
-    across the whole year is zero (ambiguous: could be genuinely no
-    Fixed Asset transactions, or a voucher with the Fixed Asset ledger
-    in a 3rd+ position this filter doesn't check) -- either way the
-    caller has a clear signal to fall back rather than trust an
+    directly.
+
+    Deliberately NOT chunked by date range (unlike the per-type fallback
+    below): confirmed in production that this collection returns the
+    exact same byte-for-byte response regardless of the SVFROMDATE/
+    SVTODATE values sent -- STATICVARIABLES evidently doesn't scope a raw
+    <TYPE>Collection</TYPE> export the way it scopes a REPORTNAME-based
+    one (like the Trial Balance fetch). Since the $$IsLedOfGrp filter
+    already keeps Tally's own working set small regardless of range
+    requested, and a single call for the whole year measured at ~10-13s
+    with no hang, splitting it into ~37 chunks was making 37 identical
+    round trips for the same data instead of one -- minutes of wall time
+    for no benefit. If per-period scoping is needed later (e.g. for
+    incremental syncs), it needs an explicit date comparison inside
+    IsFixedAssetsVoucher itself, not STATICVARIABLES.
+
+    Returns None (not an empty list) on a hard failure, or if the fetch
+    succeeded but returned zero vouchers (ambiguous: could be genuinely
+    no Fixed Asset transactions, or a voucher with the Fixed Asset
+    ledger in a 3rd+ position this filter doesn't check) -- either way
+    the caller has a clear signal to fall back rather than trust an
     unverified result.
     """
-    all_vouchers = {}
-    failed_chunks = []
-    successful_chunks = 0
-    for chunk_from, chunk_to in iter_date_chunks(from_date, to_date, VOUCHER_FETCH_CHUNK_DAYS):
-        result = _fetch_fa_vouchers_single_range(chunk_from, chunk_to)
-        if result is None:
-            failed_chunks.append(f"{chunk_from}..{chunk_to}")
-            continue
-        successful_chunks += 1
-        for v in result:
-            all_vouchers[v["tally_guid"]] = v
-
-    if failed_chunks:
-        logging.warning(
-            "Fixed Asset group filter: %d date-chunk(s) failed and were skipped: %s",
-            len(failed_chunks), ", ".join(failed_chunks[:20]) + (", ..." if len(failed_chunks) > 20 else ""),
-        )
-
-    if successful_chunks == 0:
-        logging.warning("Fixed Asset group-filtered fetch: every date chunk failed -- falling back to per-type fetch")
+    result = _fetch_fa_vouchers_single_range(from_date, to_date)
+    if result is None:
+        logging.warning("Fixed Asset group-filtered fetch failed outright -- falling back to per-type fetch")
         return None
-
-    if not all_vouchers:
-        logging.info(
-            "Fixed Asset group-filtered fetch returned 0 vouchers across %d successful chunk(s) -- treating as inconclusive",
-            successful_chunks,
-        )
+    if not result:
+        logging.info("Fixed Asset group-filtered fetch returned 0 vouchers -- treating as inconclusive")
         return None
-
-    return list(all_vouchers.values())
+    return result
 
 
 def _fetch_fa_vouchers_single_range(from_date, to_date):
