@@ -15,7 +15,7 @@ import urllib.parse
 import webbrowser
 import xml.etree.ElementTree as ET
 import xml.sax.saxutils as saxutils
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -51,6 +51,21 @@ TALLY_READ_TIMEOUT = 8
 # fetch_vouchers_via_xml()'s per-type resilience (one slow/timed-out type
 # no longer aborts the other 7), this is a ceiling per type, not per sync.
 TALLY_VOUCHER_READ_TIMEOUT = 180
+# Even a single voucher TYPE for a full financial year can be enough
+# working data for Tally to hang rather than just respond slowly --
+# confirmed via Windows Event Viewer against a real 47,000-voucher/year
+# company: "tally.exe stopped interacting with Windows and was closed"
+# (Event ID 1002, Application Hang), recurring across multiple sync
+# attempts, not a one-off. A raised HTTP timeout only helps if Tally is
+# merely slow; it does nothing for a genuine hang, since Tally itself
+# stops responding to Windows, not just to the bridge. Splitting each
+# fetch into date-range chunks keeps every individual request's working
+# set small regardless of the company's total annual volume -- 10 days
+# is a starting point, not a measured optimum (this environment has no
+# way to benchmark against the user's real Tally); if 10-day chunks
+# still hang, halving this constant is the first thing to try before
+# any other change.
+VOUCHER_FETCH_CHUNK_DAYS = 10
 HTTP_REQUEST_TIMEOUT = 10
 UPLOAD_TIMEOUT = 10
 VOUCHER_UPLOAD_TIMEOUT = 120
@@ -475,6 +490,26 @@ def sanitize_xml(raw_xml):
     return INVALID_XML_RE.sub("", raw_xml)
 
 
+def iter_date_chunks(from_date, to_date, chunk_days):
+    """Yields (chunk_from, chunk_to) date strings ("YYYY-MM-DD") covering
+    from_date..to_date inclusive in chunk_days-sized windows -- keeps each
+    individual Tally voucher request scoped to a small enough date range
+    that Tally can generate a response without hanging, regardless of the
+    company's total annual voucher volume.
+    """
+    start = datetime.strptime(from_date[:10], "%Y-%m-%d").date()
+    end = datetime.strptime(to_date[:10], "%Y-%m-%d").date()
+    if start > end:
+        return
+    current = start
+    one_day = timedelta(days=1)
+    step = timedelta(days=chunk_days)
+    while current <= end:
+        chunk_end = min(current + step - one_day, end)
+        yield current.strftime("%Y-%m-%d"), chunk_end.strftime("%Y-%m-%d")
+        current = chunk_end + one_day
+
+
 def fetch_from_tally(xml_request, timeout=None):
     if timeout is None:
         timeout = TALLY_READ_TIMEOUT
@@ -741,29 +776,32 @@ VOUCHER_TYPES_FOR_FULL_FETCH = [
 
 def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
     if voucher_type is None:
-        # Each voucher type is fetched independently, and a slow/timed-out
-        # type must not abort the rest of the batch -- confirmed against a
-        # real company where the very first type in the list (alphabetically
-        # "Payment") alone took longer than the 90s per-request timeout,
-        # which previously killed the entire sync before the other 7 types
-        # were even attempted, uploading nothing at all. Best-effort: log
-        # and skip whichever type failed, upload whatever succeeded.
+        # Two layers of resilience: the date range is split into
+        # VOUCHER_FETCH_CHUNK_DAYS-sized windows (a confirmed Application
+        # Hang against a real 47,000-voucher/year company showed that even
+        # a single voucher TYPE for a full year can be too much working
+        # data for Tally to generate without hanging -- a longer HTTP
+        # timeout doesn't help a genuine hang, only a slow-but-eventually-
+        # responding request), and within each window, each voucher type
+        # is still fetched independently so one slow/hung chunk+type
+        # combination doesn't abort the rest of the batch.
         all_vouchers = {}
-        failed_types = []
-        for vtype in VOUCHER_TYPES_FOR_FULL_FETCH:
-            try:
-                result = fetch_vouchers_via_xml(from_date, to_date, vtype)
-            except Exception as exc:
-                logging.error("Voucher fetch failed for type %s: %s", vtype, exc)
-                failed_types.append(vtype)
-                continue
-            if result:
-                for v in result:
-                    all_vouchers[v["tally_guid"]] = v
-        if failed_types:
+        failed = []
+        for chunk_from, chunk_to in iter_date_chunks(from_date, to_date, VOUCHER_FETCH_CHUNK_DAYS):
+            for vtype in VOUCHER_TYPES_FOR_FULL_FETCH:
+                try:
+                    result = fetch_vouchers_via_xml(chunk_from, chunk_to, vtype)
+                except Exception as exc:
+                    logging.error("Voucher fetch failed for type %s (%s to %s): %s", vtype, chunk_from, chunk_to, exc)
+                    failed.append(f"{vtype} {chunk_from}..{chunk_to}")
+                    continue
+                if result:
+                    for v in result:
+                        all_vouchers[v["tally_guid"]] = v
+        if failed:
             logging.warning(
-                "Voucher sync: %d of %d type(s) failed and were skipped: %s",
-                len(failed_types), len(VOUCHER_TYPES_FOR_FULL_FETCH), ", ".join(failed_types),
+                "Voucher sync: %d type/date-chunk combination(s) failed and were skipped: %s",
+                len(failed), ", ".join(failed[:20]) + (", ..." if len(failed) > 20 else ""),
             )
         return list(all_vouchers.values())
 
@@ -899,15 +937,59 @@ FA_VOUCHER_XML_TEMPLATE = """<ENVELOPE>
 def fetch_fa_vouchers_via_group_filter(from_date, to_date, ledger_names):
     """Best-effort fast path: asks Tally to filter the voucher collection
     itself to the given ledgers, instead of the bridge fetching every
-    voucher type for the full year and filtering client-side. Returns
-    None (not an empty list) on any failure -- including a suspiciously
-    empty result, treated as inconclusive rather than "genuinely zero" --
-    so the caller always has a clear signal to fall back on rather than
-    silently trusting an unverified result.
+    voucher type for the full year and filtering client-side. The date
+    range is split into VOUCHER_FETCH_CHUNK_DAYS-sized windows for the
+    same reason as the per-type fetch -- a full year in one request can
+    hang Tally outright at high voucher volume, not just respond slowly.
+    Returns None (not an empty list) if every chunk failed outright, or
+    if every chunk succeeded but the total across the whole year is zero
+    (ambiguous: could be genuinely no Fixed Asset transactions, or the
+    untested $$FilterAny formula silently matching nothing) -- either way
+    the caller has a clear signal to fall back rather than trust an
+    unverified result.
     """
     if not ledger_names:
         return None
 
+    ledger_pipe_list = "|".join(saxutils.escape(name) for name in ledger_names)
+
+    all_vouchers = {}
+    failed_chunks = []
+    successful_chunks = 0
+    for chunk_from, chunk_to in iter_date_chunks(from_date, to_date, VOUCHER_FETCH_CHUNK_DAYS):
+        result = _fetch_fa_vouchers_single_range(chunk_from, chunk_to, ledger_pipe_list)
+        if result is None:
+            failed_chunks.append(f"{chunk_from}..{chunk_to}")
+            continue
+        successful_chunks += 1
+        for v in result:
+            all_vouchers[v["tally_guid"]] = v
+
+    if failed_chunks:
+        logging.warning(
+            "Fixed Asset group filter: %d date-chunk(s) failed and were skipped: %s",
+            len(failed_chunks), ", ".join(failed_chunks[:20]) + (", ..." if len(failed_chunks) > 20 else ""),
+        )
+
+    if successful_chunks == 0:
+        logging.warning("Fixed Asset group-filtered fetch: every date chunk failed -- falling back to per-type fetch")
+        return None
+
+    if not all_vouchers:
+        logging.info(
+            "Fixed Asset group-filtered fetch returned 0 vouchers across %d successful chunk(s) -- treating as inconclusive",
+            successful_chunks,
+        )
+        return None
+
+    return list(all_vouchers.values())
+
+
+def _fetch_fa_vouchers_single_range(from_date, to_date, ledger_pipe_list):
+    """Single already-chunked date-range request against the Fixed Asset
+    group filter. Returns a list (possibly empty -- that chunk genuinely
+    had no matches) on success, or None on a hard failure for this chunk
+    (network error, timeout, unparseable response)."""
     from_date_display = (
         datetime.strptime(from_date[:10], "%Y-%m-%d").strftime("%d-%b-%Y")
         if from_date
@@ -918,15 +1000,6 @@ def fetch_fa_vouchers_via_group_filter(from_date, to_date, ledger_names):
         if to_date
         else "31-Mar-2025"
     )
-    # Ledger names commonly contain XML-significant characters (e.g. the
-    # real, common "Plant & Machinery") -- unescaped, these would produce
-    # an XML payload Tally itself can't parse, which (safely) falls
-    # through to the per-type fallback below via the empty/error path,
-    # but escaping avoids hitting that fallback for every company with an
-    # ampersand in a ledger name, which is the common case, not the edge
-    # case.
-    ledger_pipe_list = "|".join(saxutils.escape(name) for name in ledger_names)
-
     xml_request = FA_VOUCHER_XML_TEMPLATE.format(
         from_date=from_date_display, to_date=to_date_display, ledger_pipe_list=ledger_pipe_list
     )
@@ -934,7 +1007,7 @@ def fetch_fa_vouchers_via_group_filter(from_date, to_date, ledger_names):
         response = fetch_from_tally(xml_request, timeout=TALLY_VOUCHER_READ_TIMEOUT)
         root = ET.fromstring(response)
     except Exception as exc:
-        logging.warning("Fixed Asset group-filtered voucher fetch failed: %s", exc)
+        logging.warning("Fixed Asset group-filtered voucher fetch failed for %s..%s: %s", from_date, to_date, exc)
         return None
 
     vouchers = []
@@ -982,18 +1055,6 @@ def fetch_fa_vouchers_via_group_filter(from_date, to_date, ledger_names):
             "source": "xml",
             "entries": entries,
         })
-
-    if not vouchers:
-        # An empty result here is genuinely ambiguous: it could mean this
-        # company had zero Fixed Asset transactions in the period, or it
-        # could mean the experimental $$FilterAny formula above silently
-        # matched nothing due to a syntax/logic issue this couldn't be
-        # tested against live Tally for. There is no way to tell those
-        # apart from the response alone, so it's treated as inconclusive
-        # rather than trusted -- the caller falls back to the per-type
-        # fetch, which has no such ambiguity.
-        logging.info("Fixed Asset group-filtered fetch returned 0 vouchers -- treating as inconclusive")
-        return None
 
     return vouchers
 
