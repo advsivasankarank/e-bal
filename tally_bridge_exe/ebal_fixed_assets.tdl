@@ -1,0 +1,72 @@
+;; ============================================================
+;; eBAL Smart Bridge -- Fixed Asset TDL Add-On
+;; ============================================================
+;;
+;; Purpose: exposes two report IDs the bridge can call directly, so
+;; Tally does the Fixed Asset filtering itself instead of the bridge
+;; fetching every voucher type for the full year and filtering
+;; client-side. Both collections are re-usable across financial years
+;; and companies -- nothing here is hardcoded to one company.
+;;
+;; INSTALL:
+;;   TallyPrime > F1 (Help) > TDL & Add-On > F4 (Manage Local TDLs)
+;;   > set "Load selected TDL files on startup" to Yes
+;;   > add this file's full path under "List of TDL files"
+;;   > Save (Ctrl+A), then restart Tally.
+;;
+;; VERIFY IT LOADED CORRECTLY:
+;;   Re-open F1 > TDL & Add-On -- if there's a syntax error anywhere
+;;   below, Tally will show it right there on that screen, naming the
+;;   exact problem, instead of the bridge having to infer it indirectly
+;;   from a failed/empty HTTP response. That is the whole point of
+;;   installing this as a real file rather than embedding it in every
+;;   request: fast, direct compiler feedback while testing.
+;;
+;; THE ONE LINE THAT NEEDS LIVE VERIFICATION:
+;;   FAHasMatchingEntry's use of $$FilterAny (below) is the part of
+;;   this file that could not be checked against a live Tally instance
+;;   before writing it -- if $$FilterAny isn't the right built-in
+;;   function name/signature, Tally's TDL loader will flag it on this
+;;   line specifically when you load the file. Report back the exact
+;;   error text from that screen if so, and it can be corrected in one
+;;   pass instead of guessing again.
+;;
+;; ------------------------------------------------------------------
+;; FAGroupLedgers -- every ledger under "Fixed Assets" or any of its
+;; nested sub-groups (e.g. "Fixed Assets > Vehicles"). <CHILDOF> +
+;; <BELONGSTO>Yes</BELONGSTO> (here: "Child Of" + "Belongs To : Yes")
+;; is Tally's standard, well-documented attribute pair for exactly
+;; this "this group or any descendant" membership test.
+;; ------------------------------------------------------------------
+[Collection: FAGroupLedgers]
+    Type            : Ledger
+    Child Of        : "Fixed Assets"
+    Belongs To      : Yes
+    Fetch           : Name
+
+;; ------------------------------------------------------------------
+;; FAVouchers -- vouchers (within whatever SVFROMDATE/SVTODATE the
+;; caller sets) that have at least one ledger entry whose ledger name
+;; appears in ##SVFALEDGERLIST, a pipe-separated list the bridge
+;; supplies at request time (built from FAGroupLedgers above, or from
+;; e-BAL's own ReconHub classification -- either way, supplied
+;; dynamically, not hardcoded here).
+;; ------------------------------------------------------------------
+[Collection: FAVouchers]
+    Type            : Voucher
+    Child Of        : $$VchVouchers
+    Fetch           : Guid, VoucherTypeName, VoucherNumber, Date, EffectiveDate, Narration, PartyLedgerName, IsOptional, IsCancelled, AlterDate, EnteredDate, LedgerEntries
+    Filter          : FAHasMatchingEntry
+
+[System: Formulae]
+    FAHasMatchingEntry : $$FilterAny:AllLedgerEntries:$$StringFind:$LedgerName:##SVFALedgerList
+
+;; ------------------------------------------------------------------
+;; SVFALedgerList -- a static variable (not a hardcoded value) that
+;; the bridge sets per-request via STATICVARIABLES, e.g.:
+;;   <SVFALEDGERLIST>Plant &amp; Machinery|Vehicles - Ambulance|...</SVFALEDGERLIST>
+;; Declared here with an empty default so the report doesn't error out
+;; if called without it (matches nothing, rather than crashing).
+;; ------------------------------------------------------------------
+[System: Variable]
+    SVFALedgerList : String : ""
