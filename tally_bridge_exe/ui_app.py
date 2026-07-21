@@ -838,7 +838,15 @@ def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
         if tag.endswith("VOUCHERTYPE") or tag.endswith("VOUCHERLIST"):
             continue
 
-        guid = voucher_node.attrib.get("GUID", "") or ""
+        # GUID is fetched the same way as every other field in the FETCH
+        # list (VoucherTypeName, Date, ...), all of which are read below
+        # via findtext() as child elements -- confirmed in production
+        # that reading it as an XML attribute instead (the original
+        # assumption) silently discarded every real voucher, since Tally
+        # emits it as a child <GUID> tag here, not a GUID="..." attribute.
+        # Attribute checked too, defensively, in case some Tally
+        # configuration does emit it that way.
+        guid = (voucher_node.findtext("GUID") or voucher_node.attrib.get("GUID", "") or "").strip()
         if not guid:
             continue
 
@@ -1004,7 +1012,15 @@ def _fetch_fa_vouchers_single_range(from_date, to_date):
         tag = voucher_node.tag.upper()
         if not tag.endswith("VOUCHER") or tag.endswith("VOUCHERTYPE") or tag.endswith("VOUCHERLIST"):
             continue
-        guid = voucher_node.attrib.get("GUID", "") or ""
+        # GUID is fetched the same way as every other field in the FETCH
+        # list (VoucherTypeName, Date, ...), all of which are read below
+        # via findtext() as child elements -- confirmed in production
+        # that reading it as an XML attribute instead (the original
+        # assumption) silently discarded every real voucher, since Tally
+        # emits it as a child <GUID> tag here, not a GUID="..." attribute.
+        # Attribute checked too, defensively, in case some Tally
+        # configuration does emit it that way.
+        guid = (voucher_node.findtext("GUID") or voucher_node.attrib.get("GUID", "") or "").strip()
         if not guid:
             continue
 
