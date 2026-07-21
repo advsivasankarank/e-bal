@@ -1164,7 +1164,7 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
        bridge has already pushed for the period, instead of attempting a
        doomed live pull of its own. */
     ensureVoucherTables($pdo);
-    $voucherCountStmt = $pdo->prepare('SELECT COUNT(*), MAX(source), MAX(created_at) FROM vouchers WHERE company_id = ? AND fy_id = ? AND date BETWEEN ? AND ?');
+    $voucherCountStmt = $pdo->prepare('SELECT COUNT(*), MAX(source), MAX(synced_at) FROM vouchers WHERE company_id = ? AND fy_id = ? AND date BETWEEN ? AND ?');
     $voucherCountStmt->execute([$company_id, $fy_id, $fyStart, $fyEnd]);
     [$totalVouchersForPeriod, $lastVoucherSource, $lastVoucherPushedAt] = $voucherCountStmt->fetch(PDO::FETCH_NUM);
     $totalVouchersForPeriod = (int) $totalVouchersForPeriod;
