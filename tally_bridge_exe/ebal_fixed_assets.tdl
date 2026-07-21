@@ -22,21 +22,38 @@
 ;;   installing this as a real file rather than embedding it in every
 ;;   request: fast, direct compiler feedback while testing.
 ;;
-;; THE ONE LINE THAT NEEDS LIVE VERIFICATION:
-;;   FAHasMatchingEntry's use of $$FilterAny (below) is the part of
-;;   this file that could not be checked against a live Tally instance
-;;   before writing it -- if $$FilterAny isn't the right built-in
-;;   function name/signature, Tally's TDL loader will flag it on this
-;;   line specifically when you load the file. Report back the exact
-;;   error text from that screen if so, and it can be corrected in one
-;;   pass instead of guessing again.
+;; REVISION HISTORY:
+;;   v1 used $$FilterAny:AllLedgerEntries:... on the Voucher collection
+;;   to ask "does any entry match" as a single yes/no formula -- tested
+;;   live and rejected outright ("Cannot understand. Bad formula!"), so
+;;   $$FilterAny is not valid TDL used that way. v2 (below) avoids that
+;;   construct entirely: instead of filtering VOUCHERS by a property of
+;;   their nested entries, it WALKs INTO the entries directly and
+;;   filters AT the entry level (a single, non-nested condition per
+;;   entry -- $$StringFind:$LedgerName:... alone, no aggregate/any-match
+;;   function needed), which is the standard way Tally's own built-in
+;;   reports (Sales Register, Purchase Register, etc.) are built in
+;;   TDL. This produces one row per MATCHING ENTRY rather than one row
+;;   per voucher (a voucher with 2 Fixed Asset entries appears twice) --
+;;   the bridge already deduplicates by voucher GUID when parsing, so
+;;   this doesn't need to be handled here.
+;;
+;; STILL NEEDS LIVE VERIFICATION:
+;;   The ".." parent-navigation prefix on FAVoucherEntries' Fetch list
+;;   (used to pull voucher-level fields like Date/VoucherTypeName from
+;;   the entry's enclosing Voucher, since Walk changes the collection's
+;;   "current object" to each LedgerEntry) is the one part of this
+;;   version untested against live Tally. If Tally rejects a field with
+;;   "..", it needs a different navigation syntax -- report the exact
+;;   error the same way as last time.
 ;;
 ;; ------------------------------------------------------------------
 ;; FAGroupLedgers -- every ledger under "Fixed Assets" or any of its
 ;; nested sub-groups (e.g. "Fixed Assets > Vehicles"). <CHILDOF> +
 ;; <BELONGSTO>Yes</BELONGSTO> (here: "Child Of" + "Belongs To : Yes")
 ;; is Tally's standard, well-documented attribute pair for exactly
-;; this "this group or any descendant" membership test.
+;; this "this group or any descendant" membership test. Unchanged from
+;; v1 -- this part was never in question.
 ;; ------------------------------------------------------------------
 [Collection: FAGroupLedgers]
     Type            : Ledger
@@ -45,21 +62,25 @@
     Fetch           : Name
 
 ;; ------------------------------------------------------------------
-;; FAVouchers -- vouchers (within whatever SVFROMDATE/SVTODATE the
-;; caller sets) that have at least one ledger entry whose ledger name
-;; appears in ##SVFALEDGERLIST, a pipe-separated list the bridge
-;; supplies at request time (built from FAGroupLedgers above, or from
-;; e-BAL's own ReconHub classification -- either way, supplied
-;; dynamically, not hardcoded here).
+;; FAVoucherEntries -- one row per ledger entry (within whatever
+;; SVFROMDATE/SVTODATE the caller sets) whose ledger name appears in
+;; ##SVFALEDGERLIST, a pipe-separated list the bridge supplies at
+;; request time (built from FAGroupLedgers above, or from e-BAL's own
+;; ReconHub classification -- either way, supplied dynamically, not
+;; hardcoded here). Each row carries both the entry's own fields
+;; (LedgerName, Amount, Parent group) and its enclosing voucher's
+;; fields (via ".."), since Walk makes each LedgerEntry the collection's
+;; current object, not the Voucher.
 ;; ------------------------------------------------------------------
-[Collection: FAVouchers]
+[Collection: FAVoucherEntries]
     Type            : Voucher
     Child Of        : $$VchVouchers
-    Fetch           : Guid, VoucherTypeName, VoucherNumber, Date, EffectiveDate, Narration, PartyLedgerName, IsOptional, IsCancelled, AlterDate, EnteredDate, LedgerEntries
-    Filter          : FAHasMatchingEntry
+    Walk            : AllLedgerEntries
+    Fetch           : ..Guid, ..VoucherTypeName, ..VoucherNumber, ..Date, ..EffectiveDate, ..Narration, ..PartyLedgerName, ..IsOptional, ..IsCancelled, ..AlterDate, ..EnteredDate, LedgerName, Amount, Parent
+    Filter          : FAEntryMatches
 
 [System: Formulae]
-    FAHasMatchingEntry : $$FilterAny:AllLedgerEntries:$$StringFind:$LedgerName:##SVFALedgerList
+    FAEntryMatches : $$StringFind:$LedgerName:##SVFALedgerList
 
 ;; ------------------------------------------------------------------
 ;; SVFALedgerList -- a static variable (not a hardcoded value) that
