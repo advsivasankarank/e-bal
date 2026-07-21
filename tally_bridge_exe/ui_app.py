@@ -42,8 +42,14 @@ TALLY_READ_TIMEOUT = 8
 # request, is a much heavier Tally export than ledgers/TB (which already
 # took 6+ seconds for this company's size) -- the default 8s
 # TALLY_READ_TIMEOUT was cutting this off before Tally finished generating
-# the response at all, not a real connectivity failure.
-TALLY_VOUCHER_READ_TIMEOUT = 90
+# the response at all, not a real connectivity failure. Raised again from
+# 90s after confirming against a real high-volume company (a hospital,
+# where Payment/Receipt volume for a full year is large) that even a
+# single voucher TYPE alone -- not the whole unfiltered fetch -- can
+# legitimately take longer than 90s to generate. Combined with
+# fetch_vouchers_via_xml()'s per-type resilience (one slow/timed-out type
+# no longer aborts the other 7), this is a ceiling per type, not per sync.
+TALLY_VOUCHER_READ_TIMEOUT = 180
 HTTP_REQUEST_TIMEOUT = 10
 UPLOAD_TIMEOUT = 10
 VOUCHER_UPLOAD_TIMEOUT = 120
@@ -673,12 +679,30 @@ VOUCHER_TYPES_FOR_FULL_FETCH = [
 
 def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
     if voucher_type is None:
+        # Each voucher type is fetched independently, and a slow/timed-out
+        # type must not abort the rest of the batch -- confirmed against a
+        # real company where the very first type in the list (alphabetically
+        # "Payment") alone took longer than the 90s per-request timeout,
+        # which previously killed the entire sync before the other 7 types
+        # were even attempted, uploading nothing at all. Best-effort: log
+        # and skip whichever type failed, upload whatever succeeded.
         all_vouchers = {}
+        failed_types = []
         for vtype in VOUCHER_TYPES_FOR_FULL_FETCH:
-            result = fetch_vouchers_via_xml(from_date, to_date, vtype)
+            try:
+                result = fetch_vouchers_via_xml(from_date, to_date, vtype)
+            except Exception as exc:
+                logging.error("Voucher fetch failed for type %s: %s", vtype, exc)
+                failed_types.append(vtype)
+                continue
             if result:
                 for v in result:
                     all_vouchers[v["tally_guid"]] = v
+        if failed_types:
+            logging.warning(
+                "Voucher sync: %d of %d type(s) failed and were skipped: %s",
+                len(failed_types), len(VOUCHER_TYPES_FOR_FULL_FETCH), ", ".join(failed_types),
+            )
         return list(all_vouchers.values())
 
     from_date_display = (
