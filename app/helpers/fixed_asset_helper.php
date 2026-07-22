@@ -841,6 +841,7 @@ function mapFixedAssetGroupToCategory(string $group, string $assetName): string
         'plant and machinery' => 'Plant & Machinery (general)',
         'electrical installations and equipment' => 'Plant & Machinery (general)',
         'laboratory equipment' => 'Plant & Machinery (general)',
+        'medical equipment' => 'Plant & Machinery (general)',
         'office equipment' => 'Office Equipment',
         'computers and data processing units' => 'Computers and Data Processing Units (End User Devices)',
         'furniture and fittings' => 'Furniture and Fixtures',
@@ -848,8 +849,25 @@ function mapFixedAssetGroupToCategory(string $group, string $assetName): string
         'buildings' => 'Buildings (RCC, other than factory)',
         'land' => '',
     ];
+    if (isset($map[$g])) {
+        return $map[$g];
+    }
 
-    return $map[$g] ?? '';
+    /* No specific keyword or sub-group matched (common when a company
+       hasn't bothered creating sub-groups in Tally and just parks every
+       asset directly under "Fixed Assets" itself, or the sub-group name
+       doesn't match any rule above -- e.g. hospital/medical equipment like
+       imaging plates, ventilators, solar power backup units). Rather than
+       leave the category blank and force manual classification of every
+       single row, default to Schedule II's general equipment bucket -- the
+       CA can still correct any individual row in the Classify Assets
+       table. Land is the one deliberate exception: it's never depreciated,
+       so guessing a depreciable category for it would be a real error, not
+       just an inconvenience -- left blank to force a genuine manual look. */
+    if (str_contains($g, 'land')) {
+        return '';
+    }
+    return 'Plant & Machinery (general)';
 }
 
 /**

@@ -1080,11 +1080,22 @@ def _fetch_fa_vouchers_single_range(from_date, to_date):
             if not lname:
                 continue
             amt = float(entry.findtext("AMOUNT", "0") or 0)
+            dr_cr = _ledger_entry_dr_cr(entry, amt)
+            # Temporary diagnostic -- logs every FA-classified ledger entry's
+            # raw sign/flag so a misclassified addition/disposal/depreciation
+            # entry can be traced back to exactly what Tally sent, instead of
+            # guessing again. Safe to remove once the dr/cr detection is
+            # confirmed correct against real data.
+            logging.debug(
+                "FA entry: voucher=%s ledger=%s amount=%s isdeemedpositive=%r -> dr_cr=%s",
+                voucher_node.findtext("VOUCHERNUMBER"), lname, amt,
+                entry.findtext("ISDEEMEDPOSITIVE"), dr_cr,
+            )
             entries.append({
                 "ledger_name": lname,
                 "parent_group": (entry.findtext("PARENT") or "").strip(),
                 "amount": abs(amt),
-                "dr_cr": _ledger_entry_dr_cr(entry, amt),
+                "dr_cr": dr_cr,
             })
 
         alter_raw = (voucher_node.findtext("ALTERDATE") or voucher_node.findtext("ALTEREDDATE") or "").strip()
