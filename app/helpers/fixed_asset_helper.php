@@ -1262,13 +1262,53 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
        vouchers for this period (guaranteed at this point, or the early
        return above would have fired), but none of them touched a
        classified Fixed Asset ledger. Surfaced so the CA doesn't have to
-       guess whether that's genuinely true or a ledger-name mismatch. */
+       guess whether that's genuinely true or a ledger-name mismatch --
+       this app has no direct access to the CA's own Tally/production
+       database to check by hand, so the diagnosis has to happen through
+       what's visible on this page. */
+    $sampleVoucherLedgerNames = [];
+    $nearMatchLedgerNames = [];
+    if ($entries === []) {
+        $seenLedgersStmt = $pdo->prepare("
+            SELECT DISTINCT ve.ledger_name
+            FROM voucher_entries ve
+            INNER JOIN vouchers v ON v.id = ve.voucher_id
+            WHERE ve.company_id = ? AND v.fy_id = ? AND v.date BETWEEN ? AND ? AND v.is_cancelled = 0
+            ORDER BY ve.ledger_name
+            LIMIT 200
+        ");
+        $seenLedgersStmt->execute([$company_id, $fy_id, $fyStart, $fyEnd]);
+        $sampleVoucherLedgerNames = array_map('strval', $seenLedgersStmt->fetchAll(PDO::FETCH_COLUMN));
+
+        /* Case/whitespace-insensitive comparison against the classified
+           list -- distinguishes "genuinely not classified as a Fixed
+           Asset ledger" from "classified, but under a near-identical
+           name" (trailing space, different case, double space), which is
+           the actual bug this exists to catch. */
+        $normalizedClassified = [];
+        foreach ($ledgerNames as $classifiedName) {
+            $key = mb_strtolower(preg_replace('/\s+/', ' ', trim($classifiedName)));
+            $normalizedClassified[$key] = $classifiedName;
+        }
+        foreach ($sampleVoucherLedgerNames as $seenName) {
+            $key = mb_strtolower(preg_replace('/\s+/', ' ', trim($seenName)));
+            if (isset($normalizedClassified[$key]) && $normalizedClassified[$key] !== $seenName) {
+                $nearMatchLedgerNames[] = [
+                    'voucher_ledger_name' => $seenName,
+                    'classified_ledger_name' => $normalizedClassified[$key],
+                ];
+            }
+        }
+    }
+
     $diagnostics = [
         'voucher_source' => $voucherSyncResult['source'] ?? null,
         'total_vouchers_from_tally' => (int) ($voucherSyncResult['total'] ?? 0),
         'fixed_asset_ledger_count' => count($ledgerNames),
         'matched_voucher_entries' => count($entries),
         'last_voucher_pushed_at' => $lastVoucherPushedAt,
+        'sample_voucher_ledger_names' => array_slice($sampleVoucherLedgerNames, 0, 40),
+        'near_match_ledger_names' => $nearMatchLedgerNames,
         'raw_response_sample' => null,
     ];
 

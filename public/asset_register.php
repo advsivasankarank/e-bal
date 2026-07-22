@@ -35,6 +35,8 @@ $fyEnd = (string) ($fyDatesRow['fy_end'] ?? '');
 $infoMessage = '';
 $warningMessage = '';
 $errorMessages = [];
+$sampleLedgerNames = [];
+$nearMatchLedgerNames = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrfToken();
@@ -102,6 +104,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    this branch is never reached. */
                 if ($matchedEntries === 0) {
                     $warningMessage = "{$totalFromTally} voucher(s) synced via {$source}, but none of them touched any of the {$ledgerCount} ledger(s) classified as Fixed Assets/CWIP within {$fyStart} to {$fyEnd}. Either there genuinely were no Fixed Asset purchases/disposals this year, or the ledger names in those vouchers don't exactly match the names classified in ReconHub (check for trailing spaces or renamed ledgers).";
+                    $sampleLedgerNames = $diag['sample_voucher_ledger_names'] ?? [];
+                    $nearMatchLedgerNames = $diag['near_match_ledger_names'] ?? [];
                 } else {
                     $warningMessage = "{$totalFromTally} voucher(s) synced via {$source}, and {$matchedEntries} touched a Fixed Asset/CWIP ledger, but all of them were classified as depreciation/revaluation journals and excluded -- see the excluded list below if one was expected to be a genuine addition or disposal.";
                 }
@@ -198,6 +202,32 @@ require_once __DIR__ . '/layouts/header_v2.php';
     <div class="card section-card" style="background:#fffbeb;border:1px solid #fcd34d;">
         <strong style="color:#92400e;">⚠ Sync from Tally found nothing to add</strong>
         <p style="font-size:0.85rem;color:#475569;margin:6px 0 0;"><?= htmlspecialchars($warningMessage) ?></p>
+        <?php if ($nearMatchLedgerNames !== []): ?>
+        <p style="font-size:0.85rem;color:#92400e;margin:10px 0 0;font-weight:600;">Likely the exact problem -- these ledger names in the synced vouchers are near-identical to a classified ledger, but not an exact match (case or spacing differs):</p>
+        <table class="note-table" border="1" cellpadding="4" style="font-size:0.78rem;margin-top:4px;width:100%;">
+            <thead><tr><th>Name in synced voucher</th><th>Classified name in ReconHub</th></tr></thead>
+            <tbody>
+            <?php foreach ($nearMatchLedgerNames as $pair): ?>
+            <tr>
+                <td><code><?= htmlspecialchars((string) $pair['voucher_ledger_name']) ?></code></td>
+                <td><code><?= htmlspecialchars((string) $pair['classified_ledger_name']) ?></code></td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
+        <?php if ($sampleLedgerNames !== []): ?>
+        <details style="margin-top:10px;">
+            <summary style="cursor:pointer;font-size:0.82rem;color:#92400e;">Show all ledger names actually touched by these vouchers (<?= count($sampleLedgerNames) ?>)</summary>
+            <div style="max-height:220px;overflow-y:auto;margin-top:6px;">
+                <ul style="font-size:0.78rem;color:#475569;margin:0;padding-left:18px;">
+                    <?php foreach ($sampleLedgerNames as $name): ?>
+                    <li><code><?= htmlspecialchars((string) $name) ?></code></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        </details>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 <?php foreach ($errorMessages as $err): ?>
