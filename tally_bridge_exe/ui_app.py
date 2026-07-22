@@ -774,6 +774,26 @@ VOUCHER_TYPES_FOR_FULL_FETCH = [
 ]
 
 
+def _parse_tally_bool(value):
+    """IsOptional/IsCancelled come back from Tally as the text "Yes"/"No",
+    not the numeric "1"/"0" this code originally assumed -- confirmed in
+    production ("invalid literal for int() with base 10: 'No'"), and that
+    exception wasn't caught anywhere between here and the outermost sync
+    handler, so it silently failed the entire voucher sync rather than
+    just one field. Falls back to a raw int() parse too, in case some
+    Tally configuration or field genuinely does emit "1"/"0" instead.
+    """
+    text = (value or "").strip().lower()
+    if text in ("yes", "true"):
+        return 1
+    if text in ("no", "false", ""):
+        return 0
+    try:
+        return int(text)
+    except ValueError:
+        return 0
+
+
 def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
     if voucher_type is None:
         # Two layers of resilience: the date range is split into
@@ -887,8 +907,8 @@ def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
             "date": (voucher_node.findtext("DATE") or "")[:10],
             "narration": (voucher_node.findtext("NARRATION") or "").strip(),
             "party_ledger_name": (voucher_node.findtext("PARTYLEDGERNAME") or "").strip(),
-            "is_optional": int(voucher_node.findtext("ISOPTIONAL", "0") or 0),
-            "is_cancelled": int(voucher_node.findtext("ISCANCELLED", "0") or 0),
+            "is_optional": _parse_tally_bool(voucher_node.findtext("ISOPTIONAL")),
+            "is_cancelled": _parse_tally_bool(voucher_node.findtext("ISCANCELLED")),
             "altered_date": altered_date,
             "source": "xml",
             "entries": entries,
@@ -1054,8 +1074,8 @@ def _fetch_fa_vouchers_single_range(from_date, to_date):
             "date": (voucher_node.findtext("DATE") or "")[:10],
             "narration": (voucher_node.findtext("NARRATION") or "").strip(),
             "party_ledger_name": (voucher_node.findtext("PARTYLEDGERNAME") or "").strip(),
-            "is_optional": int(voucher_node.findtext("ISOPTIONAL", "0") or 0),
-            "is_cancelled": int(voucher_node.findtext("ISCANCELLED", "0") or 0),
+            "is_optional": _parse_tally_bool(voucher_node.findtext("ISOPTIONAL")),
+            "is_cancelled": _parse_tally_bool(voucher_node.findtext("ISCANCELLED")),
             "altered_date": altered_date,
             "source": "xml",
             "entries": entries,
