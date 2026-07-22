@@ -1207,7 +1207,28 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         $categoryByLedger[(string) $row['source_ledger_name']] = (string) $row['asset_category'];
     }
 
+    /* Auto-category, so a fresh sync doesn't need manual classification for
+       every ledger before it's usable -- guessed from the ledger name first
+       (finer-grained, e.g. distinguishing Servers from End User computers),
+       falling back to the ledger's own Tally parent group via the same
+       mapping the Excel detail-block import uses. Still just a starting
+       guess: the Classify Assets table below stays fully editable per row. */
     $placeholders = implode(',', array_fill(0, count($ledgerNames), '?'));
+    $groupStmt = $pdo->prepare("
+        SELECT tlm.ledger_name, tlm.parent_group
+        FROM tally_ledger_master tlm
+        INNER JOIN (
+            SELECT company_id, ledger_name, MIN(id) AS min_id
+            FROM tally_ledger_master
+            WHERE company_id = ? AND ledger_name IN ({$placeholders})
+            GROUP BY company_id, ledger_name
+        ) dedup ON dedup.min_id = tlm.id
+    ");
+    $groupStmt->execute(array_merge([$company_id], $ledgerNames));
+    $groupByLedger = [];
+    foreach ($groupStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $groupByLedger[(string) $row['ledger_name']] = (string) $row['parent_group'];
+    }
     $entryStmt = $pdo->prepare("
         SELECT ve.id AS entry_id, ve.ledger_name, ve.amount, ve.dr_cr,
                v.voucher_type, v.voucher_number, v.date, v.narration, v.is_cancelled
@@ -1224,8 +1245,9 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         INSERT INTO fixed_assets
             (company_id, fy_id, asset_category, asset_description, source_ledger_name, source,
              tally_voucher_entry_id, voucher_type, voucher_classification, voucher_narration,
-             opening_gross_block, additions_during_year, addition_date, disposals_during_year, disposal_date, is_disposed)
-        VALUES (?, ?, ?, ?, ?, 'tally_voucher', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+             opening_gross_block, additions_during_year, addition_date, disposals_during_year, disposal_date, is_disposed,
+             depreciation_method)
+        VALUES (?, ?, ?, ?, ?, 'tally_voucher', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'WDV')
         ON DUPLICATE KEY UPDATE
             asset_category = IF(asset_category = '', VALUES(asset_category), asset_category),
             voucher_type = VALUES(voucher_type),
@@ -1249,7 +1271,7 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         }
 
         $amount = (float) $entry['amount'];
-        $category = $categoryByLedger[$ledgerName] ?? '';
+        $category = $categoryByLedger[$ledgerName] ?? mapFixedAssetGroupToCategory($groupByLedger[$ledgerName] ?? '', $ledgerName);
 
         $upsert->execute([
             $company_id,
