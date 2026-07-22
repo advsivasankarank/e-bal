@@ -873,7 +873,12 @@ def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
         entries = []
         for entry in voucher_node.iter():
             etag = entry.tag.upper()
-            if not etag.endswith("LEDGERENTRY"):
+            # Tally emits ledger-entry lines as <ALLLEDGERENTRIES.LIST> or
+            # <LEDGERENTRIES.LIST> (always ending in .LIST) -- never a bare
+            # <LEDGERENTRY> tag. Confirmed live: the old endswith("LEDGERENTRY")
+            # check never matched anything, so every voucher was stored with
+            # zero entries even though the voucher header itself synced fine.
+            if "LEDGERENTR" not in etag or not etag.endswith(".LIST"):
                 continue
             lname = (entry.findtext("LEDGERNAME") or "").strip()
             if not lname:
@@ -1046,7 +1051,11 @@ def _fetch_fa_vouchers_single_range(from_date, to_date):
 
         entries = []
         for entry in voucher_node.iter():
-            if not entry.tag.upper().endswith("LEDGERENTRY"):
+            etag = entry.tag.upper()
+            # See the matching comment in fetch_vouchers_via_xml() -- Tally's
+            # real tag is <ALLLEDGERENTRIES.LIST>/<LEDGERENTRIES.LIST>, never
+            # a bare <LEDGERENTRY>, so the old check never matched.
+            if "LEDGERENTR" not in etag or not etag.endswith(".LIST"):
                 continue
             lname = (entry.findtext("LEDGERNAME") or "").strip()
             if not lname:
