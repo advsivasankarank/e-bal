@@ -794,6 +794,25 @@ def _parse_tally_bool(value):
         return 0
 
 
+def _ledger_entry_dr_cr(entry, amt):
+    """Determines Debit/Credit for a ledger entry using Tally's own
+    <ISDEEMEDPOSITIVE> flag (Yes = Debit, No = Credit) instead of the raw
+    AMOUNT sign. AMOUNT's sign convention is not reliably "positive = debit"
+    across voucher types -- confirmed in production: Journal-voucher entries
+    (both depreciation write-offs directly against an FA ledger, and a
+    genuine Fixed Asset addition posted via Journal) came through with the
+    opposite sign from what a Purchase/Sales voucher would give, making the
+    old amt >= 0 check misclassify real additions as disposals. Falls back
+    to the sign check only if Tally omits the flag entirely.
+    """
+    flag = (entry.findtext("ISDEEMEDPOSITIVE") or "").strip().lower()
+    if flag == "yes":
+        return "DR"
+    if flag == "no":
+        return "CR"
+    return "DR" if amt >= 0 else "CR"
+
+
 def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
     if voucher_type is None:
         # Two layers of resilience: the date range is split into
@@ -888,7 +907,7 @@ def fetch_vouchers_via_xml(from_date, to_date, voucher_type=None):
                 "ledger_name": lname,
                 "parent_group": (entry.findtext("PARENT") or "").strip(),
                 "amount": abs(amt),
-                "dr_cr": "DR" if amt >= 0 else "CR",
+                "dr_cr": _ledger_entry_dr_cr(entry, amt),
             })
 
         alter_raw = (
@@ -1065,7 +1084,7 @@ def _fetch_fa_vouchers_single_range(from_date, to_date):
                 "ledger_name": lname,
                 "parent_group": (entry.findtext("PARENT") or "").strip(),
                 "amount": abs(amt),
-                "dr_cr": "DR" if amt >= 0 else "CR",
+                "dr_cr": _ledger_entry_dr_cr(entry, amt),
             })
 
         alter_raw = (voucher_node.findtext("ALTERDATE") or voucher_node.findtext("ALTEREDDATE") or "").strip()

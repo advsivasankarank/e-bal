@@ -1113,7 +1113,7 @@ function getFixedAssetLedgerNames(array $classified): array
  * Purchase/Sales voucher (common for cash purchases without a GST bill) --
  * kept in, since excluding them would silently miss real additions.
  */
-function classifyFixedAssetVoucherType(string $voucherType): string
+function classifyFixedAssetVoucherType(string $voucherType, string $ledgerName = '', bool $isCredit = false): string
 {
     if (stripos($voucherType, 'purchase') !== false) {
         return 'purchase';
@@ -1122,6 +1122,18 @@ function classifyFixedAssetVoucherType(string $voucherType): string
         return 'sale';
     }
     if (stripos($voucherType, 'depreciation') !== false) {
+        return 'depreciation_journal';
+    }
+    /* Some companies don't track individual assets in Tally -- they group
+       them by useful life on ledgers literally named e.g. "Depreciation -
+       3 Years Useful", classified as PPE in ReconHub since that's the only
+       ledger carrying the asset's balance. A CREDIT to such a ledger is the
+       year-end depreciation write-off against that balance, not a genuine
+       disposal -- confirmed against a real company where every 31-Mar
+       Journal voucher crediting these ledgers was a depreciation run, not
+       an asset sale. Only applies to credits: a DEBIT into the same ledger
+       is a genuine addition being grouped under that useful-life bucket. */
+    if ($isCredit && stripos($ledgerName, 'deprec') !== false) {
         return 'depreciation_journal';
     }
     return 'other';
@@ -1228,14 +1240,14 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
     $created = 0;
     $excluded = [];
     foreach ($entries as $entry) {
-        $classification = classifyFixedAssetVoucherType((string) $entry['voucher_type']);
+        $ledgerName = (string) $entry['ledger_name'];
+        $isAddition = $entry['dr_cr'] === 'DR';
+        $classification = classifyFixedAssetVoucherType((string) $entry['voucher_type'], $ledgerName, !$isAddition);
         if ($classification === 'depreciation_journal') {
             $excluded[] = $entry + ['classification' => $classification];
             continue;
         }
 
-        $ledgerName = (string) $entry['ledger_name'];
-        $isAddition = $entry['dr_cr'] === 'DR';
         $amount = (float) $entry['amount'];
         $category = $categoryByLedger[$ledgerName] ?? '';
 
