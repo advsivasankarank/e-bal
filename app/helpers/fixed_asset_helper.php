@@ -1299,13 +1299,24 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
             is_disposed = VALUES(is_disposed)
     ");
 
+    /* Group non-depreciation entries by (voucher, ledger) before writing
+       rows -- a single voucher can carry more than one line against the
+       same FA ledger, e.g. a purchase debit plus a same-voucher credit for
+       a discount/rounding adjustment (confirmed live: voucher 927 debited
+       "Defibrillator 5" Rs.2,15,000 and separately credited it Rs.10,000
+       in the same voucher). Treating each line independently created a
+       spurious "disposal" alongside the real addition. Netting the group's
+       DR total against its CR total gives the true addition/disposal for
+       that ledger in that voucher, matching what actually happened
+       (net Rs.2,05,000 addition here, not an addition plus a disposal). */
     $created = 0;
     $excluded = [];
+    $groups = [];
     foreach ($entries as $entry) {
         $ledgerName = (string) $entry['ledger_name'];
-        $isAddition = $entry['dr_cr'] === 'DR';
-        $classification = classifyFixedAssetVoucherType((string) $entry['voucher_type'], $ledgerName, !$isAddition);
-        if ($classification !== 'depreciation_journal' && !$isAddition && isset($depreciationVoucherIds[(int) $entry['voucher_id']])) {
+        $isCredit = $entry['dr_cr'] !== 'DR';
+        $classification = classifyFixedAssetVoucherType((string) $entry['voucher_type'], $ledgerName, $isCredit);
+        if ($classification !== 'depreciation_journal' && $isCredit && isset($depreciationVoucherIds[(int) $entry['voucher_id']])) {
             $classification = 'depreciation_journal';
         }
         if ($classification === 'depreciation_journal') {
@@ -1313,23 +1324,46 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
             continue;
         }
 
-        $amount = (float) $entry['amount'];
+        $groupKey = $entry['voucher_id'] . '|' . $ledgerName;
+        if (!isset($groups[$groupKey])) {
+            $groups[$groupKey] = ['entries' => [], 'net' => 0.0, 'classification' => $classification];
+        }
+        $groups[$groupKey]['entries'][] = $entry;
+        $groups[$groupKey]['net'] += $isCredit ? -(float) $entry['amount'] : (float) $entry['amount'];
+    }
+
+    foreach ($groups as $group) {
+        $net = $group['net'];
+        if (abs($net) < 0.005) {
+            // Fully self-cancelling within the voucher -- no real addition or disposal happened.
+            continue;
+        }
+        $representative = $group['entries'][0];
+        foreach ($group['entries'] as $candidate) {
+            if ((int) $candidate['entry_id'] < (int) $representative['entry_id']) {
+                $representative = $candidate;
+            }
+        }
+
+        $isAddition = $net > 0;
+        $amount = abs($net);
+        $ledgerName = (string) $representative['ledger_name'];
         $category = $categoryByLedger[$ledgerName] ?? mapFixedAssetGroupToCategory($groupByLedger[$ledgerName] ?? '', $ledgerName);
 
         $upsert->execute([
             $company_id,
             $fy_id,
             $category,
-            $ledgerName . ' (' . $entry['voucher_type'] . ' #' . $entry['voucher_number'] . ')',
+            $ledgerName . ' (' . $representative['voucher_type'] . ' #' . $representative['voucher_number'] . ')',
             $ledgerName,
-            (int) $entry['entry_id'],
-            $entry['voucher_type'],
-            $classification,
-            $entry['narration'],
+            (int) $representative['entry_id'],
+            $representative['voucher_type'],
+            $group['classification'],
+            $representative['narration'],
             $isAddition ? $amount : 0,
-            $isAddition ? $entry['date'] : null,
+            $isAddition ? $representative['date'] : null,
             !$isAddition ? $amount : 0,
-            !$isAddition ? $entry['date'] : null,
+            !$isAddition ? $representative['date'] : null,
             !$isAddition ? 1 : 0,
         ]);
         $created++;
