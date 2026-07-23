@@ -1421,6 +1421,18 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         'sample_voucher_ledger_names' => array_slice($sampleVoucherLedgerNames, 0, 40),
         'near_match_ledger_names' => $nearMatchLedgerNames,
         'raw_response_sample' => null,
+        /* If sample_voucher_ledger_names ALSO comes back empty here, that
+           means voucher_entries has zero rows for this exact
+           company_id+fy_id+date range -- despite total_vouchers_from_tally
+           being > 0 (guaranteed at this point). That can only mean the
+           bridge is pushing under a DIFFERENT fy_id/company_id than this
+           page is reading (e.g. bridge_clients maps this client to a
+           different FY than the one currently selected here), not a
+           ledger-name mismatch. Surfaced directly so that mismatch doesn't
+           have to be guessed at again. */
+        'debug_company_id' => $company_id,
+        'debug_fy_id' => $fy_id,
+        'debug_fy_range' => "{$fyStart} to {$fyEnd}",
     ];
 
     return [

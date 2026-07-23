@@ -106,6 +106,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $warningMessage = "{$totalFromTally} voucher(s) synced via {$source}, but none of them touched any of the {$ledgerCount} ledger(s) classified as Fixed Assets/CWIP within {$fyStart} to {$fyEnd}. Either there genuinely were no Fixed Asset purchases/disposals this year, or the ledger names in those vouchers don't exactly match the names classified in ReconHub (check for trailing spaces or renamed ledgers).";
                     $sampleLedgerNames = $diag['sample_voucher_ledger_names'] ?? [];
                     $nearMatchLedgerNames = $diag['near_match_ledger_names'] ?? [];
+                    if ($sampleLedgerNames === [] && $nearMatchLedgerNames === []) {
+                        $warningMessage .= " (No vouchers at all -- of any ledger -- were found for company_id={$diag['debug_company_id']}, fy_id={$diag['debug_fy_id']}, {$diag['debug_fy_range']}. Since {$totalFromTally} vouchers were confirmed synced, this most likely means the bridge is pushing data under a different company/FY selection than what's currently open on this page -- double check the Smart Bridge app's configured company/FY against the one selected here.)";
+                    }
                 } else {
                     $warningMessage = "{$totalFromTally} voucher(s) synced via {$source}, and {$matchedEntries} touched a Fixed Asset/CWIP ledger, but all of them were classified as depreciation/revaluation journals and excluded -- see the excluded list below if one was expected to be a genuine addition or disposal.";
                 }
