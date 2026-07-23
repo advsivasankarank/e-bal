@@ -1248,7 +1248,7 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         $groupByLedger[(string) $row['ledger_name']] = (string) $row['parent_group'];
     }
     $entryStmt = $pdo->prepare("
-        SELECT ve.id AS entry_id, ve.ledger_name, ve.amount, ve.dr_cr,
+        SELECT ve.id AS entry_id, ve.voucher_id, ve.ledger_name, ve.amount, ve.dr_cr,
                v.voucher_type, v.voucher_number, v.date, v.narration, v.is_cancelled
         FROM voucher_entries ve
         INNER JOIN vouchers v ON v.id = ve.voucher_id
@@ -1258,6 +1258,28 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
     ");
     $entryStmt->execute(array_merge([$company_id, $fy_id], $ledgerNames, [$fyStart, $fyEnd]));
     $entries = $entryStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    /* A batch depreciation journal in this company's Tally books one DEBIT
+       line to a P&L ledger named e.g. "Depreciation - 15 Years Useful" and
+       dozens of CREDIT lines directly against the individual FA-classified
+       asset ledgers being written down -- confirmed live via bridge.log
+       (voucher 9946: one debit to "Depreciation - 15 Years Useful", ~150
+       credits to individual assets like "Water Heater", "AgVa Ventilator").
+       The "Depreciation - ..." ledger itself is never fetched above (it's
+       an expense ledger, not FA/CWIP-classified), so the only way to tell
+       "this credit is a depreciation write-off" from "this credit is a
+       genuine disposal" is to check whether the SAME voucher also touches
+       a ledger named like that -- not the matched ledger's own name, which
+       is just the asset (e.g. "Water Heater" doesn't contain "deprec"). */
+    $depreciationVoucherIds = [];
+    if ($entries !== []) {
+        $voucherIds = array_values(array_unique(array_map(static fn (array $e): int => (int) $e['voucher_id'], $entries)));
+        $vPlaceholders = implode(',', array_fill(0, count($voucherIds), '?'));
+        $depStmt = $pdo->prepare("SELECT DISTINCT voucher_id FROM voucher_entries WHERE voucher_id IN ({$vPlaceholders}) AND ledger_name LIKE '%deprec%'");
+        $depStmt->execute($voucherIds);
+        $depreciationVoucherIds = array_map('intval', $depStmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+    $depreciationVoucherIds = array_flip($depreciationVoucherIds);
 
     $upsert = $pdo->prepare("
         INSERT INTO fixed_assets
@@ -1283,6 +1305,9 @@ function syncFixedAssetVouchersFromTally(PDO $pdo, int $company_id, int $fy_id, 
         $ledgerName = (string) $entry['ledger_name'];
         $isAddition = $entry['dr_cr'] === 'DR';
         $classification = classifyFixedAssetVoucherType((string) $entry['voucher_type'], $ledgerName, !$isAddition);
+        if ($classification !== 'depreciation_journal' && !$isAddition && isset($depreciationVoucherIds[(int) $entry['voucher_id']])) {
+            $classification = 'depreciation_journal';
+        }
         if ($classification === 'depreciation_journal') {
             $excluded[] = $entry + ['classification' => $classification];
             continue;
