@@ -1232,7 +1232,18 @@ def resolve_upload_targets(base_config, override):
         if not tb_url:
             tb_url = join_url(site_origin, "/bridge_tb.php")
         if not voucher_url:
-            voucher_url = join_url(site_origin, "/voucher_sync.php?action=sync")
+            # NOT /voucher_sync.php?action=sync -- that's the old doomed
+            # server-initiated pull endpoint (api/voucher_sync.php), which
+            # accepts the request and reports "Synced 0 vouchers via xml"
+            # without storing anything, since the server can't reach Tally
+            # directly. Confirmed live: a web-triggered sync (missing an
+            # explicit voucher_upload_url override, which neither
+            # tally_connect.php nor connector.php's JS ever sent) silently
+            # fell back to this wrong default, fetched the correct 70
+            # vouchers, then uploaded them nowhere useful. The real
+            # ingestion endpoint -- the one the desktop app's own "Fetch
+            # Now" button already uses correctly -- is bridge_voucher.php.
+            voucher_url = join_url(site_origin, "/bridge_voucher.php")
 
     if ledger_url:
         active_config["ledger_upload_url"] = ledger_url
